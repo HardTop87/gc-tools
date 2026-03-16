@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, UploadCloud, FileCheck, Download, AlertCircle, FileSpreadsheet, FileUp } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileCheck, Download, AlertCircle, FileSpreadsheet, FileUp, Info, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -8,6 +8,7 @@ export default function PayPalExport() {
   const [isDragging, setIsDragging] = useState(false);
   const [processedData, setProcessedData] = useState(null);
   const [error, setError] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   const processData = (data) => {
     const formatGermanNumber = (numStr) => {
@@ -113,10 +114,19 @@ export default function PayPalExport() {
       </div>
 
       <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-10">
-        <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
+        <div className="relative flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">PayPal Export</h1>
             <p className="text-gray-400 text-sm">Automatische Gruppierung & Filterung</p>
+          </div>
+          <div className="absolute left-1/2 -translate-x-1/2">
+            <button
+              type="button"
+              onClick={() => setShowGuide(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-wider text-gray-500 transition-all hover:border-[#8e014d] hover:text-[#8e014d]"
+            >
+              <Info size={14} /> Anleitung Export
+            </button>
           </div>
           <div className="w-10 h-10 flex items-center justify-center bg-[#fdf2f8] rounded-lg border border-[#8e014d]/10">
              <FileUp size={20} className="text-[#8e014d]" />
@@ -189,6 +199,69 @@ export default function PayPalExport() {
             </div>
           </div>
         )}
+      </div>
+
+      {showGuide && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-[2.5rem] bg-white p-8 shadow-2xl border border-slate-200">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <h3 className="text-2xl font-black italic tracking-tight text-slate-900">
+                Export Anleitung
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowGuide(false)}
+                className="text-slate-400 transition-colors hover:text-[#8e014d]"
+              >
+                <XCircle size={28} />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              <GuideStep number="1">
+                Öffne das Aufträge-Menü im Backend des Online-Shops
+              </GuideStep>
+              <GuideStep number="2">
+                Scrolle runter zu "Auftragsdaten exportieren" und klicke.
+              </GuideStep>
+              <GuideStep number="3" highlight warning="WICHTIG: Nicht bis zum 30. oder 31. wählen!">
+                Wähle beim Zeitraum den genauen Monat (z.B. Februar von 01. - 28.02.).
+              </GuideStep>
+              <GuideStep number="4">
+                Wähle bei Status "Versendet" und "Abgeschlossen" aus (Multi-Auswahl geht mit gedrückter Strg- oder Command-Taste)
+              </GuideStep>
+              <GuideStep number="5">
+                Klicke auf den Button "Export starten". Lade die CSV-Datei herunter und lade sie hier in diesem Tool wieder hoch.
+              </GuideStep>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="mt-8 w-full rounded-2xl bg-black px-4 py-4 text-sm font-bold text-white transition-colors hover:bg-[#8e014d]"
+            >
+              Verstanden
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GuideStep({ number, children, highlight = false, warning = '' }) {
+  return (
+    <div className="flex items-start gap-4">
+      <div
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${
+          highlight ? 'bg-[#8e014d] text-white' : 'bg-slate-100 text-slate-700'
+        }`}
+      >
+        {number}
+      </div>
+      <div className="pt-0.5 text-sm leading-6 text-slate-700">
+        <p>{children}</p>
+        {warning && <p className="mt-1 text-xs font-bold text-[#8e014d]">{warning}</p>}
       </div>
     </div>
   );

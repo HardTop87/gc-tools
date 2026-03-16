@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Dashboard from './pages/Dashboard';
+import RechnerRST from './pages/Rechner-RST';
 import PayPalExport from './pages/PayPalExport';
+import PostVersand from './pages/PostVersand';
 import { Lock, Info } from 'lucide-react';
 
 function Login({ onLogin }) {
@@ -11,17 +13,18 @@ function Login({ onLogin }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password === 'GC2026!') { // Dein Passwort
+    // Falls die .env Variable fehlt, wird ein Fallback-Check verhindert
+    const correctPassword = import.meta.env.VITE_APP_PASSWORD;
+    
+    if (correctPassword && password === correctPassword) {
       onLogin();
     } else {
-      setError(true);
-    }
+      setError(true);    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* Login Card */}
         <form onSubmit={handleSubmit} className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100 mb-6">
           <div className="w-16 h-16 bg-[#fdf2f8] rounded-2xl flex items-center justify-center mb-8 mx-auto border border-[#8e014d]/10 text-[#8e014d]">
             <Lock size={32} />
@@ -46,7 +49,6 @@ function Login({ onLogin }) {
           </button>
         </form>
 
-        {/* Footer Links */}
         <div className="text-center">
           <button 
             onClick={() => setShowImpressum(!showImpressum)}
@@ -56,7 +58,6 @@ function Login({ onLogin }) {
           </button>
         </div>
 
-        {/* Impressum Modal-Ersatz */}
         {showImpressum && (
           <div className="mt-8 p-8 bg-white rounded-3xl border border-gray-100 shadow-sm text-[11px] text-gray-500 leading-relaxed animate-in fade-in duration-300">
             <h2 className="font-bold text-gray-800 mb-4 uppercase tracking-wider text-xs">Impressum</h2>
@@ -71,9 +72,6 @@ function Login({ onLogin }) {
               <strong>Umsatzsteuer-ID:</strong> DE265655564<br />
               <strong>Verantwortlich i.S.d. § 55 Abs. 2 RStV:</strong> Guido Coenen
             </p>
-            <p className="text-[9px] border-t border-gray-50 pt-4">
-              <strong>Urheberrecht:</strong> Die Inhalte dieser Seite unterliegen dem deutschen Urheberrecht. Downloads und Kopien sind nur für den privaten, nicht kommerziellen Gebrauch gestattet.
-            </p>
           </div>
         )}
       </div>
@@ -82,32 +80,45 @@ function Login({ onLogin }) {
 }
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    sessionStorage.getItem('gc_auth') === 'true'
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const persistedAuth = localStorage.getItem('gc_auth') === 'true';
+    setIsAuthenticated(persistedAuth);
+  }, []);
 
   const handleLogin = () => {
-    sessionStorage.setItem('gc_auth', 'true');
+    localStorage.setItem('gc_auth', 'true');
     setIsAuthenticated(true);
   };
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={!isAuthenticated ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} 
-        />
-        <Route 
-          path="/" 
-          element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} 
-        />
-        <Route 
-          path="/paypal-export" 
-          element={isAuthenticated ? <PayPalExport /> : <Navigate to="/login" />} 
-        />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </BrowserRouter>
+    <div className="min-h-screen bg-gray-50/50">
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path="/login"
+            element={!isAuthenticated ? <Login onLogin={handleLogin} /> : <Navigate to="/" replace />}
+          />
+          
+          {/* Dashboard */}
+          <Route 
+            path="/" 
+            element={isAuthenticated ? <Dashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" replace />} 
+          />          
+          {/* Rückstichheftung */}
+          <Route path="/rechner-rst" element={isAuthenticated ? <RechnerRST /> : <Navigate to="/login" replace />} />
+          
+          {/* PayPal Export */}
+          <Route path="/paypal-export" element={isAuthenticated ? <PayPalExport /> : <Navigate to="/login" replace />} />
+
+          {/* Post Versand */}
+          <Route path="/post-versand" element={isAuthenticated ? <PostVersand setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" replace />} />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
+        </Routes>
+      </BrowserRouter>
+    </div>
   );
 }

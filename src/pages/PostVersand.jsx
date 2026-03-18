@@ -4,9 +4,10 @@ import {
     ArrowLeft, Download, UploadCloud, AlertTriangle, 
     Search, XCircle, FileText, Package, Truck, Zap,
     Database, CheckCircle, Clock, Loader2, ListFilter,
-    Unlink, CheckSquare, Info, Edit3, Save, X
+    Unlink, CheckSquare, Info, ArrowUp, ChevronLeft, ChevronRight, Lock, Unlock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
 // --- KONFIGURATION ---
 const SENDER_ROW = "K.B.St.V. Rhaetia;Herold-Schriftleitung;Luisenstr.;27;80333;München;DEU;HOUSE";
@@ -17,7 +18,7 @@ const INITIAL_WEIGHTS = {
 };
 
 const RATES = {
-    de: { standard: 0.85, kompakt: 1.00, gross: 1.60, maxi: 2.75, paket: 5.49 },
+    de: { standard: 0.95, kompakt: 1.00, gross: 1.80, maxi: 2.90, paket: 5.49 },
     intl: { standard: 1.25, kompakt: 1.80, gross: 3.30, maxi: 6.50, paket: 15.99 }
 };
 
@@ -31,6 +32,44 @@ const formatETA = (ms) => {
     return `${m} Min. ${s} Sek.`;
 };
 
+const isLetterPostLabel = (label) => !/paket/i.test(String(label || ''));
+const isNoShippingRecord = (record) => record?.label === 'Kein Versand' || Boolean(record?.errorMsg);
+
+const WINDOWS_1252_SPECIAL = {
+    0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
+    0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
+    0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
+    0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+    0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
+    0x017E: 0x9E, 0x0178: 0x9F,
+};
+
+const encodeWindows1252 = (text) => {
+    const bytes = [];
+    for (const ch of String(text || '')) {
+        const cp = ch.codePointAt(0);
+        if (cp <= 0xFF) {
+            bytes.push(cp);
+            continue;
+        }
+        if (WINDOWS_1252_SPECIAL[cp] !== undefined) {
+            bytes.push(WINDOWS_1252_SPECIAL[cp]);
+            continue;
+        }
+        bytes.push(0x3F); // '?' fallback for unsupported characters
+    }
+    return new Uint8Array(bytes);
+};
+
+const toCsvCell = (value) => {
+    const raw = String(value ?? '').trim();
+    const emptyNormalized = raw === '-' ? '' : raw;
+    return emptyNormalized
+        .replace(/"/g, '')
+        .replace(/[;\r\n]+/g, ' ')
+        .trim();
+};
+
 const formatPLZ = (plz, land) => {
     let p = String(plz || '').trim();
     const l = String(land || 'DEU').toUpperCase();
@@ -38,6 +77,35 @@ const formatPLZ = (plz, land) => {
         return p.padStart(5, '0');
     }
     return p;
+};
+
+const normalizeCountryCode = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+
+    const map = {
+        DE: 'DEU',
+        D: 'DEU',
+        DEU: 'DEU',
+        DEUTSCHLAND: 'DEU',
+        GERMANY: 'DEU',
+        AT: 'AUT',
+        AUT: 'AUT',
+        A: 'AUT',
+        OESTERREICH: 'AUT',
+        ÖSTERREICH: 'AUT',
+        AUSTRIA: 'AUT',
+        CH: 'CHE',
+        CHE: 'CHE',
+        SCHWEIZ: 'CHE',
+        SWITZERLAND: 'CHE',
+        IT: 'ITA',
+        ITA: 'ITA',
+        ITALIEN: 'ITA',
+        ITALY: 'ITA',
+    };
+
+    return map[raw] || raw;
 };
 
 // --- HILFSFUNKTIONEN FÜR DATENBANK-ABGLEICH ---
@@ -56,9 +124,135 @@ const extractNumbers = (str) => {
     return matches ? matches.join("") : "";
 };
 
+const tokenizeName = (str) => {
+    if (!str) return [];
+    return String(str)
+        .toLowerCase()
+        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|dipl\-ing|ing\.|-bibliothek/g, ' ')
+        .replace(/[^a-z0-9äöüß\s-]/g, ' ')
+        .split(/[\s-]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2);
+};
+
+const normalizeStreet = (str) => {
+    if (!str) return '';
+    return String(str)
+        .toLowerCase()
+        .replace(/straße/g, 'str')
+        .replace(/str\./g, 'str')
+        .replace(/\s+/g, ' ')
+        .replace(/[^a-z0-9äöüß\s]/g, '')
+        .trim();
+};
+
+const splitStreetAndNumber = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return { street: '', number: '' };
+
+    const match = raw.match(/^(.*?)(\s+\d+[a-zA-Z\/-]*\s*)$/);
+    if (!match) {
+        return { street: raw, number: '' };
+    }
+
+    return {
+        street: String(match[1] || '').trim().replace(/[.,;]$/, ''),
+        number: String(match[2] || '').trim(),
+    };
+};
+
+const normalizeSearchText = (value) =>
+    String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const isStrictCountryCode = (code) => ['DEU', 'AUT', 'CHE', 'ITA'].includes(code);
+
+const looksLikeMojibake = (text) => /Ã.|â.|Â.|�/.test(text);
+
+const normalizeText = (value) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value !== 'string') return value;
+
+    let text = value.replace(/^\uFEFF/, '').trim();
+
+    if (looksLikeMojibake(text)) {
+        try {
+            const repaired = decodeURIComponent(escape(text));
+            if (repaired) text = repaired;
+        } catch {
+            // Fallback: keep original text when repair is not possible.
+        }
+    }
+
+    return text;
+};
+
+const normalizeRow = (row) => {
+    const normalized = {};
+    Object.entries(row || {}).forEach(([key, value]) => {
+        const cleanKey = String(normalizeText(key) || '').trim();
+        if (!cleanKey) return;
+        normalized[cleanKey] = normalizeText(value);
+    });
+    return normalized;
+};
+
+const parseCsvFile = (file, onComplete, onError) => {
+    const reader = new FileReader();
+
+    reader.onload = (evt) => {
+        try {
+            const buffer = evt.target.result;
+            const decode = (encoding) => new TextDecoder(encoding, { fatal: false }).decode(buffer);
+
+            const parseCsvText = (text) =>
+                Papa.parse(text, {
+                    header: true,
+                    skipEmptyLines: true,
+                    delimitersToGuess: [';', ',', '\t'],
+                });
+
+            const utf8Result = parseCsvText(decode('utf-8'));
+            const utf8Rows = utf8Result.data || [];
+            const utf8HasMojibake = utf8Rows.some((row) =>
+                Object.values(row || {}).some(
+                    (cell) => typeof cell === 'string' && looksLikeMojibake(cell),
+                ),
+            );
+
+            let finalRows = utf8Rows;
+            let encodingUsed = 'UTF-8';
+
+            if (utf8HasMojibake) {
+                const cpResult = parseCsvText(decode('windows-1252'));
+                const cpRows = cpResult.data || [];
+
+                if (cpRows.length > 0) {
+                    finalRows = cpRows;
+                    encodingUsed = 'Windows-1252';
+                }
+            }
+
+            onComplete(finalRows.map(normalizeRow), { encodingUsed });
+        } catch (error) {
+            onError(error);
+        }
+    };
+
+    reader.onerror = onError;
+    reader.readAsArrayBuffer(file);
+};
+
 export default function PostVersandManager() {
     const [apiKey, setApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || '');
-    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile'); 
+    const [selectedProvider, setSelectedProvider] = useState('groq');
+    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
+    const [ollamaModel, setOllamaModel] = useState('qwen2.5-coder:14b');
     const [weights, setWeights] = useState(INITIAL_WEIGHTS);
     
     const [rawData, setRawData] = useState([]);
@@ -73,19 +267,67 @@ export default function PostVersandManager() {
     const [matchModalOpen, setMatchModalOpen] = useState(false);
     const [currentItemToMatch, setCurrentItemToMatch] = useState(null);
     const [manualSearchQuery, setManualSearchQuery] = useState('');
-    
-    const [editingItemId, setEditingItemId] = useState(null);
-    const [editFormData, setEditFormData] = useState({});
+    const [editorFormData, setEditorFormData] = useState({
+        name: '',
+        zusatz: '',
+        strasse: '',
+        nummer: '',
+        plz: '',
+        stadt: '',
+        land: 'DEU',
+        adressTyp: 'HOUSE',
+    });
 
     const [results, setResults] = useState(null);
     const [view, setView] = useState('upload'); 
     const [searchTerm, setSearchTerm] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [procStats, setProcStats] = useState({ ai: 0, db: 0, total: 0, eta: 0, progress: 0 });
+    const [uploadEncoding, setUploadEncoding] = useState({ source: '', db: '' });
+    const [showOnlyMismatches, setShowOnlyMismatches] = useState(false);
+    const [expandedMatchRows, setExpandedMatchRows] = useState({});
 
     const handleSourceUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            parseCsvFile(
+                file,
+                (rows, meta) => {
+                    const currentHeaders = Object.keys(rows[0] || {});
+                    if (!currentHeaders.length) {
+                        alert('CSV enthält keine verwertbaren Spalten.');
+                        return;
+                    }
+
+                    setUploadEncoding((prev) => ({ ...prev, source: `CSV: ${meta?.encodingUsed || 'UTF-8'}` }));
+
+                    setHeaders(currentHeaders);
+                    setRawData(rows);
+
+                    const findCol = (keys) =>
+                        currentHeaders.find((h) =>
+                            keys.some((k) => String(h).toLowerCase().includes(k)),
+                        ) || '';
+
+                    setMapping({
+                        anrede: findCol(['anrede']), titel: findCol(['titel']), 
+                        akad: findCol(['akademischer']), vorname: findCol(['vorname']), 
+                        nachname: findCol(['nachname']), zusatz: findCol(['zusatz']),
+                        strasse: findCol(['straße', 'strasse', 'adresse']), plz: findCol(['plz']), 
+                        ort: findCol(['ort', 'stadt']), land: findCol(['land']), 
+                        herold: findCol(['herold']), programm: findCol(['programm'])
+                    });
+                },
+                () => {
+                    setUploadEncoding((prev) => ({ ...prev, source: 'CSV: Fehler beim Lesen' }));
+                    alert('CSV konnte nicht gelesen werden.');
+                },
+            );
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (evt) => {
             const wb = XLSX.read(evt.target.result, { type: 'array' });
@@ -96,7 +338,12 @@ export default function PostVersandManager() {
             
             const currentHeaders = data[hIdx].map(h => String(h || '').trim());
             setHeaders(currentHeaders);
-            setRawData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx }));
+            setRawData(
+                XLSX.utils
+                    .sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx })
+                    .map(normalizeRow),
+            );
+            setUploadEncoding((prev) => ({ ...prev, source: 'Excel: XLS/XLSX' }));
             
             const findCol = (keys) => currentHeaders.find(h => keys.some(k => String(h).toLowerCase().includes(k))) || '';
             setMapping({
@@ -114,16 +361,36 @@ export default function PostVersandManager() {
     const handleDbUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            parseCsvFile(
+                file,
+                (rows, meta) => {
+                    setDbData(rows);
+                    setUploadEncoding((prev) => ({ ...prev, db: `CSV: ${meta?.encodingUsed || 'UTF-8'}` }));
+                },
+                () => {
+                    setUploadEncoding((prev) => ({ ...prev, db: 'CSV: Fehler beim Lesen' }));
+                    alert('Datenbank-CSV konnte nicht gelesen werden.');
+                },
+            );
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (evt) => {
             const wb = XLSX.read(evt.target.result, { type: 'array' });
-            setDbData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]));
+            setDbData(
+                XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]).map(normalizeRow),
+            );
+            setUploadEncoding((prev) => ({ ...prev, db: 'Excel: XLS/XLSX' }));
         };
         reader.readAsArrayBuffer(file);
     };
 
     const getVersandArt = (gewicht, landCode) => {
-        const isDE = landCode === 'DEU' || landCode === 'DE';
+        const normalizedLand = normalizeCountryCode(landCode || 'DEU') || 'DEU';
+        const isDE = normalizedLand === 'DEU' || normalizedLand === 'DE';
         const rates = isDE ? RATES.de : RATES.intl;
         const prefix = isDE ? "" : "Int. ";
 
@@ -135,41 +402,88 @@ export default function PostVersandManager() {
     };
 
     const findInDatabase = (rawRow) => {
-        if (!dbData || dbData.length === 0) return null;
-        const rawLand = String(rawRow.land || 'DEU').toUpperCase();
+        if (!dbData || dbData.length === 0) return { match: null, reason: 'Keine Datenbank geladen' };
+        const rawLand = normalizeCountryCode(rawRow.land || 'DEU');
         const rawPlz = formatPLZ(rawRow.plz, rawLand);
         const sourceCloud = cleanForMatch(`${rawRow.anrede} ${rawRow.titel} ${rawRow.vorname} ${rawRow.nachname} ${rawRow.zusatz}`);
         const sourceNumbers = extractNumbers(rawRow.strasse);
+        const sourceStreet = normalizeStreet(rawRow.strasse);
+        const sourceFirstName = cleanForMatch(rawRow.vorname);
+        const sourceLastName = cleanForMatch(rawRow.nachname);
+        const sourceTokens = tokenizeName(`${rawRow.anrede} ${rawRow.titel} ${rawRow.vorname} ${rawRow.nachname} ${rawRow.zusatz}`);
+        const sourceIsPerson = /herr|frau/i.test(String(rawRow.anrede || '')) || String(rawRow.vorname || '').trim().length > 1;
 
-        return dbData.find(dbRow => {
-            const dbLand = String(dbRow.LAND || dbRow.landCode || 'DEU').toUpperCase();
+        const candidates = dbData.map((dbRow) => {
+            const dbLand = normalizeCountryCode(dbRow.LAND || dbRow.landCode || 'DEU');
             const dbPlz = formatPLZ(dbRow.PLZ || dbRow.plz, dbLand);
-            if (dbPlz !== rawPlz) return false;
+            if (dbPlz !== rawPlz) return null;
+            if (isStrictCountryCode(rawLand) && isStrictCountryCode(dbLand) && dbLand !== rawLand) return null;
 
-            const dbNameClean = cleanForMatch(dbRow.NAME);
+            const dbCombinedName = `${dbRow.NAME || ''} ${dbRow.ZUSATZ || ''}`.trim();
+            const dbNameClean = cleanForMatch(dbCombinedName);
+            const dbNameTokens = tokenizeName(dbCombinedName);
             const dbNumbers = extractNumbers(`${dbRow.STRASSE} ${dbRow.NUMMER}`);
+            const dbStreet = normalizeStreet(dbRow.STRASSE);
+            let score = 0;
 
-            let nameMatch = false;
-            if (sourceCloud.includes(dbNameClean) || dbNameClean.includes(sourceCloud)) {
-                nameMatch = true;
+            if (sourceStreet && dbStreet) {
+                if (sourceStreet.includes(dbStreet) || dbStreet.includes(sourceStreet)) score += 20;
+                else score -= 20;
             } else {
-                const lastName = cleanForMatch(rawRow.nachname);
-                if (lastName && lastName.length > 3 && dbNameClean.includes(lastName)) {
-                    nameMatch = true;
-                }
+                score += 8;
             }
-            if (!nameMatch) return false;
 
             if (sourceNumbers && dbNumbers) {
-                if (!dbNumbers.includes(sourceNumbers) && !sourceNumbers.includes(dbNumbers)) return false;
+                if (dbNumbers === sourceNumbers) score += 20;
+                else if (dbNumbers.includes(sourceNumbers) || sourceNumbers.includes(dbNumbers)) score += 10;
+                else score -= 20;
             }
 
-            return true;
-        });
+            if (sourceIsPerson && sourceLastName && sourceLastName.length >= 3) {
+                if (dbNameClean.includes(sourceLastName)) score += 35;
+                else return null;
+            }
+
+            if (sourceIsPerson && sourceFirstName && sourceFirstName.length >= 3) {
+                if (dbNameClean.includes(sourceFirstName)) score += 15;
+                else if (dbNameTokens.some((t) => t.startsWith(sourceFirstName.slice(0, 3)))) score += 8;
+                else score -= 8;
+            }
+
+            const tokenMatches = sourceTokens.filter((token) => dbNameTokens.includes(token)).length;
+            const tokenRatio = sourceTokens.length > 0 ? tokenMatches / sourceTokens.length : 0;
+            score += Math.round(tokenRatio * 20);
+
+            if (sourceCloud && dbNameClean && (sourceCloud.includes(dbNameClean) || dbNameClean.includes(sourceCloud))) {
+                score += 20;
+            }
+
+            if (!sourceLastName && tokenRatio < 0.25) {
+                score -= 12;
+            }
+
+            return { dbRow, score };
+        }).filter(Boolean);
+
+        if (candidates.length === 0) return { match: null, reason: 'Keine Adresse mit gleicher PLZ/Land gefunden' };
+
+        candidates.sort((a, b) => b.score - a.score);
+        const best = candidates[0];
+        const second = candidates[1];
+
+        if (best.score < 25) {
+            return { match: null, reason: `Treffer zu unsicher (Score ${best.score})` };
+        }
+
+        if (second && second.score >= best.score - 4 && best.score < 55) {
+            return { match: null, reason: `Mehrdeutiger Treffer (${best.score} vs ${second.score})` };
+        }
+
+        return { match: best.dbRow, reason: `Auto-Match (Score ${best.score})` };
     };
 
     const prepareDbMatch = () => {
-        if (!apiKey && dbData.length === 0) return alert("Ohne API Key musst du zumindest eine Datenbank hochladen!");
+        if (selectedProvider !== 'ollama' && !apiKey && dbData.length === 0) return alert("Ohne API Key musst du zumindest eine Datenbank hochladen!");
         const matchedList = []; const unmatchedList = [];
 
         rawData.forEach((row, index) => {
@@ -191,11 +505,15 @@ export default function PostVersandManager() {
                 return;
             }
 
-            const cached = findInDatabase(mini);
+            const dbDecision = findInDatabase(mini);
+            const cached = dbDecision.match;
             if (cached) {
-                const ship = getVersandArt(weight, cached.LAND || cached.landCode);
-                matchedList.push({ ...mini, name: cached.NAME, zusatz: cached.ZUSATZ, strasse: cached.STRASSE, nummer: cached.NUMMER, plz: cached.PLZ, ort: cached.STADT || cached.ORT, landCode: cached.LAND || cached.landCode, type: cached.ADRESS_TYP || 'HOUSE', label: ship.label, price: ship.price, isDHL: ship.isDHL, fromDB: true });
-            } else unmatchedList.push(mini);
+                const normalizedLand = normalizeCountryCode(cached.LAND || cached.landCode || 'DEU') || 'DEU';
+                const ship = getVersandArt(weight, normalizedLand);
+                matchedList.push({ ...mini, name: cached.NAME, zusatz: cached.ZUSATZ, strasse: cached.STRASSE, nummer: cached.NUMMER, plz: cached.PLZ, ort: cached.STADT || cached.ORT, landCode: normalizedLand, type: cached.ADRESS_TYP || 'HOUSE', label: ship.label, price: ship.price, isDHL: ship.isDHL, fromDB: true });
+            } else {
+                unmatchedList.push({ ...mini, matchHint: dbDecision.reason || 'Kein eindeutiger Datenbank-Treffer', isFrozen: false });
+            }
         });
 
         setPreMatchResults({ matchedList, unmatchedList });
@@ -213,52 +531,126 @@ export default function PostVersandManager() {
                 zusatz: itemToUnmatch.zusatz, strasse: itemToUnmatch.originalRow[mapping.strasse], 
                 plz: itemToUnmatch.originalRow[mapping.plz], ort: itemToUnmatch.originalRow[mapping.ort], 
                 land: itemToUnmatch.originalRow[mapping.land], hQty: itemToUnmatch.hQty, pQty: itemToUnmatch.pQty, 
-                totalWeight: itemToUnmatch.totalWeight, originalRow: itemToUnmatch.originalRow
+                totalWeight: itemToUnmatch.totalWeight, originalRow: itemToUnmatch.originalRow,
+                matchHint: 'Manuell getrennt',
+                isFrozen: false,
             };
             return { matchedList: newMatched, unmatchedList: [...prev.unmatchedList, resetItem] };
         });
     };
 
-    // --- NEU: INLINE EDITING FUNKTIONEN ---
-    const startEditing = (item) => {
-        setEditingItemId(item.id);
-        setEditFormData({
-            anrede: item.anrede || '', titel: item.titel || '', vorname: item.vorname || '', 
-            nachname: item.nachname || '', zusatz: item.zusatz || '', strasse: item.strasse || '', 
-            plz: item.plz || '', ort: item.ort || ''
-        });
+    const parsePlzAndLand = (value, fallbackLand = 'DEU') => {
+        const raw = String(value || '').trim();
+        if (!raw) return { plz: '', land: normalizeCountryCode(fallbackLand) || 'DEU' };
+
+        const parts = raw.split(/\s+/);
+        const maybeLand = normalizeCountryCode(parts[parts.length - 1]);
+        if (parts.length > 1 && maybeLand && maybeLand.length === 3) {
+            return {
+                plz: parts.slice(0, -1).join(' ').trim(),
+                land: maybeLand,
+            };
+        }
+
+        return { plz: raw, land: normalizeCountryCode(fallbackLand) || 'DEU' };
     };
 
-    const saveEdit = () => {
-        setPreMatchResults(prev => {
-            const updatedUnmatched = prev.unmatchedList.map(item => {
-                if (item.id === editingItemId) {
-                    return { ...item, ...editFormData };
-                }
-                return item;
-            });
-            return { ...prev, unmatchedList: updatedUnmatched };
-        });
-        setEditingItemId(null);
+    const buildPlzInput = (plz, land) => {
+        const cleanPlz = String(plz || '').trim();
+        if (!cleanPlz) return '';
+        return cleanPlz;
     };
 
+    const getSearchSeed = (item, fallbackName = '') => {
+        const directLastName = String(item?.nachname || '').trim();
+        const city = String(item?.ort || item?.stadt || '').trim();
+        if (directLastName) return [directLastName, city].filter(Boolean).join(' ');
 
-    const manualMatch = (dbRow) => {
-        if (!currentItemToMatch) return;
-        const shipping = getVersandArt(currentItemToMatch.totalWeight, dbRow.LAND || dbRow.landCode);
-        const newItem = {
-            ...currentItemToMatch, name: dbRow.NAME, zusatz: dbRow.ZUSATZ, strasse: dbRow.STRASSE, nummer: dbRow.NUMMER,
-            plz: dbRow.PLZ, ort: dbRow.STADT || dbRow.ORT, landCode: dbRow.LAND || dbRow.landCode, type: dbRow.ADRESS_TYP || 'HOUSE',
-            label: shipping.label, price: shipping.price, isDHL: shipping.isDHL, fromDB: true 
+        const rawName = String(item?.name || fallbackName || '').trim();
+        if (!rawName) return city;
+
+        const tokens = rawName.split(/\s+/).filter(Boolean);
+        const fallbackLastName = tokens[tokens.length - 1] || rawName;
+        return [fallbackLastName, city].filter(Boolean).join(' ');
+    };
+
+    const toEditorForm = (item) => {
+        const sourceName =
+            item.name ||
+            [item.anrede, item.titel, item.akad, item.vorname, item.nachname]
+                .filter(Boolean)
+                .join(' ')
+                .trim();
+        const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
+        const splitAddress = splitStreetAndNumber(item.strasse || '');
+        return {
+            name: sourceName || '',
+            zusatz: item.zusatz || '',
+            strasse: splitAddress.street || item.strasse || '',
+            nummer: item.nummer || splitAddress.number || '',
+            plz: buildPlzInput(parsed.plz, parsed.land),
+            stadt: item.ort || item.stadt || '',
+            land: parsed.land,
+            adressTyp: item.type || item.adressTyp || (/postfach/i.test(item.strasse || '') ? 'POBOX' : 'HOUSE'),
         };
-        setPreMatchResults(prev => ({ matchedList: [...prev.matchedList, newItem], unmatchedList: prev.unmatchedList.filter(m => m.id !== currentItemToMatch.id) }));
-        setMatchModalOpen(false); setCurrentItemToMatch(null); setManualSearchQuery('');
+    };
+
+    const mergeEditorIntoItem = (item, form) => {
+        const parsed = parsePlzAndLand(form.plz, form.land || item.landCode || item.land || 'DEU');
+        const normalizedLand = normalizeCountryCode(form.land || parsed.land || 'DEU') || 'DEU';
+        const normalizedPlz = formatPLZ(parsed.plz, normalizedLand);
+        return {
+            ...item,
+            name: String(form.name || '').trim() || item.name || '',
+            zusatz: String(form.zusatz || '').trim(),
+            strasse: String(form.strasse || '').trim(),
+            nummer: String(form.nummer || '').trim(),
+            plz: normalizedPlz,
+            ort: String(form.stadt || '').trim(),
+            land: normalizedLand,
+            landCode: normalizedLand,
+            type: form.adressTyp || 'HOUSE',
+            manualEdited: true,
+        };
+    };
+
+    const openManualEditor = (startItem = null) => {
+        const fallback = preMatchResults?.unmatchedList?.[0];
+        const target = startItem || fallback;
+        if (!target) return;
+        setCurrentItemToMatch(target);
+        const nextForm = toEditorForm(target);
+        setEditorFormData(nextForm);
+        setManualSearchQuery(getSearchSeed(target, nextForm.name));
+        setMatchModalOpen(true);
+    };
+
+    const saveCurrentEditorItem = () => {
+        if (!currentItemToMatch || currentItemToMatch.isFrozen) return;
+        setPreMatchResults((prev) => ({
+            ...prev,
+            unmatchedList: prev.unmatchedList.map((item) =>
+                item.id === currentItemToMatch.id ? mergeEditorIntoItem(item, editorFormData) : item,
+            ),
+        }));
+    };
+
+    const toggleFreezeCurrent = () => {
+        if (!currentItemToMatch) return;
+        setPreMatchResults((prev) => ({
+            ...prev,
+            unmatchedList: prev.unmatchedList.map((item) =>
+                item.id === currentItemToMatch.id ? { ...item, isFrozen: !item.isFrozen } : item,
+            ),
+        }));
+        setCurrentItemToMatch((prev) => (prev ? { ...prev, isFrozen: !prev.isFrozen } : prev));
     };
 
     const getFuzzySuggestions = (item) => {
         if (!item || dbData.length === 0) return [];
-        const sourceCloud = cleanForMatch(`${item.anrede} ${item.titel} ${item.vorname} ${item.nachname} ${item.zusatz}`);
-        const rawPlz = formatPLZ(item.plz, item.land);
+        const sourceCloud = cleanForMatch(`${item.name || ''} ${item.anrede || ''} ${item.titel || ''} ${item.vorname || ''} ${item.nachname || ''} ${item.zusatz || ''}`);
+        const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
+        const rawPlz = formatPLZ(parsed.plz, parsed.land);
         let scored = dbData.map(dbRow => {
             let score = 0;
             const dbPlz = formatPLZ(dbRow.PLZ || dbRow.plz, dbRow.LAND || dbRow.landCode);
@@ -275,108 +667,208 @@ export default function PostVersandManager() {
 
     const manualSearchResults = useMemo(() => {
         if (!manualSearchQuery || dbData.length === 0) return [];
-        const q = manualSearchQuery.toLowerCase();
-        return dbData.filter(dbRow => `${dbRow.NAME} ${dbRow.STRASSE} ${dbRow.PLZ} ${dbRow.STADT}`.toLowerCase().includes(q)).slice(0, 10); 
+        const tokens = normalizeSearchText(manualSearchQuery)
+            .split(' ')
+            .map((t) => t.trim())
+            .filter(Boolean);
+        if (tokens.length === 0) return [];
+
+        const scored = dbData
+            .map((dbRow) => {
+                const name = String(dbRow.NAME || '');
+                const city = String(dbRow.STADT || dbRow.ORT || '');
+                const street = String(dbRow.STRASSE || '');
+                const plz = String(dbRow.PLZ || '');
+                const land = String(dbRow.LAND || dbRow.landCode || '');
+                const haystack = normalizeSearchText(`${name} ${street} ${plz} ${city} ${land}`);
+
+                if (!tokens.every((token) => haystack.includes(token))) {
+                    return null;
+                }
+
+                // Prefer exact/name-city hits when multiple rows match all tokens.
+                let score = 0;
+                const nameNorm = normalizeSearchText(name);
+                const cityNorm = normalizeSearchText(city);
+                tokens.forEach((token) => {
+                    if (nameNorm === token) score += 100;
+                    else if (nameNorm.startsWith(token)) score += 40;
+                    else if (nameNorm.includes(token)) score += 25;
+
+                    if (cityNorm === token) score += 50;
+                    else if (cityNorm.startsWith(token)) score += 20;
+                    else if (cityNorm.includes(token)) score += 10;
+                });
+
+                return { dbRow, score };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 10)
+            .map((entry) => entry.dbRow);
+
+        return scored;
     }, [manualSearchQuery, dbData]);
 
+    const modalUnmatchedList = preMatchResults?.unmatchedList || [];
+    const modalItemIndex = useMemo(() => {
+        if (!currentItemToMatch) return -1;
+        return modalUnmatchedList.findIndex((item) => item.id === currentItemToMatch.id);
+    }, [modalUnmatchedList, currentItemToMatch]);
 
-    const runAiProcessing = async () => {
-        setIsProcessing(true); setView('preview');
-        const { matchedList, unmatchedList } = preMatchResults;
-        const previewList = [...matchedList]; 
-        const totalAIItems = unmatchedList.length;
-
-        setProcStats({ ai: totalAIItems, db: matchedList.filter(m=>m.fromDB).length, total: rawData.length, eta: 0, progress: 0 });
-
-        if (totalAIItems > 0 && apiKey) {
-            const chunkSize = 10; const chunks = [];
-            for (let i = 0; i < totalAIItems; i += chunkSize) chunks.push(unmatchedList.slice(i, i + chunkSize));
-            const startTime = Date.now();
-
-            for (let i = 0; i < chunks.length; i++) {
-                let retries = 0; let success = false;
-                while (!success && retries < 3) {
-                    try {
-                        if (i > 0) await delay(4000);
-                        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                model: selectedModel, 
-                                messages: [
-                                    {
-                                        role: "system",
-                                        content: `Du bist ein Daten-Experte für den postalischen Versand. Formatiere die eingehenden JSON-Rohdaten in ein sauberes, versandfertiges JSON-Array.
-
-                                        HARTE REGELN:
-                                        1. ANREDE & TITEL: Beginne IMMER mit der Anrede ("Herr", "Frau"). Lösche Berufsbezeichnungen, niedrige Grade (Dipl., B.Sc., M.A.) und Fakultäten (med., habil., rer. nat.) radikal! Behalte nur "Dr.", "Prof.", "OSB". Das Feld 'name' darf NIEMALS leer sein!
-                                        2. PFLEGEHEIME & WOHNSTIFTE: Person ist 'name' (Zeile 1). Das Heim (inkl. Appartement) ist der 'zusatz' (Zeile 2).
-                                        3. INSTITUTIONEN: Einrichtung ist 'name' (Zeile 1). Ansprechpartner ist 'zusatz' (Zeile 2) mit dem Präfix "z.Hd. ".
-                                        4. STRASSEN-EXTRAKTION: Wenn bei einem Kloster oder Heim die Straße im Einrichtungsnamen steht (z.B. "Kloster Andechs, Bergstraße 2"), trenne das zwingend! Straße und Hausnummer gehören IMMER in die Felder 'strasse' und 'nummer'.
-                                        5. POSTFACH VS STRASSE: Wenn in der Quelle eine Straße UND ein Postfach stehen, hat das Postfach IMMER Vorrang! Setze 'type' auf 'POBOX', die Postfachnummer in 'nummer' und lasse 'strasse' komplett leer!
-                                        6. LAND: Zwingend 3-stelliger ISO-Code (DEU, CHE, AUT, ITA).
-                                        7. BRIEFTRÄGER-CHECK: Fehlt der Name, der Ort oder die PLZ? Dann schreibe den Grund in 'hinweis'.
-
-                                        FORMAT-BEISPIELE:
-                                        - Quelle: Stadtarchiv München, Dr. Hans Meier, Burgstr. 1 -> "name": "Stadtarchiv München", "zusatz": "z.Hd. Herr Dr. Hans Meier", "strasse": "Burgstr.", "nummer": "1"
-                                        - Quelle: Bayerisches Hauptstaatsarchiv Schönfeldstr. 5 - Postfach -221152- -> "name": "Bayerisches Hauptstaatsarchiv", "zusatz": "", "strasse": "", "nummer": "221152", "type": "POBOX"
-                                        
-                                        ANTWORTE AUSSCHLIESSLICH ALS GÜLTIGES JSON IN DIESEM FORMAT:
-                                        {"adressen": [{"id": 1, "name": "...", "zusatz": "...", "strasse": "...", "nummer": "...", "plz": "...", "ort": "...", "landCode": "DEU", "type": "HOUSE", "hinweis": ""}]}`
-                                    },
-                                    { role: "user", content: `Bereinige: ${JSON.stringify(chunks[i])}` }
-                                ],
-                                temperature: 0.1, response_format: { type: "json_object" }
-                            })
-                        });
-
-                        if (!response.ok) { if (response.status === 429) { await delay(5000); retries++; continue; } throw new Error(`API Fehler: ${response.status}`); }
-
-                        const content = JSON.parse((await response.json()).choices[0].message.content);
-                        const aiData = content.adressen || Object.values(content)[0];
-
-                        aiData.forEach(ai => {
-                            const original = chunks[i].find(c => c.id === ai.id);
-                            if (!original) return;
-                            const shipping = getVersandArt(original.totalWeight, ai.landCode);
-                            const isError = !ai.plz || !ai.ort || !ai.name;
-                            previewList.push({
-                                ...original, ...ai, plz: formatPLZ(ai.plz, ai.landCode), 
-                                label: shipping.label, price: isError ? 0 : shipping.price, isDHL: shipping.isDHL,
-                                errorMsg: isError ? "Unvollständige Adresse" : ai.hinweis, fromDB: false
-                            });
-                        });
-                        
-                        currentProcessedCount += chunks[i].length;
-                        const elapsedMs = Date.now() - startTime;
-                        setProcStats(prev => ({ ...prev, eta: (totalAIItems - currentProcessedCount) * (elapsedMs / currentProcessedCount), progress: Math.round((currentProcessedCount / totalAIItems) * 100) }));
-                        success = true;
-                        setResults({ preview: [...previewList], groups: {}, totalCost: 0 }); 
-                    } catch (err) { retries++; await delay(3000); }
-                }
-            }
+    const navigateModalItem = (direction) => {
+        if (!currentItemToMatch || modalUnmatchedList.length === 0 || modalItemIndex === -1) return;
+        if (!currentItemToMatch.isFrozen) {
+            saveCurrentEditorItem();
         }
+        const targetIndex = modalItemIndex + direction;
+        if (targetIndex < 0 || targetIndex >= modalUnmatchedList.length) return;
+        const target = modalUnmatchedList[targetIndex];
+        setCurrentItemToMatch(target);
+        const nextForm = toEditorForm(target);
+        setEditorFormData(nextForm);
+        setManualSearchQuery(getSearchSeed(target, nextForm.name));
+    };
 
-        // --- NEU: GRANULARE GRUPPIERUNG ---
-        const groups = {}; let totalCost = 0;
-        previewList.forEach(rec => {
+    const applyDbResultToEditor = (dbRow) => {
+        const dbLand = normalizeCountryCode(dbRow.LAND || dbRow.landCode || editorFormData.land || 'DEU') || 'DEU';
+        setEditorFormData((prev) => ({
+            ...prev,
+            name: dbRow.NAME || prev.name,
+            zusatz: dbRow.ZUSATZ || '',
+            strasse: dbRow.STRASSE || '',
+            nummer: dbRow.NUMMER || '',
+            plz: String(dbRow.PLZ || '').trim(),
+            stadt: dbRow.STADT || dbRow.ORT || '',
+            land: dbLand,
+            adressTyp: dbRow.ADRESS_TYP || 'HOUSE',
+        }));
+    };
+
+    const buildGroupedSummary = (previewList) => {
+        const groups = {};
+        let totalCost = 0;
+
+        previewList.forEach((rec) => {
+            if (rec.excluded) return;
             if (rec.label === 'Kein Versand' || rec.errorMsg) return;
-            
-            // Ermittle den Produkt-Mix
+
             let mix = '';
             if (rec.hQty > 0 && rec.pQty === 0) mix = 'nur Herold';
             else if (rec.hQty === 0 && rec.pQty > 0) mix = 'nur Semesterprogramm';
             else mix = 'Herold + Semesterprogramm';
-            
-            const groupKey = `${rec.label} (${mix})`; // z.B. "Großbrief (nur Herold)"
 
+            const groupKey = `${rec.label} (${mix})`;
             if (!groups[groupKey]) groups[groupKey] = [];
             groups[groupKey].push(rec);
-            totalCost += rec.price;
+
+            if (isLetterPostLabel(rec.label)) {
+                totalCost += rec.price;
+            }
         });
 
-        setResults({ preview: previewList, groups, totalCost });
+        return { groups, totalCost };
+    };
+
+    const finalizeManualToPreview = (matchedList, unmatchedList) => {
+        const previewList = matchedList.map((item) => {
+            if (isNoShippingRecord(item)) {
+                return { ...item, excluded: true };
+            }
+
+            const normalizedLand = normalizeCountryCode(item.landCode || item.land || 'DEU') || 'DEU';
+            const ship = getVersandArt(item.totalWeight, normalizedLand);
+            return {
+                ...item,
+                landCode: normalizedLand,
+                label: ship.label,
+                price: ship.price,
+                isDHL: ship.isDHL,
+                excluded: false,
+            };
+        });
+        unmatchedList.forEach((item) => {
+            const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
+            const landCode = normalizeCountryCode(item.landCode || item.land || parsed.land || 'DEU') || 'DEU';
+            const ship = getVersandArt(item.totalWeight, landCode);
+            previewList.push({
+                ...item,
+                name: item.name || [item.anrede, item.titel, item.akad, item.vorname, item.nachname].filter(Boolean).join(' ').trim() || 'Fehler: Name fehlt',
+                zusatz: item.zusatz || '-',
+                strasse: item.strasse || '',
+                nummer: item.nummer || '',
+                plz: formatPLZ(parsed.plz, landCode),
+                ort: item.ort || '',
+                landCode,
+                type: item.type || 'HOUSE',
+                label: ship.label,
+                price: ship.price,
+                isDHL: ship.isDHL,
+                fromDB: false,
+                excluded: isNoShippingRecord(item),
+            });
+        });
+
+        return { preview: previewList, ...buildGroupedSummary(previewList) };
+    };
+
+    const togglePreviewExclusion = (id) => {
+        setResults((prev) => {
+            if (!prev) return prev;
+            const updatedPreview = prev.preview.map((item) =>
+                item.id === id
+                    ? (isNoShippingRecord(item) ? item : { ...item, excluded: !item.excluded })
+                    : item,
+            );
+            return { ...prev, preview: updatedPreview, ...buildGroupedSummary(updatedPreview) };
+        });
+    };
+
+
+    const runAiProcessing = async () => {
+        if (!preMatchResults) return;
+        setIsProcessing(true);
+
+        // KI-Flow bewusst deaktiviert: Verarbeitung erfolgt nur manuell im Editor.
+        const prepared = finalizeManualToPreview(preMatchResults.matchedList, preMatchResults.unmatchedList);
+        setProcStats({
+            ai: preMatchResults.unmatchedList.length,
+            db: preMatchResults.matchedList.filter((m) => m.fromDB).length,
+            total: rawData.length,
+            eta: 0,
+            progress: 100,
+        });
+        setResults(prepared);
+        setView('preview');
         setIsProcessing(false);
+    };
+
+    const finishManualEditing = () => {
+        if (!preMatchResults) return;
+
+        const mergedUnmatched = modalUnmatchedList.map((item) => {
+            if (!currentItemToMatch) return item;
+            if (item.id !== currentItemToMatch.id) return item;
+            if (item.isFrozen) return item;
+            return mergeEditorIntoItem(item, editorFormData);
+        });
+
+        setPreMatchResults((prev) => ({
+            ...prev,
+            unmatchedList: mergedUnmatched,
+        }));
+
+        const prepared = finalizeManualToPreview(preMatchResults.matchedList, mergedUnmatched);
+        setProcStats({
+            ai: mergedUnmatched.length,
+            db: preMatchResults.matchedList.filter((m) => m.fromDB).length,
+            total: rawData.length,
+            eta: 0,
+            progress: 100,
+        });
+        setResults(prepared);
+        setMatchModalOpen(false);
+        setView('preview');
     };
 
     const downloadCSV = (label, records) => {
@@ -391,19 +883,19 @@ export default function PostVersandManager() {
 
             // 1. CSV GENERIEREN
             const content = ["NAME;ZUSATZ;STRASSE;NUMMER;PLZ;STADT;LAND;ADRESS_TYP", SENDER_ROW, 
-                ...batch.map(r => `"${r.name}";"${r.zusatz||''}";"${r.strasse||''}";"${r.nummer||''}";"${formatPLZ(r.plz, r.landCode)}";"${r.ort}";"${r.landCode}";"${r.type||'HOUSE'}"`)
-            ].join('\r\n');
-            const blobCSV = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+                ...batch.map(r => `${toCsvCell(r.name)};${toCsvCell(r.zusatz)};${toCsvCell(r.strasse)};${toCsvCell(r.nummer)};${toCsvCell(formatPLZ(r.plz, r.landCode))};${toCsvCell(r.ort)};${toCsvCell(r.landCode)};${toCsvCell(r.type || 'HOUSE')}`)
+            ].join('\r\n') + '\r\n';
+            const blobCSV = new Blob([encodeWindows1252(content)], { type: 'text/csv;charset=windows-1252;' });
             const aCSV = document.createElement('a'); 
             aCSV.href = URL.createObjectURL(blobCSV); 
             aCSV.download = `Rhaetia_${safeLabel}${partStr}.csv`; 
             aCSV.click();
 
             // 2. BEGLEITLISTE GENERIEREN (nur wenn nötig)
-            // batchIdx ist 1-basiert, beginnend bei 1 für das erste Etikett NACH dem Absender.
-            // Die Post druckt 1. Etikett = Absender, 2. Etikett = Empfänger 1 usw.
-            // Also ist Index 0 in 'batch' = Etikett 2.
-            const begleitRecords = batch.map((r, idx) => ({ ...r, labelIndex: idx + 2 }))
+            // Für die Begleitliste zählt nur die Reihenfolge der Empfänger im Batch.
+            // Der Absender steht im CSV zwar an Position 1, wird in der Begleitliste aber nicht mitgezählt.
+            // Also ist Index 0 im Batch = Pos. 1 auf dem Etikettenblatt.
+            const begleitRecords = batch.map((r, idx) => ({ ...r, labelIndex: idx + 1 }))
                                         .filter(r => r.hQty > 1 || r.pQty > 1);
 
             if (begleitRecords.length > 0) {
@@ -424,6 +916,10 @@ export default function PostVersandManager() {
     };
 
     const filteredPreview = useMemo(() => results ? results.preview.filter(r => (r.name?.toLowerCase().includes(searchTerm.toLowerCase())) || (r.plz?.includes(searchTerm))) : [], [results, searchTerm]);
+    const previewShipmentCount = useMemo(() => {
+        if (!results) return 0;
+        return results.preview.filter((r) => !r.excluded && !isNoShippingRecord(r)).length;
+    }, [results]);
 
     const backConfig = useMemo(() => {
         switch (view) {
@@ -465,6 +961,85 @@ export default function PostVersandManager() {
                 </div>
             </div>
         );
+    };
+
+    const normalizeCompareValue = (value) =>
+        String(value || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]/g, '');
+
+    const compareValues = (source, target, allowContains = true) => {
+        const s = normalizeCompareValue(source);
+        const t = normalizeCompareValue(target);
+
+        if (!s && !t) return 'empty';
+        if (!s || !t) return 'mismatch';
+        if (s === t) return 'exact';
+        if (allowContains && (s.includes(t) || t.includes(s)) && Math.min(s.length, t.length) >= 4) return 'similar';
+        return 'mismatch';
+    };
+
+    const getMatchInsights = (record) => {
+        const sourceName = [record.anrede, record.titel, record.akad, record.vorname, record.nachname].filter(Boolean).join(' ');
+        const sourceZusatz = record.originalRow?.[mapping.zusatz] || record.zusatz || '';
+        const sourceStreet = record.originalRow?.[mapping.strasse] || record.strasse || '';
+        const sourcePlz = formatPLZ(record.originalRow?.[mapping.plz] || record.plz, record.land || 'DEU');
+        const sourceOrt = record.originalRow?.[mapping.ort] || record.ort || '';
+        const sourceLand = String(record.originalRow?.[mapping.land] || record.land || 'DEU').toUpperCase();
+        const sourceType = /postfach/i.test(sourceStreet) ? 'POBOX' : 'HOUSE';
+
+        const targetName = record.name || '';
+        const targetZusatz = record.zusatz || '';
+        const targetStreet = record.type === 'POBOX' ? `Postfach ${record.nummer || ''}` : `${record.strasse || ''} ${record.nummer || ''}`.trim();
+        const targetPlz = formatPLZ(record.plz, record.landCode);
+        const targetOrt = record.ort || '';
+        const targetLand = String(record.landCode || '').toUpperCase();
+        const targetType = record.type || 'HOUSE';
+
+        const plzStatus = compareValues(sourcePlz, targetPlz, false);
+        const ortStatus = compareValues(sourceOrt, targetOrt, true);
+
+        const fields = [
+            { key: 'name', label: 'Name', source: sourceName, target: targetName, status: compareValues(sourceName, targetName, true) },
+            { key: 'zusatz', label: 'Zusatz', source: sourceZusatz, target: targetZusatz, status: compareValues(sourceZusatz, targetZusatz, true) },
+            { key: 'adresse', label: 'Straße/Nr', source: sourceStreet, target: targetStreet, status: compareValues(sourceStreet, targetStreet, true) },
+            { key: 'plzOrt', label: 'PLZ/Ort', source: `${sourcePlz} ${sourceOrt}`.trim(), target: `${targetPlz} ${targetOrt}`.trim(), status: plzStatus === 'exact' && (ortStatus === 'exact' || ortStatus === 'similar') ? 'exact' : (plzStatus === 'exact' && ortStatus === 'mismatch' ? 'similar' : 'mismatch') },
+            { key: 'land', label: 'Land', source: sourceLand, target: targetLand, status: compareValues(sourceLand, targetLand, false) },
+            { key: 'typ', label: 'Typ', source: sourceType, target: targetType, status: compareValues(sourceType, targetType, false) },
+        ];
+
+        const scoreMap = { exact: 1, similar: 0.65, mismatch: 0 };
+        const consideredFields = fields.filter((field) => field.status !== 'empty');
+        const scoreRaw = consideredFields.length
+            ? consideredFields.reduce((acc, field) => acc + (scoreMap[field.status] ?? 0), 0) / consideredFields.length
+            : 1;
+        const score = Math.min(100, Math.max(0, Math.round(scoreRaw * 100)));
+        const mismatches = fields.filter((f) => f.status === 'mismatch').map((f) => f.label);
+
+        return { fields, score, mismatches };
+    };
+
+    const getStatusClass = (status) => {
+        if (status === 'exact') return 'text-emerald-700 bg-emerald-100 border-emerald-200';
+        if (status === 'similar') return 'text-amber-700 bg-amber-100 border-amber-200';
+        if (status === 'empty') return 'text-slate-500 bg-slate-100 border-slate-200';
+        return 'text-red-700 bg-red-100 border-red-200';
+    };
+
+    const getScoreClass = (score) => {
+        if (score >= 85) return 'text-emerald-800 bg-emerald-100 border-emerald-300';
+        if (score >= 60) return 'text-amber-800 bg-amber-100 border-amber-300';
+        return 'text-red-800 bg-red-100 border-red-300';
+    };
+
+    const getMatchHintClass = (hint) => {
+        const msg = String(hint || '').toLowerCase();
+        if (msg.includes('mehrdeutig') || msg.includes('unsicher')) return 'text-red-700 bg-red-50 border-red-200';
+        if (msg.includes('keine adresse') || msg.includes('keine datenbank')) return 'text-sky-700 bg-sky-50 border-sky-200';
+        if (msg.includes('manuell getrennt')) return 'text-slate-700 bg-slate-100 border-slate-200';
+        return 'text-amber-700 bg-amber-50 border-amber-200';
     };
 
     return (
@@ -510,12 +1085,14 @@ export default function PostVersandManager() {
                                     <UploadCloud size={48} className="mx-auto mb-4 text-slate-300 group-hover:text-[#8e014d]" />
                                     <p className="text-lg font-black text-slate-600 uppercase">1. Quelldatei</p>
                                     {rawData.length > 0 && <p className="text-[#8e014d] font-bold mt-2">{rawData.length} Zeilen</p>}
+                                    {uploadEncoding.source && <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">{uploadEncoding.source}</p>}
                                 </div>
                                 <div className="bg-white border-4 border-dashed border-slate-200 p-10 rounded-[2rem] text-center hover:border-emerald-600 relative transition-all group">
                                     <input type="file" onChange={handleDbUpload} accept=".csv, .xlsx" className="absolute inset-0 opacity-0 cursor-pointer" />
                                     <Database size={48} className="mx-auto mb-4 text-slate-300 group-hover:text-emerald-600" />
                                     <p className="text-lg font-black text-slate-600 uppercase">2. Datenbank <span className="text-[10px] normal-case font-normal">(optional)</span></p>
                                     {dbData.length > 0 && <p className="text-emerald-600 font-bold mt-2">{dbData.length} Adressen</p>}
+                                    {uploadEncoding.db && <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">{uploadEncoding.db}</p>}
                                 </div>
                             </div>
 
@@ -538,12 +1115,33 @@ export default function PostVersandManager() {
                                             <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-800 text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]" />
                                         </div>
                                         <div className="flex flex-col gap-1">
+                                            <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">Anbieter</label>
+                                            <select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)} className="w-full bg-slate-800 border-none text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]">
+                                                <option value="groq">Groq (Cloud)</option>
+                                                <option value="ollama">Ollama (Lokal)</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex flex-col gap-1 md:col-span-2">
                                             <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">KI-Modell</label>
-                                            <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="w-full bg-slate-800 border-none text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]">
+                                            {selectedProvider === 'groq' ? (
+                                                <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="w-full bg-slate-800 border-none text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]">
                                                 <option value="llama-3.3-70b-versatile">Llama 3.3 70B (empfohlen)</option>
                                                 <option value="llama-3.1-8b-instant">Llama 3.1 8B (schnell, hohes Limit)</option>
-                                                <option value="mixtral-8x7b-32768">Mixtral 8x7B (solide Alternative)</option>
-                                            </select>
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    list="ollama-model-options"
+                                                    value={ollamaModel}
+                                                    onChange={(e) => setOllamaModel(e.target.value)}
+                                                    className="w-full bg-slate-800 text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]"
+                                                    placeholder="z.B. qwen2.5-coder:14b"
+                                                />
+                                            )}
+                                            <datalist id="ollama-model-options">
+                                                <option value="qwen2.5-coder:14b" />
+                                                <option value="llama3.1:8b" />
+                                            </datalist>
                                         </div>
                                     </div>
                                     <button onClick={prepareDbMatch} className="w-full bg-[#8e014d] py-5 rounded-2xl font-black text-xl hover:bg-[#b00260] transition-all flex justify-center items-center gap-3"><ListFilter fill="currentColor"/> DATENBANK ABGLEICHEN</button>
@@ -576,8 +1174,8 @@ export default function PostVersandManager() {
                         <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-6">
                             <h2 className="text-4xl font-black tracking-tighter uppercase italic">Clearing Station</h2>
                             {preMatchResults.unmatchedList.length > 0 && (
-                                <button onClick={runAiProcessing} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#8e014d] transition-all flex items-center gap-2">
-                                    <Zap size={18} fill="currentColor"/> KI für {preMatchResults.unmatchedList.length} starten
+                                <button onClick={() => openManualEditor()} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#8e014d] transition-all flex items-center gap-2">
+                                    <CheckSquare size={18} /> Editor für {preMatchResults.unmatchedList.length} öffnen
                                 </button>
                             )}
                         </div>
@@ -594,39 +1192,116 @@ export default function PostVersandManager() {
                         {/* --- TAB 1: ERWEITERTE MATCHED ANSICHT --- */}
                         {activeTab === 'matched' && (
                             <div className="bg-white border-2 border-slate-200 rounded-[2.5rem] overflow-hidden shadow-xl">
+                                <div className="p-5 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-4">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                        Direktvergleich Quelle vs Datenbank
+                                    </div>
+                                    <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-600 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={showOnlyMismatches}
+                                            onChange={(e) => setShowOnlyMismatches(e.target.checked)}
+                                            className="h-4 w-4 rounded border-slate-300 text-[#8e014d] focus:ring-[#8e014d]"
+                                        />
+                                        Nur Abweichungen zeigen
+                                    </label>
+                                </div>
                                 <table className="w-full text-left">
                                     <thead className="bg-slate-50 border-b-2 text-[10px] uppercase font-black text-slate-400">
-                                        <tr><th className="p-5">Quelle (Excel)</th><th className="p-5">Gefunden in Datenbank</th><th className="p-5 text-right">Aktion</th></tr>
+                                        <tr><th className="p-5">Quelle (Excel)</th><th className="p-5">Gefunden in Datenbank</th><th className="p-5">Match-Check & Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {preMatchResults.matchedList.filter(m=>m.fromDB).map((r, i) => (
-                                            <tr key={i} className="hover:bg-slate-50">
+                                        {preMatchResults.matchedList
+                                            .filter(m => m.fromDB)
+                                            .filter((r) => {
+                                                if (!showOnlyMismatches) return true;
+                                                return getMatchInsights(r).mismatches.length > 0;
+                                            })
+                                            .map((r, i) => {
+                                                const insights = getMatchInsights(r);
+                                                const isExpanded = !!expandedMatchRows[r.id];
+                                                return (
+                                            <tr key={i} className="hover:bg-slate-50 align-top">
                                                 <td className="p-5">
-                                                    <div className="font-bold text-slate-800">{[r.anrede, r.titel, r.akad, r.vorname, r.nachname].filter(Boolean).join(' ')}</div>
-                                                    <div className="text-[10px] text-slate-500 mt-1">{r.strasse}, {r.plz} {r.ort}</div>
+                                                    <div className="space-y-2">
+                                                        {insights.fields.map((f) => (
+                                                            <div key={`source-${r.id}-${f.key}`} className="grid grid-cols-[68px_1fr] gap-2 items-start">
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{f.label}</span>
+                                                                <span className="text-xs font-semibold text-slate-800 break-words">{f.source || '-'}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </td>
                                                 <td className="p-5 font-bold text-emerald-900 bg-emerald-50/40">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <Database size={12} className="text-emerald-500"/>
-                                                        <span className="text-sm">{r.name}</span>
+                                                    <div className="space-y-2">
+                                                        {insights.fields.map((f) => (
+                                                            <div key={`target-${r.id}-${f.key}`} className="grid grid-cols-[68px_1fr] gap-2 items-start">
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500">{f.label}</span>
+                                                                <span className="text-xs font-semibold text-slate-900 break-words">{f.target || '-'}</span>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                    {r.zusatz && <div className="text-[10px] italic text-emerald-700 font-normal mb-2">↳ {r.zusatz}</div>}
-                                                    <div className="grid grid-cols-2 gap-2 text-[10px] font-normal border-t border-emerald-100 pt-2">
-                                                        <div><span className="text-emerald-400 uppercase font-black tracking-widest text-[8px] block">Straße</span>{r.type==='POBOX'?`Postfach ${r.nummer}`:`${r.strasse} ${r.nummer}`}</div>
-                                                        <div><span className="text-emerald-400 uppercase font-black tracking-widest text-[8px] block">Ort</span>{r.plz} {r.ort}</div>
-                                                    </div>
-                                                    <div className="mt-3 inline-block bg-white border border-emerald-200 text-emerald-800 px-2 py-1 rounded text-[9px] font-black uppercase">
-                                                        📦 {r.hQty}x Herold, {r.pQty}x Programm
+                                                    <div className="mt-3 text-[9px] uppercase tracking-widest font-black text-emerald-700 inline-flex items-center gap-2 bg-white border border-emerald-200 rounded-md px-2 py-1">
+                                                        <Database size={12} className="text-emerald-500"/> Aus Datenbank
                                                     </div>
                                                 </td>
-                                                <td className="p-5 text-right">
-                                                    <button onClick={() => unmatchItem(r.id)} className="text-red-500 hover:text-white bg-red-50 hover:bg-red-500 p-2 rounded-xl transition-colors flex items-center gap-2 ml-auto text-[10px] font-bold uppercase border border-red-100">
-                                                        <Unlink size={14}/> Trennen
-                                                    </button>
+                                                <td className="p-5">
+                                                    <div className="space-y-3">
+                                                        <div className={`inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getScoreClass(insights.score)}`}>
+                                                            {insights.score}% Match
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {insights.fields.map((f) => (
+                                                                <span key={`status-${r.id}-${f.key}`} className={`px-2 py-1 rounded-md border text-[9px] font-black uppercase tracking-wider ${getStatusClass(f.status)}`}>
+                                                                    {f.label}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        {insights.mismatches.length > 0 && (
+                                                            <div className="text-[10px] font-bold text-red-600 uppercase tracking-wide">
+                                                                Abweichung: {insights.mismatches.join(', ')}
+                                                            </div>
+                                                        )}
+                                                        <div className="inline-block bg-white border border-slate-200 text-slate-700 px-2 py-1 rounded text-[9px] font-black uppercase">
+                                                            📦 {r.hQty}x Herold, {r.pQty}x Programm
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setExpandedMatchRows((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
+                                                                className="text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-2 rounded-xl transition-colors text-[10px] font-bold uppercase border border-slate-200"
+                                                            >
+                                                                {isExpanded ? 'Weniger Details' : 'Alle Rohdaten'}
+                                                            </button>
+                                                            <button onClick={() => unmatchItem(r.id)} className="text-red-500 hover:text-white bg-red-50 hover:bg-red-500 p-2 rounded-xl transition-colors flex items-center gap-2 text-[10px] font-bold uppercase border border-red-100">
+                                                                <Unlink size={14}/> Trennen
+                                                            </button>
+                                                        </div>
+                                                        {isExpanded && (
+                                                            <div className="bg-slate-900 text-slate-100 rounded-xl p-3 text-[10px] leading-relaxed overflow-auto">
+                                                                <div className="font-black uppercase tracking-widest text-slate-400 mb-2">Rohdaten Quelle</div>
+                                                                <pre className="whitespace-pre-wrap break-words">{JSON.stringify(r.originalRow || {}, null, 2)}</pre>
+                                                                <div className="font-black uppercase tracking-widest text-slate-400 mt-4 mb-2">Rohdaten Treffer</div>
+                                                                <pre className="whitespace-pre-wrap break-words">{JSON.stringify({
+                                                                    name: r.name,
+                                                                    zusatz: r.zusatz,
+                                                                    strasse: r.strasse,
+                                                                    nummer: r.nummer,
+                                                                    plz: r.plz,
+                                                                    ort: r.ort,
+                                                                    landCode: r.landCode,
+                                                                    type: r.type,
+                                                                }, null, 2)}</pre>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
-                                        ))}
+                                        )})}
                                         {preMatchResults.matchedList.filter(m=>m.fromDB).length === 0 && <tr><td colSpan="3" className="p-10 text-center text-slate-400 italic">Keine automatischen Treffer.</td></tr>}
+                                        {preMatchResults.matchedList.filter(m=>m.fromDB).length > 0 && preMatchResults.matchedList.filter(m=>m.fromDB).filter((r) => !showOnlyMismatches || getMatchInsights(r).mismatches.length > 0).length === 0 && (
+                                            <tr><td colSpan="3" className="p-10 text-center text-slate-400 italic">Aktuell keine Abweichungen in den gematchten Datensätzen.</td></tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -641,54 +1316,34 @@ export default function PostVersandManager() {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {preMatchResults.unmatchedList.map((r, i) => (
-                                            <tr key={i} className={`hover:bg-slate-50 ${editingItemId === r.id ? 'bg-blue-50/50' : ''}`}>
+                                            <tr key={i} className="hover:bg-slate-50">
                                                 <td className="p-5">
-                                                    {editingItemId === r.id ? (
-                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-white p-4 rounded-xl border border-blue-200 shadow-sm">
-                                                            <input type="text" placeholder="Anrede" value={editFormData.anrede} onChange={e=>setEditFormData({...editFormData, anrede: e.target.value})} className="border p-2 rounded text-xs"/>
-                                                            <input type="text" placeholder="Titel" value={editFormData.titel} onChange={e=>setEditFormData({...editFormData, titel: e.target.value})} className="border p-2 rounded text-xs"/>
-                                                            <input type="text" placeholder="Vorname" value={editFormData.vorname} onChange={e=>setEditFormData({...editFormData, vorname: e.target.value})} className="border p-2 rounded text-xs"/>
-                                                            <input type="text" placeholder="Nachname" value={editFormData.nachname} onChange={e=>setEditFormData({...editFormData, nachname: e.target.value})} className="border p-2 rounded text-xs font-bold border-blue-400"/>
-                                                            <input type="text" placeholder="Zusatz" value={editFormData.zusatz} onChange={e=>setEditFormData({...editFormData, zusatz: e.target.value})} className="border p-2 rounded text-xs col-span-2 md:col-span-4"/>
-                                                            <input type="text" placeholder="Straße" value={editFormData.strasse} onChange={e=>setEditFormData({...editFormData, strasse: e.target.value})} className="border p-2 rounded text-xs col-span-2 md:col-span-2"/>
-                                                            <input type="text" placeholder="PLZ" value={editFormData.plz} onChange={e=>setEditFormData({...editFormData, plz: e.target.value})} className="border p-2 rounded text-xs border-blue-400"/>
-                                                            <input type="text" placeholder="Ort" value={editFormData.ort} onChange={e=>setEditFormData({...editFormData, ort: e.target.value})} className="border p-2 rounded text-xs"/>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <div className="font-bold text-slate-800">
-                                                                {[r.anrede, r.titel, r.akad, r.vorname, r.nachname].filter(Boolean).join(' ')} 
-                                                                <span className="text-slate-400 italic font-normal ml-2">{r.zusatz}</span>
-                                                            </div>
-                                                            <div className="text-[10px] text-slate-500 font-normal uppercase mt-1">
-                                                                {r.strasse}, <span className="font-bold text-[#8e014d]">{r.plz}</span> {r.ort}
-                                                            </div>
-                                                        </>
-                                                    )}
+                                                    <div className="font-bold text-slate-800">
+                                                        {r.name || [r.anrede, r.titel, r.akad, r.vorname, r.nachname].filter(Boolean).join(' ')}
+                                                        <span className="text-slate-400 italic font-normal ml-2">{r.zusatz}</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 font-normal uppercase mt-1">
+                                                        {r.strasse || '-'} {r.nummer || ''}, <span className="font-bold text-[#8e014d]">{r.plz || '-'}</span> {r.ort || '-'} ({normalizeCountryCode(r.landCode || r.land || 'DEU') || 'DEU'})
+                                                    </div>
                                                 </td>
                                                 <td className="p-5">
-                                                    {editingItemId === r.id ? (
-                                                        <span className="text-blue-600 font-bold text-[10px] uppercase">Bearbeitungsmodus</span>
-                                                    ) : (
-                                                        <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-200">Geht an KI</span>
-                                                    )}
+                                                    <div className="space-y-2">
+                                                        <span className={`inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${r.isFrozen ? 'bg-slate-200 text-slate-700 border-slate-300' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
+                                                            {r.isFrozen ? 'Eingefroren' : 'Manuell bearbeiten'}
+                                                        </span>
+                                                        {r.matchHint && (
+                                                            <div className={`text-[10px] font-semibold max-w-xs border rounded-md px-2 py-1 ${getMatchHintClass(r.matchHint)}`}>
+                                                                DB-Hinweis: {r.matchHint}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="p-5 text-right">
-                                                    {editingItemId === r.id ? (
-                                                        <div className="flex justify-end gap-2">
-                                                            <button onClick={() => setEditingItemId(null)} className="text-slate-500 hover:text-slate-700 bg-slate-100 p-2 rounded-lg font-bold"><X size={16}/></button>
-                                                            <button onClick={saveEdit} className="text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-[10px] uppercase flex items-center gap-2 shadow-md"><Save size={14}/> Speichern</button>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex justify-end gap-2">
-                                                            <button onClick={() => startEditing(r)} className="text-slate-500 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 p-2 rounded-lg transition-colors border border-slate-200 hover:border-blue-200" title="Adresse korrigieren">
-                                                                <Edit3 size={14}/>
-                                                            </button>
-                                                            <button onClick={() => { setCurrentItemToMatch(r); setMatchModalOpen(true); }} className="text-slate-600 hover:text-[#8e014d] bg-slate-100 hover:bg-pink-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-[10px] font-bold uppercase border border-slate-200 hover:border-pink-200">
-                                                                <Search size={14}/> DB Suchen
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                    <div className="flex justify-end gap-2">
+                                                        <button onClick={() => openManualEditor(r)} className="text-slate-600 hover:text-white bg-slate-100 hover:bg-slate-900 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-[10px] font-bold uppercase border border-slate-200">
+                                                            <CheckSquare size={14}/> Editor öffnen
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -699,55 +1354,123 @@ export default function PostVersandManager() {
                     </div>
                 )}
 
-                {/* MODAL FÜR MANUELLE SUCHE */}
+                {/* MODAL FÜR MANUELLEN DB-EDITOR */}
                 {matchModalOpen && currentItemToMatch && (
-                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 md:p-6 animate-in fade-in">
-                        <div className="bg-slate-100 rounded-[2rem] w-full max-w-5xl max-h-[95vh] overflow-hidden flex flex-col shadow-2xl border border-slate-300">
-                            <div className="bg-white p-6 border-b border-slate-200 flex justify-between items-center shrink-0">
-                                <h3 className="text-2xl font-black uppercase italic text-slate-800">Manuelle Zuweisung</h3>
-                                <button onClick={() => setMatchModalOpen(false)} className="text-slate-400 hover:text-slate-800 transition-colors"><XCircle size={28} /></button>
-                            </div>
-                            <div className="bg-slate-800 text-white p-6 shrink-0 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Info size={120}/></div>
-                                <h4 className="text-[9px] font-black uppercase text-emerald-400 mb-3 tracking-widest bg-emerald-900/40 inline-block px-3 py-1 rounded-md border border-emerald-800">Die rohe Quelle (Excel)</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative z-10">
-                                    <div className="col-span-1 md:col-span-2">
-                                        <span className="block text-[9px] text-slate-400 uppercase tracking-widest mb-1">Name / Institution</span>
-                                        <span className="font-bold text-base block">{[currentItemToMatch.anrede, currentItemToMatch.titel, currentItemToMatch.akad, currentItemToMatch.vorname, currentItemToMatch.nachname].filter(Boolean).join(' ')}</span>
-                                        {currentItemToMatch.zusatz && <span className="text-sm italic text-slate-300 block mt-1">↳ {currentItemToMatch.zusatz}</span>}
-                                    </div>
-                                    <div>
-                                        <span className="block text-[9px] text-slate-400 uppercase tracking-widest mb-1">Eingetragene Adresse</span>
-                                        <span className="font-semibold text-sm block">{currentItemToMatch.strasse || '-'}</span>
-                                        <span className="text-xs text-slate-300 block mt-0.5"><span className="text-white font-bold">{currentItemToMatch.plz}</span> {currentItemToMatch.ort} ({currentItemToMatch.land || 'DEU'})</span>
-                                    </div>
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 md:p-4 animate-in fade-in">
+                        <div className="bg-slate-100 rounded-[2rem] w-full max-w-7xl h-[96vh] max-h-[96vh] overflow-hidden flex flex-col shadow-2xl border border-slate-300">
+                            <div className="bg-white p-4 border-b border-slate-200 flex justify-between items-center shrink-0 gap-4">
+                                <h3 className="text-2xl font-black uppercase italic text-slate-800">Manueller DB-Editor</h3>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg">
+                                        {modalItemIndex >= 0 ? `${modalItemIndex + 1} / ${modalUnmatchedList.length}` : '-'}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigateModalItem(-1)}
+                                        disabled={modalItemIndex <= 0}
+                                        className="text-slate-500 disabled:text-slate-300 disabled:cursor-not-allowed hover:text-slate-800 bg-slate-100 border border-slate-200 p-2 rounded-lg transition-colors"
+                                        title="Vorheriger Eintrag"
+                                    >
+                                        <ChevronLeft size={18} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigateModalItem(1)}
+                                        disabled={modalItemIndex === -1 || modalItemIndex >= modalUnmatchedList.length - 1}
+                                        className="text-slate-500 disabled:text-slate-300 disabled:cursor-not-allowed hover:text-slate-800 bg-slate-100 border border-slate-200 p-2 rounded-lg transition-colors"
+                                        title="Nächster Eintrag"
+                                    >
+                                        <ChevronRight size={18} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={toggleFreezeCurrent}
+                                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase border transition-colors ${currentItemToMatch?.isFrozen ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                                    >
+                                        {currentItemToMatch?.isFrozen ? <Lock size={14} /> : <Unlock size={14} />}
+                                        {currentItemToMatch?.isFrozen ? 'Entsperren' : 'Einfrieren'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={finishManualEditing}
+                                        className="bg-[#8e014d] text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase"
+                                    >
+                                        Fertigstellen
+                                    </button>
+                                    <button onClick={() => setMatchModalOpen(false)} className="text-slate-400 hover:text-slate-800 transition-colors"><XCircle size={28} /></button>
                                 </div>
                             </div>
-                            <div className="p-6 overflow-y-auto flex-1">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                    <div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Zap size={14} className="text-amber-500"/> KI-gestützte Vorschläge</h4>
-                                        <div className="space-y-3">
-                                            {getFuzzySuggestions(currentItemToMatch).map((suggestion, idx) => (
-                                                <div key={idx} className="bg-white p-4 rounded-2xl border-2 border-emerald-100 hover:border-emerald-400 flex flex-col justify-between items-start transition-colors shadow-sm gap-3">
-                                                    {renderDbCard(suggestion.dbRow, true)}
-                                                    <button onClick={() => manualMatch(suggestion.dbRow)} className="w-full bg-emerald-100 text-emerald-800 hover:bg-emerald-500 hover:text-white py-3 rounded-xl font-bold uppercase text-[10px] flex justify-center items-center gap-2 transition-colors"><CheckSquare size={14}/> Diesen verwenden</button>
+                            <div className="p-4 flex-1 min-h-0">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+                                    <div className="lg:col-span-2 grid grid-rows-[auto_1fr] gap-4 min-h-0">
+                                        <div className="bg-slate-800 text-white rounded-2xl p-4 relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Info size={100}/></div>
+                                            <h4 className="text-[9px] font-black uppercase text-emerald-400 mb-3 tracking-widest bg-emerald-900/40 inline-block px-3 py-1 rounded-md border border-emerald-800">Rohdaten aus Excel</h4>
+                                            <div className="space-y-3 relative z-10">
+                                                <div>
+                                                    <span className="block text-[9px] text-slate-400 uppercase tracking-widest mb-1">Name / Institution</span>
+                                                    <span className="font-bold text-base block">{[currentItemToMatch.anrede, currentItemToMatch.titel, currentItemToMatch.akad, currentItemToMatch.vorname, currentItemToMatch.nachname].filter(Boolean).join(' ') || currentItemToMatch.name || '-'}</span>
+                                                    {currentItemToMatch.zusatz && <span className="text-sm italic text-slate-300 block mt-1">↳ {currentItemToMatch.zusatz}</span>}
                                                 </div>
-                                            ))}
-                                            {getFuzzySuggestions(currentItemToMatch).length === 0 && <p className="text-slate-400 italic text-sm p-4 bg-white rounded-2xl border border-dashed border-slate-200 text-center">Keine automatischen Vorschläge gefunden.</p>}
+                                                <div>
+                                                    <span className="block text-[9px] text-slate-400 uppercase tracking-widest mb-1">Adresse</span>
+                                                    <span className="font-semibold text-sm block">{`${currentItemToMatch.strasse || '-'} ${currentItemToMatch.nummer || ''}`.trim()}</span>
+                                                    <span className="text-xs text-slate-300 block mt-0.5"><span className="text-white font-bold">{currentItemToMatch.plz || '-'}</span> {currentItemToMatch.ort || '-'} ({normalizeCountryCode(currentItemToMatch.landCode || currentItemToMatch.land || 'DEU') || 'DEU'})</span>
+                                                </div>
+                                                <div className="text-[10px] uppercase font-black tracking-widest inline-flex items-center gap-2 rounded-lg px-3 py-2 border border-slate-600 bg-slate-700/40">
+                                                    {currentItemToMatch.isFrozen ? <Lock size={12}/> : <Unlock size={12}/>}
+                                                    {currentItemToMatch.isFrozen ? 'Eingefroren' : 'Bearbeitbar'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col min-h-0">
+                                            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">DB-Felder bearbeiten</h4>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input disabled={currentItemToMatch.isFrozen} type="text" value={editorFormData.name} onChange={(e) => setEditorFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="NAME" className="col-span-2 border p-2.5 rounded text-xs font-bold disabled:bg-slate-100 disabled:text-slate-400" />
+                                                <input disabled={currentItemToMatch.isFrozen} type="text" value={editorFormData.zusatz} onChange={(e) => setEditorFormData((prev) => ({ ...prev, zusatz: e.target.value }))} placeholder="ZUSATZ" className="col-span-2 border p-2.5 rounded text-xs disabled:bg-slate-100 disabled:text-slate-400" />
+                                                <input disabled={currentItemToMatch.isFrozen} type="text" value={editorFormData.strasse} onChange={(e) => setEditorFormData((prev) => ({ ...prev, strasse: e.target.value }))} placeholder="STRASSE" className="border p-2.5 rounded text-xs disabled:bg-slate-100 disabled:text-slate-400" />
+                                                <input disabled={currentItemToMatch.isFrozen} type="text" value={editorFormData.nummer} onChange={(e) => setEditorFormData((prev) => ({ ...prev, nummer: e.target.value }))} placeholder="NUMMER" className="border p-2.5 rounded text-xs disabled:bg-slate-100 disabled:text-slate-400" />
+                                                <input disabled={currentItemToMatch.isFrozen} type="text" value={editorFormData.plz} onChange={(e) => setEditorFormData((prev) => ({ ...prev, plz: e.target.value }))} placeholder="PLZ" className="border p-2.5 rounded text-xs font-bold disabled:bg-slate-100 disabled:text-slate-400" />
+                                                <input disabled={currentItemToMatch.isFrozen} type="text" value={editorFormData.stadt} onChange={(e) => setEditorFormData((prev) => ({ ...prev, stadt: e.target.value }))} placeholder="STADT" className="border p-2.5 rounded text-xs disabled:bg-slate-100 disabled:text-slate-400" />
+                                                <input disabled={currentItemToMatch.isFrozen} type="text" value={editorFormData.land} onChange={(e) => setEditorFormData((prev) => ({ ...prev, land: e.target.value.toUpperCase() }))} placeholder="LAND (DEU/CHE/AUT...)" className="border p-2.5 rounded text-xs font-bold disabled:bg-slate-100 disabled:text-slate-400" />
+                                                <select disabled={currentItemToMatch.isFrozen} value={editorFormData.adressTyp} onChange={(e) => setEditorFormData((prev) => ({ ...prev, adressTyp: e.target.value }))} className="border p-2.5 rounded text-xs disabled:bg-slate-100 disabled:text-slate-400">
+                                                    <option value="HOUSE">HOUSE</option>
+                                                    <option value="POBOX">POBOX</option>
+                                                </select>
+                                            </div>
+                                            <div className="mt-auto pt-3 flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={saveCurrentEditorItem}
+                                                    disabled={currentItemToMatch.isFrozen}
+                                                    className="bg-slate-900 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase disabled:bg-slate-300"
+                                                >
+                                                    Speichern
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigateModalItem(1)}
+                                                    disabled={modalItemIndex === -1 || modalItemIndex >= modalUnmatchedList.length - 1}
+                                                    className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-[10px] font-black uppercase border border-slate-200 disabled:opacity-40"
+                                                >
+                                                    Speichern & Weiter
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div>
+
+                                    <div className="h-full flex flex-col min-h-0">
                                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Search size={14} className="text-[#8e014d]"/> Datenbank durchsuchen</h4>
-                                        <div className="relative mb-4">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                            <input type="text" placeholder="Name, Straße oder PLZ tippen..." value={manualSearchQuery} onChange={e => setManualSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-slate-200 bg-white outline-none focus:border-[#8e014d] text-sm font-semibold shadow-inner" autoFocus />
-                                        </div>
-                                        <div className="space-y-3">
+                                        <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-1">
+                                            <div className="relative my-2">
+                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                                <input type="text" placeholder="Nachname, Name, Straße oder PLZ..." value={manualSearchQuery} onChange={e => setManualSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-slate-200 bg-white outline-none focus:border-[#8e014d] text-sm font-semibold shadow-inner" />
+                                            </div>
                                             {manualSearchResults.map((dbRow, idx) => (
-                                                <div key={idx} className="bg-white p-4 rounded-2xl border-2 border-slate-200 hover:border-[#8e014d] flex flex-col justify-between items-start transition-colors shadow-sm gap-3">
+                                                <div key={`manual-${idx}`} className="bg-white p-4 rounded-2xl border-2 border-slate-200 hover:border-[#8e014d] flex flex-col justify-between items-start transition-colors shadow-sm gap-3">
                                                     {renderDbCard(dbRow, false)}
-                                                    <button onClick={() => manualMatch(dbRow)} className="w-full bg-slate-100 text-slate-600 hover:bg-[#8e014d] hover:text-white py-3 rounded-xl font-bold uppercase text-[10px] flex justify-center items-center gap-2 transition-colors"><CheckSquare size={14}/> Zuweisen</button>
+                                                    <button onClick={() => applyDbResultToEditor(dbRow)} className="w-full bg-slate-100 text-slate-600 hover:bg-[#8e014d] hover:text-white py-3 rounded-xl font-bold uppercase text-[10px] flex justify-center items-center gap-2 transition-colors"><CheckSquare size={14}/> Übernehmen</button>
                                                 </div>
                                             ))}
                                         </div>
@@ -762,7 +1485,7 @@ export default function PostVersandManager() {
                 {view === 'preview' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-end gap-4 mb-6">
-                            <h2 className="text-4xl font-black tracking-tighter uppercase italic">{isProcessing ? 'KI arbeitet...' : 'Vorschau'}</h2>
+                            <h2 className="text-4xl font-black tracking-tighter uppercase italic">{isProcessing ? 'Verarbeitung...' : 'Vorschau'}</h2>
                             {!isProcessing && results && (
                                 <div className="flex gap-4 items-center">
                                     <div className="relative w-64"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14} /><input type="text" placeholder="Suchen..." className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-slate-200 outline-none focus:border-[#8e014d]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
@@ -773,11 +1496,12 @@ export default function PostVersandManager() {
                         <div className="bg-white p-8 rounded-[2.5rem] border-2 border-slate-200 flex flex-wrap gap-10 items-center justify-between shadow-sm">
                             <div className="flex gap-10">
                                 <div className="text-center"><p className="text-3xl font-black text-emerald-600">{procStats.db}</p><p className="text-[10px] font-bold uppercase text-slate-400">Aus Datenbank</p></div>
-                                <div className="text-center"><p className="text-3xl font-black text-[#8e014d]">{procStats.ai}</p><p className="text-[10px] font-bold uppercase text-slate-400">Von KI geprüft</p></div>
+                                <div className="text-center"><p className="text-3xl font-black text-[#8e014d]">{procStats.ai}</p><p className="text-[10px] font-bold uppercase text-slate-400">Manuell geprüft</p></div>
+                                <div className="text-center"><p className="text-3xl font-black text-slate-800">{previewShipmentCount}</p><p className="text-[10px] font-bold uppercase text-slate-400">Sendungen gesamt</p></div>
                             </div>
                             {isProcessing && procStats.ai > 0 && (
                                 <div className="flex-1 max-w-md ml-auto">
-                                    <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 mb-2"><span className="flex items-center gap-1"><Loader2 className="animate-spin" size={12}/> KI arbeitet... ({selectedModel})</span><span className="text-[#8e014d]">{procStats.progress}%</span></div>
+                                    <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 mb-2"><span className="flex items-center gap-1"><Loader2 className="animate-spin" size={12}/> Verarbeitung läuft...</span><span className="text-[#8e014d]">{procStats.progress}%</span></div>
                                     <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5"><div className="bg-[#8e014d] h-full transition-all duration-500" style={{ width: `${procStats.progress}%` }}></div></div>
                                     <div className="text-right text-[10px] text-slate-500 font-bold">Restzeit: {formatETA(procStats.eta)}</div>
                                 </div>
@@ -787,15 +1511,25 @@ export default function PostVersandManager() {
                             <div className="bg-white border-2 border-slate-200 rounded-[2.5rem] overflow-hidden shadow-xl mt-6">
                                 <table className="w-full text-left">
                                     <thead className="bg-slate-50 border-b-2 text-[10px] uppercase font-black text-slate-400">
-                                        <tr><th className="p-5">Name (Z.1)</th><th className="p-5">Zusatz (Z.2)</th><th className="p-5">Adresse / Land</th><th className="p-5 text-right">Versand / Porto</th></tr>
+                                        <tr><th className="p-5">Name (Z.1)</th><th className="p-5">Zusatz (Z.2)</th><th className="p-5">Adresse / Land</th><th className="p-5 text-right">Versand / Porto</th><th className="p-5 text-right">Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {filteredPreview.map((r, i) => (
-                                            <tr key={i} className={`${r.label === 'Kein Versand' ? 'bg-red-50 text-red-900 opacity-60' : r.errorMsg ? 'bg-amber-50' : ''}`}>
+                                            <tr key={i} className={`${r.excluded ? 'bg-slate-100 text-slate-500' : r.errorMsg ? 'bg-red-300 text-red-950 border-y-2 border-red-500' : r.label === 'Kein Versand' ? 'bg-red-100 text-red-900 opacity-70' : ''}`}>
                                                 <td className="p-5 font-bold">{r.fromDB && <Database size={10} className="inline text-emerald-500 mr-2" />}{r.name}</td>
                                                 <td className="p-5 opacity-60 italic">{r.zusatz || '-'}</td>
-                                                <td className="p-5"><div className="font-semibold">{r.type === 'POBOX' ? `Postfach ${r.nummer}` : `${r.strasse} ${r.nummer}`}</div><div className="text-[10px] uppercase mt-1">{r.plz} {r.ort} ({r.landCode})</div></td>
-                                                <td className="p-5 text-right"><div className="font-black text-[#8e014d] uppercase tracking-tighter">{r.label}</div>{r.price > 0 && (<div className="text-[9px] font-bold text-slate-400 mt-1 uppercase">{r.hQty}xH, {r.pQty}xP | {r.totalWeight}g = {r.price.toFixed(2)} €</div>)}{r.errorMsg && <div className="text-[10px] font-bold text-red-500 mt-1">{r.errorMsg}</div>}</td>
+                                                <td className="p-5"><div className="font-semibold">{`${r.strasse || ''} ${r.nummer || ''}`.trim()}</div><div className="text-[10px] uppercase mt-1">{`${r.plz || ''} ${r.ort || ''}`.trim()} ({r.landCode || ''})</div></td>
+                                                <td className="p-5 text-right"><div className="font-black text-[#8e014d] uppercase tracking-tighter">{r.label}</div>{r.price > 0 && (<div className="text-[9px] font-bold text-slate-400 mt-1 uppercase">{r.hQty}xH, {r.pQty}xP | {r.totalWeight}g = {r.price.toFixed(2)} €</div>)}{r.errorMsg && <div className="text-[10px] font-black text-red-900 mt-2 bg-red-100 border border-red-400 rounded-md px-2 py-1 inline-block">{r.errorMsg}</div>}</td>
+                                                <td className="p-5 text-right">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => togglePreviewExclusion(r.id)}
+                                                        disabled={isNoShippingRecord(r)}
+                                                        className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase border transition-colors ${isNoShippingRecord(r) ? 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed' : r.excluded ? 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'}`}
+                                                    >
+                                                        {isNoShippingRecord(r) ? 'Kein Versand' : (r.excluded ? 'Wieder aufnehmen' : 'Rausnehmen')}
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -809,7 +1543,7 @@ export default function PostVersandManager() {
                 {view === 'final' && results && (
                     <div className="space-y-10 animate-in zoom-in-95 duration-500">
                         <div className="bg-[#8e014d] p-16 rounded-[4rem] text-white shadow-2xl flex flex-col md:flex-row justify-between items-center relative overflow-hidden">
-                            <div className="relative z-10"><p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-80">Gesamte Portokosten</p><h2 className="text-8xl font-black mt-2 tracking-tighter italic">{results.totalCost.toFixed(2)} €</h2></div>
+                            <div className="relative z-10"><p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-80">Gesamtes Briefporto</p><h2 className="text-8xl font-black mt-2 tracking-tighter italic">{results.totalCost.toFixed(2)} €</h2><p className="text-[10px] font-bold uppercase tracking-widest mt-3 opacity-80">nur Briefport, keine Pakete</p></div>
                             <div className="bg-white/10 p-10 rounded-[2.5rem] backdrop-blur-xl border border-white/20 text-center relative z-10"><p className="text-5xl font-black">{Object.values(results.groups).reduce((acc, arr) => acc + arr.length, 0)}</p><p className="text-[10px] font-black uppercase opacity-80 tracking-widest mt-2">Sendungen Gesamt</p></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -828,6 +1562,16 @@ export default function PostVersandManager() {
                     </div>
                 )}
             </main>
+
+            {(view === 'db-preview' || view === 'preview') && (
+                <button
+                    type="button"
+                    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                    className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-4 py-3 text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-[#8e014d] transition-colors"
+                >
+                    <ArrowUp size={14} /> Nach oben
+                </button>
+            )}
         </div>
     );
 }

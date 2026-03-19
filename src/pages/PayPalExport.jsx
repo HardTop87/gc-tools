@@ -768,7 +768,7 @@ export default function PayPalExport() {
 
     const rows = buildDatevExportRows(reconciliation.matched);
     if (rows.length === 0) {
-      setError('Keine verifizierten Matches fuer den Export vorhanden.');
+      setError('Keine verifizierten Matches für den Export vorhanden.');
       return;
     }
 
@@ -819,7 +819,7 @@ export default function PayPalExport() {
           <div>
             <h1 className="text-2xl font-black tracking-tight text-gray-900">PayPal Reconciliation Tool</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Automatischer Soll-Ist-Abgleich mit interaktiver Klaerungs-Station fuer Teilzahlungen und Quittungen.
+              Automatischer Soll-Ist-Abgleich mit interaktiver Klärungs-Station für Teilzahlungen und Quittungen.
             </p>
           </div>
           <button
@@ -847,7 +847,7 @@ export default function PayPalExport() {
             subtitle={
               payPalFileName
                 ? `Geladen: ${payPalFileName}`
-                : 'Filtert Typ = Allgemeine Abbuchung aus und bereitet Brutto/Gebuehr/Netto auf'
+                : 'Filtert Typ = Allgemeine Abbuchung aus und bereitet Brutto/Gebühr/Netto auf'
             }
             onFileSelect={handlePayPalFile}
             accept=".csv,.xls,.xlsx"
@@ -863,7 +863,7 @@ export default function PayPalExport() {
               placeholder="z.B. 12.345,67"
               className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 outline-none ring-[#8e014d]/20 transition-all focus:border-[#8e014d] focus:ring"
             />
-            <p className="mt-2 text-xs text-gray-500">Manueller Kontrollwert fuer den Kassensturz.</p>
+            <p className="mt-2 text-xs text-gray-500">Manueller Kontrollwert für den Kassensturz.</p>
           </div>
         </div>
 
@@ -932,7 +932,7 @@ export default function PayPalExport() {
                 onClick={() => setActiveTab(TAB_KEYS.perfect)}
               />
               <TabButton
-                label="⚠️ Klaerungs-Station"
+                label="⚠️ Klärungs-Station"
                 count={reconciliation.unmatchedShop.length + reconciliation.unmatchedPayPal.length}
                 isActive={activeTab === TAB_KEYS.station}
                 onClick={() => setActiveTab(TAB_KEYS.station)}
@@ -989,11 +989,11 @@ export default function PayPalExport() {
                   <div className="grid gap-4 xl:grid-cols-2">
                     <div className="rounded-xl border border-gray-200 p-3">
                       <p className="mb-3 text-xs font-black uppercase tracking-wide text-gray-600">
-                        Ungeloste Shop-Auftraege
+                        Ungeloste Shop-Aufträge
                       </p>
                       <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-100">
                         {unresolvedShopVisible.length === 0 && (
-                          <p className="p-4 text-sm text-gray-500">Keine offenen Shop-Auftraege.</p>
+                          <p className="p-4 text-sm text-gray-500">Keine offenen Shop-Aufträge.</p>
                         )}
                         {unresolvedShopVisible.map((row) => (
                           <div key={row.id} className="flex items-center gap-3 border-b border-gray-100 px-3 py-2 last:border-0">
@@ -1126,7 +1126,7 @@ export default function PayPalExport() {
                       {unresolvedShopVisible.length === 0 && (
                         <tr>
                           <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                            Keine offenen Shop-Auftraege ohne PayPal-Match.
+                            Keine offenen Shop-Aufträge ohne PayPal-Match.
                           </td>
                         </tr>
                       )}
@@ -1157,8 +1157,8 @@ export default function PayPalExport() {
               <div className="flex items-start gap-3 text-sm text-gray-600">
                 <FileCheck2 size={18} className="mt-0.5 text-[#8e014d]" />
                 <div>
-                  <p className="font-semibold text-gray-800">Finaler Export enthaelt nur verifizierte Matches.</p>
-                  <p>Automatische Matches + manuell geklaerte Zuordnungen + manuelle Quittungen.</p>
+                  <p className="font-semibold text-gray-800">Finaler Export enthält nur verifizierte Matches.</p>
+                  <p>Automatische Matches + manuell geklärte Zuordnungen + manuelle Quittungen.</p>
                 </div>
               </div>
               <button
@@ -1177,7 +1177,7 @@ export default function PayPalExport() {
         <div className="flex items-start gap-2">
           <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[#8e014d]" />
           <p>
-            Datensaetze sind strikt exklusiv: Jede Buchung liegt zu jedem Zeitpunkt nur in Matches, unmatched Shop oder unmatched PayPal.
+            Datensätze sind strikt exklusiv: Jede Buchung liegt zu jedem Zeitpunkt nur in Matches, unmatched Shop oder unmatched PayPal.
           </p>
         </div>
       </div>

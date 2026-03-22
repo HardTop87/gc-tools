@@ -175,9 +175,14 @@ function parseDateToIso(value) {
 }
 
 function formatDateGerman(value) {
-  const iso = parseDateToIso(value);
+  const raw = String(value || '').trim();
+  // Already in DD.MM.YYYY format – return as-is to preserve the dots exactly
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(raw)) {
+    return raw;
+  }
+  const iso = parseDateToIso(raw);
   if (!iso.includes('-')) {
-    return value || '';
+    return raw || '';
   }
   const [year, month, day] = iso.split('-');
   return `${day}.${month}.${year}`;
@@ -452,6 +457,38 @@ function buildDatevExportRows(matchedRows) {
       Festschreibung: '0',
     };
   });
+}
+
+function aggregateMatchedRows(matchedRows) {
+  const result = [];
+  const grouped = new Map();
+
+  for (const row of matchedRows) {
+    if (row.isManual) {
+      // Manueller_Beleg-Einträge werden nie zusammengefasst
+      result.push(row);
+      continue;
+    }
+    const key = row.invoiceNo || row.orderNo || '';
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
+    }
+    grouped.get(key).push(row);
+  }
+
+  for (const group of grouped.values()) {
+    if (group.length === 1) {
+      result.push(group[0]);
+      continue;
+    }
+    // Ältestes Datum zuerst (ISO-Sortierung)
+    const sorted = [...group].sort((a, b) => parseDateToIso(a.date).localeCompare(parseDateToIso(b.date)));
+    const base = sorted[0];
+    const totalGross = group.reduce((sum, r) => sum + r.paypalGross, 0);
+    result.push({ ...base, paypalGross: totalGross });
+  }
+
+  return result;
 }
 
 function TabButton({ label, count, isActive, onClick }) {
@@ -766,7 +803,18 @@ export default function PayPalExport() {
       return;
     }
 
-    const rows = buildDatevExportRows(reconciliation.matched);
+    const aggregated = aggregateMatchedRows(reconciliation.matched).sort((a, b) => {
+      const keyA = a.isManual ? '' : a.invoiceNo || a.orderNo || '';
+      const keyB = b.isManual ? '' : b.invoiceNo || b.orderNo || '';
+      // Manueller_Beleg ans Ende
+      if (a.isManual && !b.isManual) return 1;
+      if (!a.isManual && b.isManual) return -1;
+      const numA = Number(keyA);
+      const numB = Number(keyB);
+      if (Number.isFinite(numA) && Number.isFinite(numB)) return numA - numB;
+      return keyA.localeCompare(keyB, 'de');
+    });
+    const rows = buildDatevExportRows(aggregated);
     if (rows.length === 0) {
       setError('Keine verifizierten Matches für den Export vorhanden.');
       return;

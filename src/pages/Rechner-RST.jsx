@@ -491,6 +491,18 @@ export default function NeuesTool() {
                 </div>
               )}
 
+              <label className="block space-y-1.5">
+                <span className="text-sm font-semibold text-slate-700">Produktionszeit</span>
+                <select
+                  value={form.produktionszeit}
+                  onChange={(event) => updateForm('produktionszeit', event.target.value)}
+                  className={inputBaseClassName()}
+                >
+                  <option value="standard">Standard</option>
+                  <option value="express">Express (+10%)</option>
+                </select>
+              </label>
+
               <button
                 type="button"
                 onClick={handleCalculate}
@@ -566,6 +578,9 @@ export default function NeuesTool() {
                             <h3 className="text-base font-semibold text-slate-900">
                               {result.name}
                             </h3>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {result.produktionszeit === 'express' ? 'Express' : 'Standard'} · {result.produktionszeitWT} Werktage
+                            </p>
                           </div>
                           <div className="flex shrink-0 gap-2">
                             {isRecommended && (
@@ -670,8 +685,15 @@ export default function NeuesTool() {
                               <DetailRow
                                 label="Einrichtekosten"
                                 value={`${fmt(result.setupKosten)} €`}
-                                withDivider
+                                withDivider={result.expressSurcharge === 0}
                               />
+                              {result.expressSurcharge > 0 && (
+                                <DetailRow
+                                  label="Express-Aufschlag (+10%)"
+                                  value={`${fmt(result.expressSurcharge)} €`}
+                                  withDivider
+                                />
+                              )}
                               <tr className="border-t-2 border-slate-300 bg-slate-50">
                                 <td className="px-4 py-3 font-semibold text-slate-900">
                                   Gesamt

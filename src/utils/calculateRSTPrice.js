@@ -98,10 +98,32 @@ function getLimitsForFormat(formatKey) {
 }
 
 function getPriceFromTable(table, bogenteile, auflage) {
-  if (table[bogenteile] && table[bogenteile][auflage]) {
-    return table[bogenteile][auflage];
+  const row = table[bogenteile];
+  if (!row) return null;
+
+  const keys = Object.keys(row).map(Number).sort((a, b) => a - b);
+
+  // Exakter Treffer
+  if (row[auflage] !== undefined) return row[auflage];
+
+  // Sb = höchste Staffel ≤ ZS, Sa = niedrigste Staffel > ZS
+  let sbW = null;
+  let saW = null;
+  for (const key of keys) {
+    if (key < auflage) sbW = key;
+    else if (key > auflage && saW === null) saW = key;
   }
-  return null;
+
+  // ZS unter niedrigster Staffel → nicht angeboten
+  if (sbW === null) return null;
+
+  // ZS über höchster Staffel → Preis der höchsten Staffel
+  if (saW === null) return row[keys[keys.length - 1]];
+
+  // Lineare Interpolation: Px = (SaP - SbP) / (SaW - SbW) * (ZS - SbW) + SbP
+  const sbP = row[sbW];
+  const saP = row[saW];
+  return (saP - sbP) / (saW - sbW) * (auflage - sbW) + sbP;
 }
 
 function calcDeckungsbeitragDruck(anzahlBogen) {
@@ -148,19 +170,6 @@ function isCelloAllowedForPaper(paper) {
   return Boolean(paper) && cello.allowedCategories.includes(paper.category);
 }
 
-function getCelloMengenFaktor(bogenUmschlag) {
-  const menge = Math.max(bogenUmschlag, 0);
-  let current = 0;
-
-  for (const step of cello.quantityFactors) {
-    if (menge >= step.minBogen) {
-      current = step.faktor;
-    }
-  }
-
-  return current;
-}
-
 function calcCelloCosts({ hasUmschlag, coverPaper, celloType, bogenUmschlag, grundkosten }) {
   const allowed = hasUmschlag && isCelloAllowedForPaper(coverPaper);
   const normalizedType = normalizeCelloType(celloType);
@@ -176,7 +185,7 @@ function calcCelloCosts({ hasUmschlag, coverPaper, celloType, bogenUmschlag, gru
     };
   }
 
-  const faktor = getCelloMengenFaktor(bogenUmschlag);
+  const faktor = 1;
   const stueckpreis = cello.unitPrices[normalizedType] ?? 0;
   const effektiverBogenpreis = stueckpreis * faktor;
   const fixGrundkosten = Math.max(grundkosten, 0);
@@ -193,7 +202,7 @@ function calcCelloCosts({ hasUmschlag, coverPaper, celloType, bogenUmschlag, gru
 }
 
 function calcSingleRoute(route, inputs, settings) {
-  const { name, isIntern } = route;
+  const { name, isIntern, standardWT, expressWT } = route;
   const {
     formatKey,
     auflage,
@@ -204,6 +213,7 @@ function calcSingleRoute(route, inputs, settings) {
     pUmschlagId,
     dUmschlagKey,
     celloUmschlag,
+    produktionszeit,
   } = inputs;
 
   if (!allowedFormats[name].includes(formatKey)) {
@@ -338,7 +348,9 @@ function calcSingleRoute(route, inputs, settings) {
   let errorMsg = '';
 
   if (isIntern) {
-    if (maxSeiten === 0) {
+    if (auflage > 100) {
+      errorMsg = 'Eigenproduktion ist auf maximal 100 Exemplare begrenzt.';
+    } else if (maxSeiten === 0) {
       errorMsg = 'Technisches Limit für diese Papierkombi bei diesem Format nicht definiert.';
     } else if (seiten > maxSeiten) {
       errorMsg = `Technisch nicht möglich (Maschinenlimit: ${maxSeiten} Seiten).`;
@@ -364,9 +376,10 @@ function calcSingleRoute(route, inputs, settings) {
           errorMsg = 'Von Kopp für diese Auflage/Umfang nicht in Tabelle hinterlegt.';
         }
       } else if (name === 'Partner ILDA') {
-        const table = hasUmschlag
-          ? processingPrices.ilda.withCover
-          : processingPrices.ilda.withoutCover;
+        const isBanner = formatSettings.isBanner ?? false;
+        const table = isBanner
+          ? (hasUmschlag ? processingPrices.ilda.bannerWithCover : processingPrices.ilda.bannerWithoutCover)
+          : (hasUmschlag ? processingPrices.ilda.withCover : processingPrices.ilda.withoutCover);
         wvKosten = getPriceFromTable(table, bogenteileGesamt, auflage);
         if (wvKosten === null) {
           errorMsg = 'Von ILDA für diese Auflage/Umfang nicht in Tabelle hinterlegt.';
@@ -379,14 +392,21 @@ function calcSingleRoute(route, inputs, settings) {
     return { name, error: errorMsg };
   }
 
-  const gesamt = kostenDruckUndPapier + wvKosten + celloKostenGesamt + settings.setupKosten;
+  const gesamtBase = kostenDruckUndPapier + wvKosten + celloKostenGesamt + settings.setupKosten;
+  const isExpress = produktionszeit === 'express';
+  const expressSurcharge = isExpress ? gesamtBase * 0.1 : 0;
+  const gesamt = gesamtBase + expressSurcharge;
   const stueckPreis = gesamt / auflage;
+  const produktionszeitWT = isExpress ? expressWT : standardWT;
 
   return {
     name,
     error: null,
     gesamt,
     stueckPreis,
+    produktionszeit: isExpress ? 'express' : 'standard',
+    produktionszeitWT,
+    expressSurcharge,
     formatName,
     nutzen,
     bogenInhalt,
@@ -471,6 +491,7 @@ export function calculateRSTPrice(formValues, settingsValues = defaults.settings
     pUmschlagId: formValues.pUmschlagId,
     dUmschlagKey: formValues.dUmschlagKey,
     celloUmschlag: formValues.celloUmschlag,
+    produktionszeit: formValues.produktionszeit === 'express' ? 'express' : 'standard',
   };
 
   const typedSettings = {

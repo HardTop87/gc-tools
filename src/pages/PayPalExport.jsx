@@ -17,6 +17,7 @@ import {
 import { Link } from 'react-router-dom';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 const TAB_KEYS = {
   perfect: 'perfect',
@@ -499,7 +500,7 @@ function TabButton({ label, count, isActive, onClick }) {
       className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wide transition-all ${
         isActive
           ? 'border-[#8e014d] bg-[#8e014d] text-white shadow-md'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-[#8e014d]/30 hover:text-[#8e014d]'
+          : 'border-gray-200 bg-white text-gray-600 hover:border-[#8e014d]/30 hover:text-[#8e014d] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
       }`}
     >
       {label} ({count})
@@ -527,8 +528,8 @@ function UploadDropzone({ title, subtitle, onFileSelect, accept }) {
       }}
       className={`block cursor-pointer rounded-2xl border-2 border-dashed p-6 transition-all ${
         isDragging
-          ? 'border-[#8e014d] bg-[#fdf2f8]'
-          : 'border-gray-200 bg-white hover:border-[#8e014d]/30 hover:bg-[#fdf2f8]/40'
+          ? 'border-[#8e014d] bg-[#fdf2f8] dark:bg-[#8e014d]/10'
+          : 'border-gray-200 bg-white hover:border-[#8e014d]/30 hover:bg-[#fdf2f8]/40 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-[#8e014d]/5'
       }`}
     >
       <input
@@ -547,8 +548,8 @@ function UploadDropzone({ title, subtitle, onFileSelect, accept }) {
           <FileUp size={20} />
         </div>
         <div>
-          <p className="text-sm font-black text-gray-900">{title}</p>
-          <p className="text-xs text-gray-500">{subtitle}</p>
+          <p className="text-sm font-black text-gray-900 dark:text-gray-100">{title}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
         </div>
       </div>
     </label>
@@ -852,32 +853,38 @@ export default function PayPalExport() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10">
-      <div className="mb-6">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#8e014d] transition-colors hover:text-[#c2185b]"
-        >
-          <ArrowLeft size={16} /> Dashboard
-        </Link>
-      </div>
-
-      <div className="rounded-3xl border border-gray-100 bg-white p-8 shadow-xl md:p-10">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 pb-5">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-gray-900">PayPal Reconciliation Tool</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Automatischer Soll-Ist-Abgleich mit interaktiver Klärungs-Station für Teilzahlungen und Quittungen.
-            </p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl">
+      <header className="mb-8 overflow-hidden rounded-[28px] border border-[#8e014d]/20 bg-[#8e014d] text-white shadow-[0_30px_80px_-30px_rgba(142,1,77,0.5)]">
+        <div className="px-6 py-6 sm:px-8 lg:px-10 lg:py-8">
+          <div className="flex items-center justify-between mb-5">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
+            >
+              <ArrowLeft size={16} /> Dashboard
+            </Link>
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              <button
+                type="button"
+                onClick={resetAll}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
+              >
+                <RefreshCcw size={14} /> Reset
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={resetAll}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-gray-600 transition-all hover:border-[#8e014d]/40 hover:text-[#8e014d]"
-          >
-            <RefreshCcw size={14} /> Reset
-          </button>
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/80 mb-3">
+            <FileUp size={12} />
+            Internes Tool
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">PayPal Reconciliation</h1>
+          <p className="mt-1 text-sm text-white/70">Automatischer Soll-Ist-Abgleich mit interaktiver Klärungs-Station.</p>
         </div>
+      </header>
+
+      <div className="rounded-3xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 shadow-xl md:p-10">
 
         <div className="grid gap-4 lg:grid-cols-3">
           <UploadDropzone
@@ -900,8 +907,8 @@ export default function PayPalExport() {
             onFileSelect={handlePayPalFile}
             accept=".csv,.xls,.xlsx"
           />
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 shadow-sm">
-            <label className="mb-2 block text-xs font-black uppercase tracking-wide text-gray-600">
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-6 shadow-sm">
+            <label className="mb-2 block text-xs font-black uppercase tracking-wide text-gray-600 dark:text-gray-300">
               Zielsumme laut PayPal-Kontoauszug PDF
             </label>
             <input
@@ -909,9 +916,9 @@ export default function PayPalExport() {
               value={targetSumInput}
               onChange={(event) => setTargetSumInput(event.target.value)}
               placeholder="z.B. 12.345,67"
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 outline-none ring-[#8e014d]/20 transition-all focus:border-[#8e014d] focus:ring"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-100 outline-none ring-[#8e014d]/20 transition-all focus:border-[#8e014d] focus:ring dark:placeholder-gray-500"
             />
-            <p className="mt-2 text-xs text-gray-500">Manueller Kontrollwert für den Kassensturz.</p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Manueller Kontrollwert für den Kassensturz.</p>
           </div>
         </div>
 
@@ -931,42 +938,42 @@ export default function PayPalExport() {
         {reconciliation && (
           <div className="mt-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="rounded-2xl border border-[#8e014d]/10 bg-gradient-to-r from-[#fff6fb] via-[#fff] to-[#fff6fb] p-6 shadow-sm">
+              <div className="rounded-2xl border border-[#8e014d]/10 bg-gradient-to-r from-[#fff6fb] via-[#fff] to-[#fff6fb] dark:from-transparent dark:via-transparent dark:to-transparent dark:bg-[#8e014d]/10 p-6 shadow-sm">
                 <p className="text-xs font-black uppercase tracking-wider text-[#8e014d]">Kassensturz (PayPal)</p>
-                <p className="mt-2 text-sm text-gray-600">Ausgangsstand vs. Live-Stand und Zielsumme PDF</p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Ausgangsstand vs. Live-Stand und Zielsumme PDF</p>
                 <div className="mt-4 space-y-1 text-sm">
-                  <p className="font-semibold text-gray-600">
+                  <p className="font-semibold text-gray-600 dark:text-gray-300">
                     Ausgang PayPal: {formatNumberGerman(initialStats?.paypalTotal ?? kassensturzPayPalSum)} EUR
                   </p>
-                  <p className="font-semibold text-gray-600">
+                  <p className="font-semibold text-gray-600 dark:text-gray-300">
                     Live PayPal: {formatNumberGerman(liveStats.livePayPalTotal || kassensturzPayPalSum)} EUR
                   </p>
-                  <p className="font-semibold text-gray-600">Zielsumme PDF: {formatNumberGerman(targetSum)} EUR</p>
+                  <p className="font-semibold text-gray-600 dark:text-gray-300">Zielsumme PDF: {formatNumberGerman(targetSum)} EUR</p>
                 </div>
                 <p className={`mt-3 text-lg font-black ${kassensturzBalanced ? 'text-emerald-600' : 'text-red-600'}`}>
                   Differenz: {formatNumberGerman(kassensturzDiff)} EUR
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-sm">
                 <p className="text-xs font-black uppercase tracking-wider text-[#8e014d]">Matching-Status</p>
                 <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                  <div className="rounded-xl bg-gray-50 p-3">
-                    <p className="text-[10px] font-black uppercase text-gray-500">Ausgang Shop</p>
-                    <p className="mt-1 text-sm font-black text-gray-800">
+                  <div className="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-3">
+                    <p className="text-[10px] font-black uppercase text-gray-500 dark:text-gray-400">Ausgang Shop</p>
+                    <p className="mt-1 text-sm font-black text-gray-800 dark:text-gray-100">
                       {formatNumberGerman(initialStats?.shopTotal ?? sollLautShop)} EUR
                     </p>
                   </div>
-                  <div className="rounded-xl bg-gray-50 p-3">
-                    <p className="text-[10px] font-black uppercase text-gray-500">Live Gematcht</p>
-                    <p className="mt-1 text-sm font-black text-gray-800">{formatNumberGerman(liveStats.matchedTotal)} EUR</p>
+                  <div className="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-3">
+                    <p className="text-[10px] font-black uppercase text-gray-500 dark:text-gray-400">Live Gematcht</p>
+                    <p className="mt-1 text-sm font-black text-gray-800 dark:text-gray-100">{formatNumberGerman(liveStats.matchedTotal)} EUR</p>
                   </div>
-                  <div className="rounded-xl bg-gray-50 p-3">
-                    <p className="text-[10px] font-black uppercase text-gray-500">Verbleibende Differenz</p>
-                    <p className="mt-1 text-sm font-black text-amber-700">{formatNumberGerman(liveStats.liveDiff)} EUR</p>
+                  <div className="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-3">
+                    <p className="text-[10px] font-black uppercase text-gray-500 dark:text-gray-400">Verbleibende Differenz</p>
+                    <p className="mt-1 text-sm font-black text-amber-700 dark:text-amber-400">{formatNumberGerman(liveStats.liveDiff)} EUR</p>
                   </div>
                 </div>
-                <p className="mt-3 text-xs font-semibold text-gray-500">
+                <p className="mt-3 text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Offener Shop-Betrag: {formatNumberGerman(liveStats.openShopTotal)} EUR | Offenes PayPal: {formatNumberGerman(liveStats.openPayPalTotal)} EUR
                 </p>
               </div>
@@ -993,11 +1000,11 @@ export default function PayPalExport() {
               />
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
               {activeTab === TAB_KEYS.perfect && (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[920px] divide-y divide-gray-100 text-left text-sm">
-                    <thead className="bg-gray-50 text-xs font-black uppercase tracking-wide text-gray-500">
+                  <table className="w-full min-w-[920px] divide-y divide-gray-100 dark:divide-gray-800 text-left text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-800 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       <tr>
                         <th className="px-4 py-3">Auftragsnummer / Beleg</th>
                         <th className="px-4 py-3">Kunde</th>
@@ -1008,23 +1015,23 @@ export default function PayPalExport() {
                         <th className="px-4 py-3">Code</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                       {reconciliation.matched.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                          <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                             Noch keine Matches vorhanden.
                           </td>
                         </tr>
                       )}
                       {reconciliation.matched.map((row) => (
-                        <tr key={row.id} className="hover:bg-gray-50/80">
-                          <td className="px-4 py-3 font-bold text-gray-800">{row.orderNo || '-'}</td>
-                          <td className="px-4 py-3 text-gray-700">{row.customerName}</td>
-                          <td className="px-4 py-3 text-gray-700">{formatNumberGerman(row.paypalGross)} EUR</td>
-                          <td className="px-4 py-3 text-gray-700">{formatNumberGerman(row.paypalFee)} EUR</td>
-                          <td className="px-4 py-3 text-gray-700">{formatNumberGerman(row.paypalNet)} EUR</td>
-                          <td className="px-4 py-3 text-gray-700">{formatDateGerman(row.date)}</td>
-                          <td className="px-4 py-3 text-gray-700">{row.transactionCode || '-'}</td>
+                        <tr key={row.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-700/40">
+                          <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{row.orderNo || '-'}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.customerName}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatNumberGerman(row.paypalGross)} EUR</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatNumberGerman(row.paypalFee)} EUR</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatNumberGerman(row.paypalNet)} EUR</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatDateGerman(row.date)}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.transactionCode || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1035,24 +1042,24 @@ export default function PayPalExport() {
               {activeTab === TAB_KEYS.station && (
                 <div className="space-y-4 p-4">
                   <div className="grid gap-4 xl:grid-cols-2">
-                    <div className="rounded-xl border border-gray-200 p-3">
-                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-gray-600">
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-gray-600 dark:text-gray-300">
                         Ungeloste Shop-Aufträge
                       </p>
-                      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-100">
+                      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-100 dark:border-gray-700">
                         {unresolvedShopVisible.length === 0 && (
-                          <p className="p-4 text-sm text-gray-500">Keine offenen Shop-Aufträge.</p>
+                          <p className="p-4 text-sm text-gray-500 dark:text-gray-400">Keine offenen Shop-Aufträge.</p>
                         )}
                         {unresolvedShopVisible.map((row) => (
-                          <div key={row.id} className="flex items-center gap-3 border-b border-gray-100 px-3 py-2 last:border-0">
+                          <div key={row.id} className="flex items-center gap-3 border-b border-gray-100 dark:border-gray-700 px-3 py-2 last:border-0">
                             <RowCheck checked={selectedShopIds.includes(row.id)} onClick={() => toggleSelectedShop(row.id)} />
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-gray-800">
+                              <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">
                                 {row.orderNo || row.invoiceNo || '-'}
                               </p>
-                              <p className="truncate text-xs text-gray-500">{row.customerName}</p>
+                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">{row.customerName}</p>
                             </div>
-                            <p className="ml-auto text-xs font-black text-gray-700">{formatNumberGerman(row.gross)} EUR</p>
+                            <p className="ml-auto text-xs font-black text-gray-700 dark:text-gray-300">{formatNumberGerman(row.gross)} EUR</p>
                           </div>
                         ))}
                       </div>
@@ -1070,25 +1077,25 @@ export default function PayPalExport() {
                       </button>
                     </div>
 
-                    <div className="rounded-xl border border-gray-200 p-3">
-                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-gray-600">
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                      <p className="mb-3 text-xs font-black uppercase tracking-wide text-gray-600 dark:text-gray-300">
                         Ungeloste PayPal-Zahlungen
                       </p>
-                      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-100">
+                      <div className="max-h-[320px] overflow-auto rounded-lg border border-gray-100 dark:border-gray-700">
                         {reconciliation.unmatchedPayPal.length === 0 && (
-                          <p className="p-4 text-sm text-gray-500">Keine offenen PayPal-Zahlungen.</p>
+                          <p className="p-4 text-sm text-gray-500 dark:text-gray-400">Keine offenen PayPal-Zahlungen.</p>
                         )}
                         {reconciliation.unmatchedPayPal.map((row) => (
-                          <div key={row.id} className="flex items-center gap-3 border-b border-gray-100 px-3 py-2 last:border-0">
+                          <div key={row.id} className="flex items-center gap-3 border-b border-gray-100 dark:border-gray-700 px-3 py-2 last:border-0">
                             <RowCheck
                               checked={selectedPayPalIds.includes(row.id)}
                               onClick={() => toggleSelectedPayPal(row.id)}
                             />
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-gray-800">{row.customerName}</p>
-                              <p className="truncate text-xs text-gray-500">{row.orderNo || row.transactionCode || '-'}</p>
+                              <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{row.customerName}</p>
+                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">{row.orderNo || row.transactionCode || '-'}</p>
                             </div>
-                            <p className="ml-auto text-xs font-black text-gray-700">{formatNumberGerman(row.gross)} EUR</p>
+                            <p className="ml-auto text-xs font-black text-gray-700 dark:text-gray-300">{formatNumberGerman(row.gross)} EUR</p>
                           </div>
                         ))}
                       </div>
@@ -1119,11 +1126,11 @@ export default function PayPalExport() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-100 p-4 rounded-xl flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <p className="text-sm font-black text-slate-700">
+                  <div className="bg-slate-100 dark:bg-gray-800 p-4 rounded-xl flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <p className="text-sm font-black text-slate-700 dark:text-gray-200">
                       Summe Shop: <span className="text-[#8e014d]">{formatNumberGerman(selectedShopSum)} EUR</span>
                     </p>
-                    <p className="text-sm font-black text-slate-700">
+                    <p className="text-sm font-black text-slate-700 dark:text-gray-200">
                       Summe PayPal: <span className="text-[#8e014d]">{formatNumberGerman(selectedPayPalSum)} EUR</span>
                     </p>
                   </div>
@@ -1160,8 +1167,8 @@ export default function PayPalExport() {
 
               {activeTab === TAB_KEYS.missingPaypal && (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[820px] divide-y divide-gray-100 text-left text-sm">
-                    <thead className="bg-gray-50 text-xs font-black uppercase tracking-wide text-gray-500">
+                  <table className="w-full min-w-[820px] divide-y divide-gray-100 dark:divide-gray-800 text-left text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-800 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       <tr>
                         <th className="px-4 py-3">Rechnungsnummer</th>
                         <th className="px-4 py-3">Auftragsnummer</th>
@@ -1170,25 +1177,25 @@ export default function PayPalExport() {
                         <th className="px-4 py-3">Aktion</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                       {unresolvedShopVisible.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                             Keine offenen Shop-Aufträge ohne PayPal-Match.
                           </td>
                         </tr>
                       )}
                       {unresolvedShopVisible.map((row) => (
-                        <tr key={row.id} className="hover:bg-gray-50/80">
-                          <td className="px-4 py-3 font-bold text-gray-800">{row.invoiceNo || '-'}</td>
-                          <td className="px-4 py-3 text-gray-700">{row.orderNo || '-'}</td>
-                          <td className="px-4 py-3 text-gray-700">{row.customerName}</td>
-                          <td className="px-4 py-3 text-gray-700">{formatNumberGerman(row.gross)} EUR</td>
+                        <tr key={row.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-700/40">
+                          <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{row.invoiceNo || '-'}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.orderNo || '-'}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.customerName}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatNumberGerman(row.gross)} EUR</td>
                           <td className="px-4 py-3">
                             <button
                               type="button"
                               onClick={() => excludeShopFromExport(row.id)}
-                              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-gray-600 transition-all hover:border-gray-300"
+                              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs font-black uppercase tracking-wide text-gray-600 dark:text-gray-300 transition-all hover:border-gray-300 dark:hover:border-gray-600"
                             >
                               <XCircle size={14} /> Aus Export ausschliessen
                             </button>
@@ -1201,11 +1208,11 @@ export default function PayPalExport() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4">
-              <div className="flex items-start gap-3 text-sm text-gray-600">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800 px-4 py-4">
+              <div className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
                 <FileCheck2 size={18} className="mt-0.5 text-[#8e014d]" />
                 <div>
-                  <p className="font-semibold text-gray-800">Finaler Export enthält nur verifizierte Matches.</p>
+                  <p className="font-semibold text-gray-800 dark:text-gray-100">Finaler Export enthält nur verifizierte Matches.</p>
                   <p>Automatische Matches + manuell geklärte Zuordnungen + manuelle Quittungen.</p>
                 </div>
               </div>
@@ -1221,7 +1228,7 @@ export default function PayPalExport() {
         )}
       </div>
 
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
+      <div className="mt-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
         <div className="flex items-start gap-2">
           <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[#8e014d]" />
           <p>
@@ -1229,6 +1236,7 @@ export default function PayPalExport() {
           </p>
         </div>
       </div>
+    </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   Settings2,
   Sparkles,
 } from 'lucide-react';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 import { PRICING_CONFIG } from '../data/pricingData';
 import {
@@ -53,11 +54,11 @@ function fmtKg(kg) {
 }
 
 function inputBaseClassName() {
-  return 'h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10';
+  return 'h-10 w-full rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm text-slate-900 dark:text-gray-100 shadow-sm outline-none transition placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:border-[#8e014d] focus:ring-2 focus:ring-[#8e014d]/10';
 }
 
 function panelClassName() {
-  return 'rounded-3xl border border-slate-200 bg-white/90 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur';
+  return 'rounded-3xl border border-slate-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur';
 }
 
 export default function NeuesTool() {
@@ -117,19 +118,22 @@ export default function NeuesTool() {
   const recommendedName = calculation?.recommendedName ?? null;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_rgba(241,245,249,0.92),_rgba(226,232,240,0.95))] px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1800px]">
-        <header className="mb-6 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950 text-white shadow-[0_30px_80px_-30px_rgba(15,23,42,0.85)]">
+        <header className="mb-6 overflow-hidden rounded-[28px] border border-[#8e014d]/20 bg-[#8e014d] text-white shadow-[0_30px_80px_-30px_rgba(142,1,77,0.5)]">
           <div className="grid gap-6 px-6 py-6 sm:px-8 lg:grid-cols-[1.4fr_0.8fr] lg:px-10 lg:py-8">
             <div className="space-y-4">
-              <Link
-                to="/"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-400 transition-colors hover:text-[#8e014d]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Dashboard
-              </Link>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-200">
+              <div className="flex items-center justify-between">
+                <Link
+                  to="/"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Dashboard
+                </Link>
+                <ThemeToggle />
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/80">
                 <Sparkles className="h-3.5 w-3.5" />
                 Internes Kalkulationstool
               </div>
@@ -137,7 +141,7 @@ export default function NeuesTool() {
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   Kalkulator Rückstichheftung
                 </h1>
-                <p className="max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">
+                <p className="max-w-3xl text-sm leading-6 text-white/70 sm:text-base">
                   Selbständige React-Seite für Broschüren- und Heftkalkulation mit
                   interner Produktion, Kopp und ILDA.
                 </p>
@@ -146,24 +150,24 @@ export default function NeuesTool() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                <div className="mb-2 flex items-center gap-2 text-white/70">
                   <FileText className="h-4 w-4" />
                   <span className="text-xs font-semibold uppercase tracking-[0.18em]">
                     Formate
                   </span>
                 </div>
                 <p className="text-2xl font-semibold">{formatOptions.length}</p>
-                <p className="mt-1 text-sm text-slate-400">Standard und Banner</p>
+                <p className="mt-1 text-sm text-white/50">Standard und Banner</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="mb-2 flex items-center gap-2 text-slate-300">
+                <div className="mb-2 flex items-center gap-2 text-white/70">
                   <Calculator className="h-4 w-4" />
                   <span className="text-xs font-semibold uppercase tracking-[0.18em]">
                     Produzenten
                   </span>
                 </div>
                 <p className="text-2xl font-semibold">{routes.length}</p>
-                <p className="mt-1 text-sm text-slate-400">Intern, Kopp, ILDA</p>
+                <p className="mt-1 text-sm text-white/50">Intern, Kopp, ILDA</p>
               </div>
             </div>
           </div>
@@ -176,32 +180,32 @@ export default function NeuesTool() {
             className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left sm:px-8"
           >
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-slate-950 p-2 text-white">
+              <div className="rounded-2xl bg-[#8e014d] p-2 text-white">
                 <Settings2 className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-900">Basis-Einstellungen</p>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">Basis-Einstellungen</p>
+                <p className="text-sm text-slate-500 dark:text-gray-400">
                   Grundpreise, Multiplikatoren, Auftrag und Empfehlungslogik
                 </p>
               </div>
             </div>
             <ChevronDown
-              className={`h-5 w-5 text-slate-500 transition ${
+              className={`h-5 w-5 text-slate-500 dark:text-gray-400 transition ${
                 settingsOpen ? 'rotate-180' : ''
               }`}
             />
           </button>
 
           {settingsOpen && (
-            <div className="border-t border-slate-200 px-6 py-6 sm:px-8">
+            <div className="border-t border-slate-200 dark:border-gray-700 px-6 py-6 sm:px-8">
               <div className="grid gap-6 xl:grid-cols-4">
                 <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
                     Grundpreise SRA3
                   </p>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">SW (1c) €</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">SW (1c) €</span>
                     <input
                       type="number"
                       min="0"
@@ -214,7 +218,7 @@ export default function NeuesTool() {
                     />
                   </label>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">Farbe (4c) €</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Farbe (4c) €</span>
                     <input
                       type="number"
                       min="0"
@@ -229,11 +233,11 @@ export default function NeuesTool() {
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
                     Multiplikatoren
                   </p>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">Faktor Banner</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Faktor Banner</span>
                     <input
                       type="number"
                       min="1"
@@ -244,7 +248,7 @@ export default function NeuesTool() {
                     />
                   </label>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
                       Faktor Klick SRA4
                     </span>
                     <input
@@ -261,11 +265,11 @@ export default function NeuesTool() {
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
                     Auftrag
                   </p>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
                       Grundkosten Cello €
                     </span>
                     <input
@@ -280,7 +284,7 @@ export default function NeuesTool() {
                     />
                   </label>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
                       Einrichtekosten €
                     </span>
                     <input
@@ -295,11 +299,11 @@ export default function NeuesTool() {
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
                     Empfehlung
                   </p>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">Intern bis + €</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Intern bis + €</span>
                     <input
                       type="number"
                       min="0"
@@ -312,7 +316,7 @@ export default function NeuesTool() {
                     />
                   </label>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700">Kopp bis + €</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Kopp bis + €</span>
                     <input
                       type="number"
                       min="0"
@@ -332,21 +336,21 @@ export default function NeuesTool() {
 
         <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
           <aside className={`${panelClassName()} h-fit xl:sticky xl:top-6`}>
-            <div className="border-b border-slate-200 px-6 py-5">
+            <div className="border-b border-slate-200 dark:border-gray-700 px-6 py-5">
               <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-slate-950 p-2 text-white">
+                <div className="rounded-2xl bg-[#8e014d] p-2 text-white">
                   <FileText className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold text-slate-900">Produktdaten</h2>
-                  <p className="text-sm text-slate-500">Eingaben für die Kalkulation</p>
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-gray-100">Produktdaten</h2>
+                  <p className="text-sm text-slate-500 dark:text-gray-400">Eingaben für die Kalkulation</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-4 px-6 py-6">
               <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700">Endformat</span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Endformat</span>
                 <select
                   value={form.formatKey}
                   onChange={(event) => updateForm('formatKey', event.target.value)}
@@ -362,7 +366,7 @@ export default function NeuesTool() {
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block space-y-1.5">
-                  <span className="text-sm font-semibold text-slate-700">Auflage</span>
+                  <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Auflage</span>
                   <input
                     type="number"
                     min="1"
@@ -373,7 +377,7 @@ export default function NeuesTool() {
                 </label>
 
                 <label className="block space-y-1.5">
-                  <span className="text-sm font-semibold text-slate-700">Seiten</span>
+                  <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Seiten</span>
                   <input
                     type="number"
                     min="8"
@@ -385,14 +389,14 @@ export default function NeuesTool() {
                 </label>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
+              <div className="rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
                   Inhalt
                 </p>
               </div>
 
               <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700">Papier</span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Papier</span>
                 <select
                   value={form.pInhaltId}
                   onChange={(event) => updateForm('pInhaltId', event.target.value)}
@@ -407,7 +411,7 @@ export default function NeuesTool() {
               </label>
 
               <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700">Druck</span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Druck</span>
                 <select
                   value={form.dInhaltKey}
                   onChange={(event) => updateForm('dInhaltKey', event.target.value)}
@@ -421,29 +425,29 @@ export default function NeuesTool() {
                 </select>
               </label>
 
-              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 px-4 py-3">
                 <input
                   type="checkbox"
                   checked={form.hasUmschlag}
                   onChange={(event) => updateForm('hasUmschlag', event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 dark:border-gray-600 text-[#8e014d] focus:ring-[#8e014d]"
                 />
                 <span>
-                  <span className="block text-sm font-semibold text-slate-800">
+                  <span className="block text-sm font-semibold text-slate-800 dark:text-gray-200">
                     Mit Umschlag
                   </span>
-                  <span className="block text-sm text-slate-500">4 zusätzliche Seiten</span>
+                  <span className="block text-sm text-slate-500 dark:text-gray-400">4 zusätzliche Seiten</span>
                 </span>
               </label>
 
               {form.hasUmschlag && (
-                <div className="space-y-4 rounded-2xl border-l-4 border-slate-900 bg-slate-50 px-4 py-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
+                <div className="space-y-4 rounded-2xl border-l-4 border-[#8e014d] bg-slate-50 dark:bg-gray-800 px-4 py-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
                     Umschlag
                   </p>
 
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-semibold text-slate-700">Papier</span>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Papier</span>
                     <select
                       value={form.pUmschlagId}
                       onChange={(event) => updateForm('pUmschlagId', event.target.value)}
@@ -458,7 +462,7 @@ export default function NeuesTool() {
                   </label>
 
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-semibold text-slate-700">Druck</span>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Druck</span>
                     <select
                       value={form.dUmschlagKey}
                       onChange={(event) => updateForm('dUmschlagKey', event.target.value)}
@@ -473,7 +477,7 @@ export default function NeuesTool() {
                   </label>
 
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-semibold text-slate-700">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">
                       Cellophanierung
                     </span>
                     <select
@@ -492,7 +496,7 @@ export default function NeuesTool() {
               )}
 
               <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700">Produktionszeit</span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Produktionszeit</span>
                 <select
                   value={form.produktionszeit}
                   onChange={(event) => updateForm('produktionszeit', event.target.value)}
@@ -506,7 +510,7 @@ export default function NeuesTool() {
               <button
                 type="button"
                 onClick={handleCalculate}
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#8e014d] px-4 text-sm font-semibold text-white transition hover:bg-[#70013d]"
               >
                 <Calculator className="h-4 w-4" />
                 Preis berechnen
@@ -515,16 +519,16 @@ export default function NeuesTool() {
           </aside>
 
           <section className={panelClassName()}>
-            <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
+            <div className="border-b border-slate-200 dark:border-gray-700 px-6 py-5 sm:px-8">
               <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-slate-950 p-2 text-white">
+                <div className="rounded-2xl bg-[#8e014d] p-2 text-white">
                   <Calculator className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold text-slate-900">
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-gray-100">
                     Kalkulierte Produktionswege
                   </h2>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-gray-400">
                     Vergleich von Eigenproduktion und Partnern
                   </p>
                 </div>
@@ -551,7 +555,7 @@ export default function NeuesTool() {
                       return (
                         <article
                           key={result.name}
-                          className="rounded-3xl border border-rose-200 bg-rose-50 p-5 text-rose-900"
+                          className="rounded-3xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 p-5 text-rose-900 dark:text-rose-300"
                         >
                           <div className="mb-3 flex items-center gap-2">
                             <AlertCircle className="h-4 w-4 shrink-0" />
@@ -565,20 +569,20 @@ export default function NeuesTool() {
                     return (
                       <article
                         key={result.name}
-                        className={`rounded-3xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
+                        className={`rounded-3xl border bg-white dark:bg-gray-900 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
                           isCheapest
                             ? 'border-emerald-400'
                             : isRecommended
                               ? 'border-amber-400'
-                              : 'border-slate-200'
+                              : 'border-slate-200 dark:border-gray-700'
                         }`}
                       >
                         <div className="mb-4 flex items-start justify-between gap-3">
                           <div>
-                            <h3 className="text-base font-semibold text-slate-900">
+                            <h3 className="text-base font-semibold text-slate-900 dark:text-gray-100">
                               {result.name}
                             </h3>
-                            <p className="mt-0.5 text-xs text-slate-500">
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-gray-400">
                               {result.produktionszeit === 'express' ? 'Express' : 'Standard'} · {result.produktionszeitWT} Werktage
                             </p>
                           </div>
@@ -600,17 +604,17 @@ export default function NeuesTool() {
                           <div>
                             <p
                               className={`text-3xl font-bold tracking-tight ${
-                                isCheapest ? 'text-emerald-600' : 'text-slate-900'
+                                isCheapest ? 'text-emerald-600' : 'text-slate-900 dark:text-gray-100'
                               }`}
                             >
                               {fmt(result.gesamt)} €
                             </p>
-                            <p className="mt-1 text-sm text-slate-500">
+                            <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
                               {fmt(result.stueckPreis, 4)} € / Stück
                             </p>
                           </div>
 
-                          <div className="space-y-1 text-right text-xs text-slate-500">
+                          <div className="space-y-1 text-right text-xs text-slate-500 dark:text-gray-400">
                             <p>
                               DB Druck: {fmt(result.dbDruckInhalt, 3)}
                               {hasUm ? ` (I) · ${fmt(result.dbDruckUmschlag, 3)} (U)` : ''}
@@ -632,7 +636,7 @@ export default function NeuesTool() {
                           </div>
                         </div>
 
-                        <div className="overflow-hidden rounded-2xl border border-slate-200">
+                        <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-gray-700">
                           <table className="w-full text-sm">
                             <tbody>
                               <DetailRow
@@ -694,13 +698,13 @@ export default function NeuesTool() {
                                   withDivider
                                 />
                               )}
-                              <tr className="border-t-2 border-slate-300 bg-slate-50">
-                                <td className="px-4 py-3 font-semibold text-slate-900">
+                              <tr className="border-t-2 border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-800">
+                                <td className="px-4 py-3 font-semibold text-slate-900 dark:text-gray-100">
                                   Gesamt
                                 </td>
                                 <td
                                   className={`px-4 py-3 text-right font-bold ${
-                                    isCheapest ? 'text-emerald-600' : 'text-slate-900'
+                                    isCheapest ? 'text-emerald-600' : 'text-slate-900 dark:text-gray-100'
                                   }`}
                                 >
                                   {fmt(result.gesamt)} €
@@ -724,9 +728,9 @@ export default function NeuesTool() {
 
 function DetailRow({ label, value, withDivider = false }) {
   return (
-    <tr className={withDivider ? 'border-b border-slate-200' : ''}>
-      <td className="px-4 py-2.5 text-slate-500">{label}</td>
-      <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{value}</td>
+    <tr className={withDivider ? 'border-b border-slate-200 dark:border-gray-700' : ''}>
+      <td className="px-4 py-2.5 text-slate-500 dark:text-gray-400">{label}</td>
+      <td className="px-4 py-2.5 text-right font-semibold text-slate-900 dark:text-gray-100">{value}</td>
     </tr>
   );
 }
@@ -734,7 +738,7 @@ function DetailRow({ label, value, withDivider = false }) {
 function DetailSubRow({ value }) {
   return (
     <tr>
-      <td colSpan={2} className="px-4 pb-2 text-right text-xs italic text-slate-500">
+      <td colSpan={2} className="px-4 pb-2 text-right text-xs italic text-slate-500 dark:text-gray-500">
         {value}
       </td>
     </tr>

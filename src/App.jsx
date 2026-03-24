@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import RechnerRST from './pages/Rechner-RST';
 import PayPalExport from './pages/PayPalExport';
 import PostVersand from './pages/PostVersand';
+import { ThemeProvider } from './context/ThemeContext';
 import { Lock, Info } from 'lucide-react';
 
 function Login({ onLogin }) {
@@ -23,21 +24,21 @@ function Login({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full">
-        <form onSubmit={handleSubmit} className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100 mb-6">
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-900 p-10 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 mb-6">
           <div className="w-16 h-16 bg-[#fdf2f8] rounded-2xl flex items-center justify-center mb-8 mx-auto border border-[#8e014d]/10 text-[#8e014d]">
             <Lock size={32} />
           </div>
           
           <h1 className="text-3xl font-black text-center text-[#8e014d] mb-2 tracking-tight">GC Tools</h1>
-          <p className="text-gray-400 text-center text-sm mb-8">Bitte Passwort für den Zugriff eingeben</p>
-          
-          <input 
-            type="password" 
+          <p className="text-gray-400 dark:text-gray-500 text-center text-sm mb-8">Bitte Passwort für den Zugriff eingeben</p>
+
+          <input
+            type="password"
             autoFocus
-            placeholder="Passwort" 
-            className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl mb-2 focus:ring-2 focus:ring-[#8e014d] outline-none transition-all text-center font-bold"
+            placeholder="Passwort"
+            className="w-full p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl mb-2 focus:ring-2 focus:ring-[#8e014d] outline-none transition-all text-center font-bold text-gray-900 dark:text-gray-100 dark:placeholder-gray-500"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -59,8 +60,8 @@ function Login({ onLogin }) {
         </div>
 
         {showImpressum && (
-          <div className="mt-8 p-8 bg-white rounded-3xl border border-gray-100 shadow-sm text-[11px] text-gray-500 leading-relaxed animate-in fade-in duration-300">
-            <h2 className="font-bold text-gray-800 mb-4 uppercase tracking-wider text-xs">Impressum</h2>
+          <div className="mt-8 p-8 bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed animate-in fade-in duration-300">
+            <h2 className="font-bold text-gray-800 dark:text-gray-200 mb-4 uppercase tracking-wider text-xs">Impressum</h2>
             <p className="mb-4">
               <strong>Betreiber:</strong><br />
               Guido Coenen, GC Digitaldruck<br />
@@ -93,7 +94,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
+    <ThemeProvider>
+    <div className="min-h-screen bg-gray-50/50 dark:bg-gray-950">
       <BrowserRouter>
         <Routes>
           <Route
@@ -120,5 +122,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </div>
+    </ThemeProvider>
   );
 }

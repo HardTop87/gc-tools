@@ -104,6 +104,11 @@ const normalizeCountryCode = (value) => {
         ITA: 'ITA',
         ITALIEN: 'ITA',
         ITALY: 'ITA',
+        NL: 'NLD',
+        NLD: 'NLD',
+        NIEDERLANDE: 'NLD',
+        NETHERLANDS: 'NLD',
+        HOLLAND: 'NLD',
     };
 
     return map[raw] || raw;

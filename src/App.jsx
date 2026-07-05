@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import RechnerRST from './pages/Rechner-RST';
+import Verwaltung from './pages/Verwaltung';
 import PayPalExport from './pages/PayPalExport';
 import PostVersand from './pages/PostVersand';
 import { ThemeProvider } from './context/ThemeContext';
@@ -110,6 +111,9 @@ export default function App() {
           />          
           {/* Rückstichheftung */}
           <Route path="/rechner-rst" element={isAuthenticated ? <RechnerRST /> : <Navigate to="/login" replace />} />
+
+          {/* Verwaltung Kalkulationsbasis */}
+          <Route path="/verwaltung" element={isAuthenticated ? <Verwaltung /> : <Navigate to="/login" replace />} />
           
           {/* PayPal Export */}
           <Route path="/paypal-export" element={isAuthenticated ? <PayPalExport /> : <Navigate to="/login" replace />} />

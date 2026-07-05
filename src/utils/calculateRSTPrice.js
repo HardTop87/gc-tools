@@ -1,79 +1,73 @@
-import { PAPER_DATABASE, PRICING_CONFIG } from '../data/pricingData';
+import { bogenpreis } from './pricingConfig';
 
-const { 
-  allowedFormats,
-  allowedPapers,
-  cello,
-  clicks,
-  defaults,
-  formats,
-  processingPrices,
-  routes,
-  limits,
-} = PRICING_CONFIG;
+// Statische Druckoptionen (nicht preisrelevant, daher nicht in der Config)
+export const DRUCK_OPTIONS = [
+  { value: '1c', label: '1/1 Schwarz-Weiß' },
+  { value: '4c', label: '4/4 Farbig' },
+];
 
-function findPaperById(id) {
-  const paper = PAPER_DATABASE[id] ?? null;
-  if (!paper) return null;
-  return {
-    id,
-    name: paper.name,
-    gsm: paper.gsm,
-    category: paper.category,
-    pricePerSheet: paper.pricePerSheet,
-  };
+function paperById(config, id) {
+  return config.papiere.find((p) => p.id === id) ?? null;
 }
 
-function getPapersByIds(ids) {
-  return ids
-    .map((id) => findPaperById(id))
-    .filter((paper) => paper !== null);
+function formatByKey(config, key) {
+  return config.formate.find((f) => f.key === key) ?? null;
 }
 
-export function getContentPaperOptions(formatKey) {
-  const isBanner = formats[formatKey]?.isBanner ?? false;
-  const ids = isBanner ? allowedPapers.inhaltBanner : allowedPapers.inhalt;
-  return getPapersByIds(ids);
+function getPapersByIds(config, ids) {
+  return ids.map((id) => paperById(config, id)).filter(Boolean);
 }
 
-export function getCoverPaperOptions(formatKey, contentPaperId) {
-  const contentPaper = findPaperById(contentPaperId);
-  if (!contentPaper) return [];
+export function getFormatOptions(config) {
+  return config.formate.map((f) => ({ value: f.key, label: f.name }));
+}
 
-  const isBanner = formats[formatKey]?.isBanner ?? false;
-  const ids = isBanner ? allowedPapers.umschlagBanner : allowedPapers.umschlag;
+export function getContentPaperOptions(config, formatKey) {
+  const format = formatByKey(config, formatKey);
+  if (!format) return [];
+  return getPapersByIds(config, format.papiereInhalt);
+}
 
-  return getPapersByIds(ids).filter(
-    (paper) => paper.category === contentPaper.category,
+// Familienregel: Umschlag muss aus derselben Papierfamilie stammen wie der Inhalt
+// (CC↔CC, N↔N, BD↔BD, R↔R — bestätigt Armin/Guido 06.07.2026).
+export function getCoverPaperOptions(config, formatKey, contentPaperId) {
+  const format = formatByKey(config, formatKey);
+  const contentPaper = paperById(config, contentPaperId);
+  if (!format || !contentPaper) return [];
+  return getPapersByIds(config, format.papiereUmschlag).filter(
+    (paper) => paper.familie === contentPaper.familie,
   );
 }
 
-export function getCelloOptions(coverPaperId) {
-  const coverPaper = findPaperById(coverPaperId);
-  const category = coverPaper?.category;
-
-  if (category === 'CC' || category === 'BD') {
-    return [
-      { value: 'ohne', label: 'Ohne Cellophanierung' },
-      { value: 'glaenzend', label: 'Glänzend' },
-      { value: 'matt', label: 'Matt / kratzfest' },
-      { value: 'softtouch', label: 'Softtouch' },
-    ];
+export function getCelloOptions(config, coverPaperId) {
+  const coverPaper = paperById(config, coverPaperId);
+  if (coverPaper && config.cello.erlaubteFamilien.includes(coverPaper.familie)) {
+    return config.cello.arten.map((a) => ({ value: a.key, label: a.name }));
   }
-
   return [{ value: 'ohne', label: 'Ohne (nur bei CC/BD möglich)' }];
 }
 
-export function getInitialRSTForm() {
-  const initialFormat = defaults.form.formatKey;
-  const contentOptions = getContentPaperOptions(initialFormat);
+export function getCelloLabels(config) {
+  return Object.fromEntries(config.cello.arten.map((a) => [a.key, a.name]));
+}
+
+export function getInitialRSTForm(config) {
+  const initialFormat = config.formate[0].key;
+  const contentOptions = getContentPaperOptions(config, initialFormat);
   const contentPaperId = contentOptions[0]?.id ?? '';
-  const coverOptions = getCoverPaperOptions(initialFormat, contentPaperId);
+  const coverOptions = getCoverPaperOptions(config, initialFormat, contentPaperId);
 
   return {
-    ...defaults.form,
+    formatKey: initialFormat,
+    auflage: '100',
+    seiten: '24',
     pInhaltId: contentPaperId,
+    dInhaltKey: '4c',
+    hasUmschlag: false,
     pUmschlagId: coverOptions[0]?.id ?? '',
+    dUmschlagKey: '4c',
+    celloUmschlag: 'ohne',
+    produktionszeit: 'standard',
   };
 }
 
@@ -82,19 +76,25 @@ function numberOrDefault(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function getLimitsForFormat(formatKey) {
-  switch (formatKey) {
-    case 'A4_Hoch':
-    case 'A5_Quer':
-      return limits.a4;
-    case 'A5_Hoch':
-      return limits.a5;
-    case 'A4_Quer':
-    case '30x30':
-      return limits.banner;
-    default:
-      return { noCover: {}, withCover: {} };
+export function resolveSettings(config, overrides = null) {
+  const resolved = { ...config.settings };
+  if (overrides) {
+    for (const key of Object.keys(resolved)) {
+      if (overrides[key] !== undefined) {
+        resolved[key] = numberOrDefault(overrides[key], resolved[key]);
+      }
+    }
   }
+  return resolved;
+}
+
+// Seitenlimit aus Blattdicken (µm) und maximaler Broschürendicke der Route.
+// Ersetzt die früheren statischen Limit-Tabellen (Spec Kap. 4).
+export function calcMaxSeiten({ maxDicke, dickeInhalt, dickeUmschlag = 0 }) {
+  if (!(maxDicke > 0) || !(dickeInhalt > 0)) return 0;
+  const nutzbareDicke = maxDicke - (dickeUmschlag || 0);
+  if (nutzbareDicke <= 0) return 0;
+  return Math.floor(nutzbareDicke / dickeInhalt) * 4;
 }
 
 function getPriceFromTable(table, bogenteile, auflage) {
@@ -126,6 +126,14 @@ function getPriceFromTable(table, bogenteile, auflage) {
   return (saP - sbP) / (saW - sbW) * (auflage - sbW) + sbP;
 }
 
+function resolveWvTable(config, route, isBanner, hasUmschlag) {
+  const ref = route.wvTabelleRef;
+  const name = typeof ref === 'string'
+    ? ref
+    : ref[`${isBanner ? 'banner' : 'standard'}_${hasUmschlag ? 'mit' : 'ohne'}`];
+  return config.wvTabellen[name] ?? null;
+}
+
 function calcDeckungsbeitragDruck(anzahlBogen) {
   const n = Math.max(anzahlBogen, 1);
   return 1.5 + 4 / Math.pow(n, 0.15);
@@ -146,12 +154,12 @@ function calcMakulatur(anzahlBogen) {
   return Math.ceil(makulatur);
 }
 
-function calcGewichtszuschlag(gsm) {
+function calcGewichtszuschlag(config, gsm) {
   const grammatur = Math.max(gsm, 0);
   let current = 0;
 
-  for (const step of clicks.weightSurcharges) {
-    if (grammatur >= step.minGsm) {
+  for (const step of config.gewichtszuschlaege) {
+    if (grammatur >= step.abGsm) {
       current = step.zuschlag;
     }
   }
@@ -159,20 +167,14 @@ function calcGewichtszuschlag(gsm) {
   return current;
 }
 
-function normalizeCelloType(celloType) {
-  if (celloType === 'glaenzend' || celloType === 'matt' || celloType === 'softtouch') {
-    return celloType;
-  }
-  return 'ohne';
+function normalizeCelloType(config, celloType) {
+  return config.cello.arten.some((a) => a.key === celloType) ? celloType : 'ohne';
 }
 
-function isCelloAllowedForPaper(paper) {
-  return Boolean(paper) && cello.allowedCategories.includes(paper.category);
-}
-
-function calcCelloCosts({ hasUmschlag, coverPaper, celloType, bogenUmschlag, grundkosten }) {
-  const allowed = hasUmschlag && isCelloAllowedForPaper(coverPaper);
-  const normalizedType = normalizeCelloType(celloType);
+function calcCelloCosts({ config, settings, hasUmschlag, coverPaper, celloType, bogenUmschlag, isBanner }) {
+  const allowed =
+    hasUmschlag && Boolean(coverPaper) && config.cello.erlaubteFamilien.includes(coverPaper.familie);
+  const normalizedType = normalizeCelloType(config, celloType);
 
   if (!allowed || normalizedType === 'ohne') {
     return {
@@ -186,9 +188,11 @@ function calcCelloCosts({ hasUmschlag, coverPaper, celloType, bogenUmschlag, gru
   }
 
   const faktor = 1;
-  const stueckpreis = cello.unitPrices[normalizedType] ?? 0;
+  const basisStueckpreis = config.cello.arten.find((a) => a.key === normalizedType)?.stueckpreis ?? 0;
+  // Banner-Formate: Bogen-Stückpreis × celloFaktorBanner (Grundkosten unverändert)
+  const stueckpreis = basisStueckpreis * (isBanner ? settings.celloFaktorBanner : 1);
   const effektiverBogenpreis = stueckpreis * faktor;
-  const fixGrundkosten = Math.max(grundkosten, 0);
+  const fixGrundkosten = Math.max(settings.celloGrundkosten, 0);
   const bogenkosten = bogenUmschlag * effektiverBogenpreis;
 
   return {
@@ -201,8 +205,8 @@ function calcCelloCosts({ hasUmschlag, coverPaper, celloType, bogenUmschlag, gru
   };
 }
 
-function calcSingleRoute(route, inputs, settings) {
-  const { name, isIntern, standardWT, expressWT } = route;
+function calcSingleRoute(route, inputs, config, settings) {
+  const { key, name, typ } = route;
   const {
     formatKey,
     auflage,
@@ -216,57 +220,78 @@ function calcSingleRoute(route, inputs, settings) {
     produktionszeit,
   } = inputs;
 
-  if (!allowedFormats[name].includes(formatKey)) {
-    return { name, error: 'Format wird von diesem Produzenten nicht unterstützt.' };
+  if (!route.formate.includes(formatKey)) {
+    return { key, name, typ, error: 'Format wird von diesem Produzenten nicht unterstützt.' };
   }
 
-  const formatSettings = formats[formatKey];
+  const format = formatByKey(config, formatKey);
   const bogenteile = seiten / 4;
   const bogenteileGesamt = hasUmschlag ? bogenteile + 1 : bogenteile;
-  const contentPaper = findPaperById(pInhaltId);
-  const coverPaper = hasUmschlag ? findPaperById(pUmschlagId) : null;
+  const contentPaper = paperById(config, pInhaltId);
+  const coverPaper = hasUmschlag ? paperById(config, pUmschlagId) : null;
 
-  if (!formatSettings || !contentPaper) {
-    return { name, error: 'Produktkonfiguration ist unvollständig.' };
+  if (!format || !contentPaper) {
+    return { key, name, typ, error: 'Produktkonfiguration ist unvollständig.' };
   }
 
-  if (hasUmschlag && !coverPaper) {
-    return { name, error: 'Umschlagpapier ist ungültig.' };
+  if (!format.papiereInhalt.includes(contentPaper.id)) {
+    return { key, name, typ, error: 'Inhaltspapier ist für dieses Format nicht zulässig.' };
   }
 
-  const klickSRA3 = {
+  if (hasUmschlag) {
+    if (!coverPaper || !format.papiereUmschlag.includes(coverPaper.id)) {
+      return { key, name, typ, error: 'Umschlagpapier ist ungültig oder für dieses Format nicht zulässig.' };
+    }
+    if (coverPaper.familie !== contentPaper.familie) {
+      return {
+        key,
+        name,
+        typ,
+        error: 'Umschlag- und Inhaltspapier müssen aus derselben Papierfamilie stammen (CC/N/BD/R).',
+      };
+    }
+  }
+
+  if (route.minAuflage && auflage < route.minAuflage) {
+    return { key, name, typ, error: `${name} ist erst ab ${route.minAuflage} Exemplaren möglich.` };
+  }
+  if (route.maxAuflage && auflage > route.maxAuflage) {
+    return { key, name, typ, error: `${name} ist auf maximal ${route.maxAuflage} Exemplare begrenzt.` };
+  }
+
+  // Seitenlimit aus Blattdicken — gilt für alle Routen (Spec 4.2)
+  const maxDicke = settings[route.maxDickeRef];
+  const maxSeiten = calcMaxSeiten({
+    maxDicke,
+    dickeInhalt: contentPaper.dickeUm,
+    dickeUmschlag: hasUmschlag ? coverPaper.dickeUm : 0,
+  });
+  if (maxSeiten < 8) {
+    return { key, name, typ, error: 'Papierkombination technisch nicht möglich (Broschüre zu dick).' };
+  }
+  if (seiten > maxSeiten) {
+    return {
+      key,
+      name,
+      typ,
+      error: `Technisch nicht möglich (max. ${maxSeiten} Seiten bei dieser Papierkombination).`,
+    };
+  }
+
+  const nutzen = format[route.nutzenRef] ?? format.nutzenPartner;
+  const isBanner = format.isBanner;
+  const formatName = isBanner ? 'Banner' : 'SRA3';
+
+  const klickBasis = {
     '1c': settings.baseGrundpreis1c,
     '4c': settings.baseGrundpreis4c,
   };
-  const klickSRA4 = {
-    '1c': settings.baseGrundpreis1c * settings.dynFaktorKlickSRA4,
-    '4c': settings.baseGrundpreis4c * settings.dynFaktorKlickSRA4,
-  };
+  const bannerFaktor = isBanner ? settings.dynFaktorBanner : 1;
+  const currentKlickInhalt = klickBasis[dInhaltKey] * bannerFaktor;
+  const currentKlickUmschlag = hasUmschlag ? klickBasis[dUmschlagKey] * bannerFaktor : 0;
 
-  let nutzen = formatSettings.nutzenPartner;
-  let formatName = 'SRA3';
-  let bogenPreisInhalt = contentPaper.pricePerSheet;
-  let bogenPreisUmschlag = hasUmschlag ? coverPaper.pricePerSheet : 0;
-  let currentKlickInhalt = klickSRA3[dInhaltKey];
-  let currentKlickUmschlag = hasUmschlag ? klickSRA3[dUmschlagKey] : 0;
-
-  if (formatSettings.isBanner) {
-    formatName = 'Banner';
-    currentKlickInhalt *= settings.dynFaktorBanner;
-    currentKlickUmschlag = hasUmschlag
-      ? currentKlickUmschlag * settings.dynFaktorBanner
-      : 0;
-  } else if (isIntern) {
-    nutzen = 1;
-
-    if (formatKey === 'A5_Hoch') {
-      formatName = 'SRA4';
-      bogenPreisInhalt = contentPaper.pricePerSheet / 2;
-      bogenPreisUmschlag = hasUmschlag ? coverPaper.pricePerSheet / 2 : 0;
-      currentKlickInhalt = klickSRA4[dInhaltKey];
-      currentKlickUmschlag = hasUmschlag ? klickSRA4[dUmschlagKey] : 0;
-    }
-  }
+  const bogenPreisInhalt = bogenpreis(contentPaper);
+  const bogenPreisUmschlag = hasUmschlag ? bogenpreis(coverPaper) : 0;
 
   const nettoBogenInhalt = Math.ceil((auflage * bogenteile) / nutzen);
   const makulaturInhalt = calcMakulatur(nettoBogenInhalt);
@@ -289,8 +314,7 @@ function calcSingleRoute(route, inputs, settings) {
     dbPapierUmschlag = calcDeckungsbeitragPapier(nettoBogenUmschlag);
   }
 
-  const gsmInhalt = contentPaper.gsm;
-  const gewichtszuschlagInhalt = calcGewichtszuschlag(gsmInhalt);
+  const gewichtszuschlagInhalt = calcGewichtszuschlag(config, contentPaper.gsm);
   const klickpreisInhalt = (currentKlickInhalt + gewichtszuschlagInhalt) * dbDruckInhalt;
 
   const kostenPapierInhalt = bogenInhalt * bogenPreisInhalt * dbPapierInhalt;
@@ -301,8 +325,7 @@ function calcSingleRoute(route, inputs, settings) {
   let gewichtszuschlagUmschlag = 0;
 
   if (hasUmschlag) {
-    const gsmUmschlag = coverPaper.gsm;
-    gewichtszuschlagUmschlag = calcGewichtszuschlag(gsmUmschlag);
+    gewichtszuschlagUmschlag = calcGewichtszuschlag(config, coverPaper.gsm);
     const klickpreisUmschlag =
       (currentKlickUmschlag + gewichtszuschlagUmschlag) * dbDruckUmschlag;
     kostenPapierUmschlag = bogenUmschlag * bogenPreisUmschlag * dbPapierUmschlag;
@@ -321,86 +344,48 @@ function calcSingleRoute(route, inputs, settings) {
     celloStueckpreis,
     celloKostenGesamt,
   } = calcCelloCosts({
+    config,
+    settings,
     hasUmschlag,
     coverPaper,
     celloType: celloUmschlag,
     bogenUmschlag,
-    grundkosten: settings.celloGrundkosten,
+    isBanner,
   });
 
+  // Umschlag-Zuschlag GC (Rillung/Umschlagverarbeitung Horizon, Spec 3.1)
+  let umschlagZuschlag = 0;
+  if (route.umschlagZuschlag && hasUmschlag && auflage >= settings.gcUmschlagAbAuflage) {
+    umschlagZuschlag = settings.gcUmschlagGrundkosten + settings.gcUmschlagStueckpreis * auflage;
+  }
+
   const gsmUmschlag = hasUmschlag ? coverPaper.gsm : 0;
-  const [openW, openH] = formatSettings.openMm;
-  const sheetAreaM2 = (openW * openH) / 1_000_000;
+  const sheetAreaM2 = (format.offenB * format.offenH) / 1_000_000;
   const weightPerCopyG =
-    (bogenteile * gsmInhalt + (hasUmschlag ? 1 : 0) * gsmUmschlag) * sheetAreaM2;
+    (bogenteile * contentPaper.gsm + (hasUmschlag ? 1 : 0) * gsmUmschlag) * sheetAreaM2;
   const weightTotalKg = (weightPerCopyG * auflage) / 1000;
 
-  const { noCover, withCover } = getLimitsForFormat(formatKey);
-
-  let maxSeiten = 0;
-  if (!hasUmschlag) {
-    maxSeiten = noCover[contentPaper.id] || 0;
-  } else if (withCover[coverPaper.id] && withCover[coverPaper.id][contentPaper.id]) {
-    maxSeiten = withCover[coverPaper.id][contentPaper.id];
+  const wvTable = resolveWvTable(config, route, isBanner, hasUmschlag);
+  if (!wvTable) {
+    return { key, name, typ, error: 'Keine Verarbeitungspreistabelle für diese Konfiguration hinterlegt.' };
+  }
+  const wvKosten = getPriceFromTable(wvTable, bogenteileGesamt, auflage);
+  if (wvKosten === null) {
+    return { key, name, typ, error: `Auflage/Umfang bei ${name} nicht in Preistabelle hinterlegt.` };
   }
 
-  let wvKosten = null;
-  let errorMsg = '';
-
-  if (isIntern) {
-    if (auflage > 100) {
-      errorMsg = 'Eigenproduktion ist auf maximal 100 Exemplare begrenzt.';
-    } else if (maxSeiten === 0) {
-      errorMsg = 'Technisches Limit für diese Papierkombi bei diesem Format nicht definiert.';
-    } else if (seiten > maxSeiten) {
-      errorMsg = `Technisch nicht möglich (Maschinenlimit: ${maxSeiten} Seiten).`;
-    } else {
-      wvKosten = getPriceFromTable(processingPrices.intern, bogenteileGesamt, auflage);
-      if (wvKosten === null) {
-        errorMsg = 'Auflage/Umfang für Eigenproduktion nicht in Preistabelle hinterlegt.';
-      }
-    }
-  } else {
-    if (formatSettings.isBanner) {
-      if (maxSeiten === 0) {
-        errorMsg = 'Papierkombination für dieses Banner-Format nicht zulässig.';
-      } else if (seiten > maxSeiten) {
-        errorMsg = `Technisch nicht möglich (Limit für schweres Banner-Format: ${maxSeiten} Seiten).`;
-      }
-    }
-
-    if (errorMsg === '') {
-      if (name === 'Partner Kopp') {
-        wvKosten = getPriceFromTable(processingPrices.kopp, bogenteileGesamt, auflage);
-        if (wvKosten === null) {
-          errorMsg = 'Von Kopp für diese Auflage/Umfang nicht in Tabelle hinterlegt.';
-        }
-      } else if (name === 'Partner ILDA') {
-        const isBanner = formatSettings.isBanner ?? false;
-        const table = isBanner
-          ? (hasUmschlag ? processingPrices.ilda.bannerWithCover : processingPrices.ilda.bannerWithoutCover)
-          : (hasUmschlag ? processingPrices.ilda.withCover : processingPrices.ilda.withoutCover);
-        wvKosten = getPriceFromTable(table, bogenteileGesamt, auflage);
-        if (wvKosten === null) {
-          errorMsg = 'Von ILDA für diese Auflage/Umfang nicht in Tabelle hinterlegt.';
-        }
-      }
-    }
-  }
-
-  if (errorMsg) {
-    return { name, error: errorMsg };
-  }
-
-  const gesamtBase = kostenDruckUndPapier + wvKosten + celloKostenGesamt + settings.setupKosten;
+  const gesamtBase =
+    kostenDruckUndPapier + wvKosten + celloKostenGesamt + umschlagZuschlag + settings.setupKosten;
   const isExpress = produktionszeit === 'express';
-  const expressSurcharge = isExpress ? gesamtBase * 0.1 : 0;
+  const expressSurcharge = isExpress ? gesamtBase * settings.expressFaktor : 0;
   const gesamt = gesamtBase + expressSurcharge;
   const stueckPreis = gesamt / auflage;
-  const produktionszeitWT = isExpress ? expressWT : standardWT;
+  const produktionszeitWT = isExpress ? route.wtExpress : route.wtStandard;
 
   return {
+    key,
     name,
+    typ,
     error: null,
     gesamt,
     stueckPreis,
@@ -409,6 +394,9 @@ function calcSingleRoute(route, inputs, settings) {
     expressSurcharge,
     formatName,
     nutzen,
+    maxSeiten,
+    nettoBogenInhalt,
+    nettoBogenUmschlag,
     bogenInhalt,
     bogenUmschlag,
     kostenPapierGesamt,
@@ -431,6 +419,7 @@ function calcSingleRoute(route, inputs, settings) {
     celloGrundkostenFaktor,
     celloStueckpreis,
     celloType: celloTypeEffektiv,
+    umschlagZuschlag,
     setupKosten: settings.setupKosten,
     wvKosten,
     weightPerCopyG,
@@ -448,20 +437,20 @@ function pickRecommendedRouteName(validRoutes, settings) {
     ? settings.preferKoppDelta
     : 30;
 
-  const intern = validRoutes.find((route) => route.name.includes('Intern'));
-  const kopp = validRoutes.find((route) => route.name.includes('Kopp'));
-  const ilda = validRoutes.find((route) => route.name.includes('ILDA'));
-  const extern = validRoutes.filter((route) => !route.name.includes('Intern'));
+  const eigen = validRoutes.find((route) => route.typ === 'eigen');
+  const kopp = validRoutes.find((route) => route.key === 'kopp');
+  const ilda = validRoutes.find((route) => route.key === 'ilda');
+  const extern = validRoutes.filter((route) => route.typ !== 'eigen');
   const cheapestExternal = extern.length
     ? extern.reduce((best, route) => (route.gesamt < best.gesamt ? route : best), extern[0])
     : null;
 
-  if (intern && cheapestExternal) {
-    if (intern.gesamt <= cheapestExternal.gesamt + preferInternDelta) {
-      return intern.name;
+  if (eigen && cheapestExternal) {
+    if (eigen.gesamt <= cheapestExternal.gesamt + preferInternDelta) {
+      return eigen.name;
     }
-  } else if (intern) {
-    return intern.name;
+  } else if (eigen) {
+    return eigen.name;
   }
 
   if (kopp && ilda) {
@@ -480,7 +469,7 @@ function pickRecommendedRouteName(validRoutes, settings) {
   ).name;
 }
 
-export function calculateRSTPrice(formValues, settingsValues = defaults.settings) {
+export function calculateRSTPrice(formValues, config, settingsOverrides = null) {
   const typedInputs = {
     formatKey: formValues.formatKey,
     auflage: parseInt(formValues.auflage, 10) || 1,
@@ -494,24 +483,9 @@ export function calculateRSTPrice(formValues, settingsValues = defaults.settings
     produktionszeit: formValues.produktionszeit === 'express' ? 'express' : 'standard',
   };
 
-  const typedSettings = {
-    baseGrundpreis1c: numberOrDefault(
-      settingsValues.baseGrundpreis1c,
-      clicks.defaultBasePrices['1c'],
-    ),
-    baseGrundpreis4c: numberOrDefault(
-      settingsValues.baseGrundpreis4c,
-      clicks.defaultBasePrices['4c'],
-    ),
-    dynFaktorBanner: numberOrDefault(settingsValues.dynFaktorBanner, 1.5),
-    dynFaktorKlickSRA4: numberOrDefault(settingsValues.dynFaktorKlickSRA4, 0.7),
-    celloGrundkosten: numberOrDefault(settingsValues.celloGrundkosten, 20),
-    setupKosten: numberOrDefault(settingsValues.setupKosten, 15),
-    preferInternDelta: numberOrDefault(settingsValues.preferInternDelta, 20),
-    preferKoppDelta: numberOrDefault(settingsValues.preferKoppDelta, 30),
-  };
+  const settings = resolveSettings(config, settingsOverrides);
 
-  const results = routes.map((route) => calcSingleRoute(route, typedInputs, typedSettings));
+  const results = config.routen.map((route) => calcSingleRoute(route, typedInputs, config, settings));
   const validResults = results.filter((result) => !result.error);
   const cheapestPrice = validResults.length
     ? Math.min(...validResults.map((result) => result.gesamt))
@@ -521,6 +495,6 @@ export function calculateRSTPrice(formValues, settingsValues = defaults.settings
     results,
     validResults,
     cheapestPrice,
-    recommendedName: pickRecommendedRouteName(validResults, typedSettings),
+    recommendedName: pickRecommendedRouteName(validResults, settings),
   };
 }

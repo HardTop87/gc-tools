@@ -1,4 +1,4 @@
-import { FileUp, ArrowRight, Calculator, Mail, LogOut } from 'lucide-react';
+import { FileUp, ArrowRight, Calculator, Mail, LogOut, Settings2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 
@@ -23,6 +23,12 @@ export default function Dashboard({ setIsAuthenticated }) {
       description: "Versand-CSV für Rhaetia erstellen (inkl. Porto-Berechnung).",
       icon: <Mail size={24} className="text-[#8e014d]" />,
       path: "/post-versand"
+    },
+    {
+      title: "Verwaltung",
+      description: "Papierpreise, Grundpreise und WV-Tabellen des RST-Rechners pflegen.",
+      icon: <Settings2 size={24} className="text-[#8e014d]" />,
+      path: "/verwaltung"
     }
   ];
 

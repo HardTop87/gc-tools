@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Calculator,
   ChevronDown,
@@ -11,16 +12,19 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-import { PRICING_CONFIG } from '../data/pricingData';
+import { loadPricingConfig } from '../utils/pricingConfig';
 import {
+  DRUCK_OPTIONS,
   calculateRSTPrice,
+  getCelloLabels,
   getCelloOptions,
   getContentPaperOptions,
   getCoverPaperOptions,
+  getFormatOptions,
   getInitialRSTForm,
 } from '../utils/calculateRSTPrice';
 
-const { celloLabels, defaults, druckOptions, formatOptions, routes } = PRICING_CONFIG;
+const druckOptions = DRUCK_OPTIONS;
 
 function fmt(n, digits = 2) {
   return n.toFixed(digits).replace('.', ',');
@@ -62,14 +66,23 @@ function panelClassName() {
 }
 
 export default function NeuesTool() {
+  const [config] = useState(() => loadPricingConfig());
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [calculation, setCalculation] = useState(null);
-  const [form, setForm] = useState(() => getInitialRSTForm());
-  const [settings, setSettings] = useState(() => ({ ...defaults.settings }));
+  const [form, setForm] = useState(() => getInitialRSTForm(config));
+  const [settings, setSettings] = useState(() =>
+    Object.fromEntries(Object.entries(config.settings).map(([key, value]) => [key, String(value)])),
+  );
 
-  const contentPaperOptions = getContentPaperOptions(form.formatKey);
-  const coverPaperOptions = getCoverPaperOptions(form.formatKey, form.pInhaltId);
-  const celloOptions = getCelloOptions(form.pUmschlagId);
+  const formatOptions = getFormatOptions(config);
+  const routes = config.routen;
+  const celloLabels = getCelloLabels(config);
+  const contentPaperOptions = getContentPaperOptions(config, form.formatKey);
+  const coverPaperOptions = getCoverPaperOptions(config, form.formatKey, form.pInhaltId);
+  const celloOptions = getCelloOptions(config, form.pUmschlagId);
+  const selectedContentPaper = contentPaperOptions.find((paper) => paper.id === form.pInhaltId);
+  const selectedCoverPaper = coverPaperOptions.find((paper) => paper.id === form.pUmschlagId);
+  const expressProzent = Math.round((parseFloat(settings.expressFaktor) || 0) * 100);
 
   useEffect(() => {
     const contentStillValid = contentPaperOptions.some((paper) => paper.id === form.pInhaltId);
@@ -81,7 +94,7 @@ export default function NeuesTool() {
   useEffect(() => {
     const coverStillValid = coverPaperOptions.some((paper) => paper.id === form.pUmschlagId);
     const nextCoverId = coverStillValid ? form.pUmschlagId : coverPaperOptions[0]?.id ?? '';
-    const celloStillValid = getCelloOptions(nextCoverId).some(
+    const celloStillValid = getCelloOptions(config, nextCoverId).some(
       (option) => option.value === form.celloUmschlag,
     );
     const nextCello = celloStillValid ? form.celloUmschlag : 'ohne';
@@ -93,7 +106,7 @@ export default function NeuesTool() {
         celloUmschlag: nextCello,
       }));
     }
-  }, [coverPaperOptions, form.pUmschlagId, form.celloUmschlag]);
+  }, [config, coverPaperOptions, form.pUmschlagId, form.celloUmschlag]);
 
   useEffect(() => {
     if (!form.hasUmschlag && form.celloUmschlag !== 'ohne') {
@@ -110,7 +123,7 @@ export default function NeuesTool() {
   }
 
   function handleCalculate() {
-    setCalculation(calculateRSTPrice(form, settings));
+    setCalculation(calculateRSTPrice(form, config, settings));
   }
 
   const results = calculation?.results ?? null;
@@ -142,8 +155,12 @@ export default function NeuesTool() {
                   Kalkulator Rückstichheftung
                 </h1>
                 <p className="max-w-3xl text-sm leading-6 text-white/70 sm:text-base">
-                  Selbständige React-Seite für Broschüren- und Heftkalkulation mit
-                  interner Produktion, Kopp und ILDA.
+                  Broschüren- und Heftkalkulation mit GC (Horizon), Kopp und ILDA.
+                  Preise und Tabellen werden in der{' '}
+                  <Link to="/verwaltung" className="underline decoration-white/40 underline-offset-2 hover:text-white">
+                    Verwaltung
+                  </Link>{' '}
+                  gepflegt.
                 </p>
               </div>
             </div>
@@ -167,7 +184,7 @@ export default function NeuesTool() {
                   </span>
                 </div>
                 <p className="text-2xl font-semibold">{routes.length}</p>
-                <p className="mt-1 text-sm text-white/50">Intern, Kopp, ILDA</p>
+                <p className="mt-1 text-sm text-white/50">GC (Horizon), Kopp, ILDA</p>
               </div>
             </div>
           </div>
@@ -199,7 +216,7 @@ export default function NeuesTool() {
 
           {settingsOpen && (
             <div className="border-t border-slate-200 dark:border-gray-700 px-6 py-6 sm:px-8">
-              <div className="grid gap-6 xl:grid-cols-4">
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-3">
                   <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
                     Grundpreise SRA3
@@ -249,16 +266,91 @@ export default function NeuesTool() {
                   </label>
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Faktor Klick SRA4
+                      Faktor Cello Banner
                     </span>
                     <input
                       type="number"
-                      min="0.1"
+                      min="1"
                       step="0.1"
-                      value={settings.dynFaktorKlickSRA4}
+                      value={settings.celloFaktorBanner}
                       onChange={(event) =>
-                        updateSettings('dynFaktorKlickSRA4', event.target.value)
+                        updateSettings('celloFaktorBanner', event.target.value)
                       }
+                      className={inputBaseClassName()}
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
+                    GC Umschlag-Zuschlag
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block space-y-1.5">
+                      <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Grund €</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={settings.gcUmschlagGrundkosten}
+                        onChange={(event) =>
+                          updateSettings('gcUmschlagGrundkosten', event.target.value)
+                        }
+                        className={inputBaseClassName()}
+                      />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-sm font-medium text-slate-700 dark:text-gray-300">€/Stück</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={settings.gcUmschlagStueckpreis}
+                        onChange={(event) =>
+                          updateSettings('gcUmschlagStueckpreis', event.target.value)
+                        }
+                        className={inputBaseClassName()}
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">ab Auflage</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={settings.gcUmschlagAbAuflage}
+                      onChange={(event) =>
+                        updateSettings('gcUmschlagAbAuflage', event.target.value)
+                      }
+                      className={inputBaseClassName()}
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
+                    Max. Broschürendicke (µm)
+                  </p>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">GC (Horizon)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="50"
+                      value={settings.maxDickeGC}
+                      onChange={(event) => updateSettings('maxDickeGC', event.target.value)}
+                      className={inputBaseClassName()}
+                    />
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Kopp / ILDA</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="50"
+                      value={settings.maxDickePartner}
+                      onChange={(event) => updateSettings('maxDickePartner', event.target.value)}
                       className={inputBaseClassName()}
                     />
                   </label>
@@ -405,9 +497,16 @@ export default function NeuesTool() {
                   {contentPaperOptions.map((paper) => (
                     <option key={paper.id} value={paper.id}>
                       {paper.name}
+                      {paper.isPlaceholder ? ' ⚠ Platzhalter' : ''}
                     </option>
                   ))}
                 </select>
+                {selectedContentPaper?.isPlaceholder && (
+                  <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Vorläufiger Preis — Klärung mit Guido steht aus.
+                  </span>
+                )}
               </label>
 
               <label className="block space-y-1.5">
@@ -456,9 +555,16 @@ export default function NeuesTool() {
                       {coverPaperOptions.map((paper) => (
                         <option key={paper.id} value={paper.id}>
                           {paper.name}
+                          {paper.isPlaceholder ? ' ⚠ Platzhalter' : ''}
                         </option>
                       ))}
                     </select>
+                    {selectedCoverPaper?.isPlaceholder && (
+                      <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        Vorläufiger Preis — Klärung mit Guido steht aus.
+                      </span>
+                    )}
                   </label>
 
                   <label className="block space-y-1.5">
@@ -503,7 +609,7 @@ export default function NeuesTool() {
                   className={inputBaseClassName()}
                 >
                   <option value="standard">Standard</option>
-                  <option value="express">Express (+10%)</option>
+                  <option value="express">{`Express (+${expressProzent}%)`}</option>
                 </select>
               </label>
 
@@ -677,8 +783,15 @@ export default function NeuesTool() {
                               <DetailRow
                                 label="Verarbeitung"
                                 value={`${fmt(result.wvKosten)} €`}
-                                withDivider
+                                withDivider={result.umschlagZuschlag === 0}
                               />
+                              {result.umschlagZuschlag > 0 && (
+                                <DetailRow
+                                  label="Umschlag-Zuschlag (Rillung)"
+                                  value={`${fmt(result.umschlagZuschlag)} €`}
+                                  withDivider
+                                />
+                              )}
                               <DetailRow
                                 label="Cellophanierung"
                                 value={`${fmt(result.celloKosten)} €`}
@@ -693,7 +806,7 @@ export default function NeuesTool() {
                               />
                               {result.expressSurcharge > 0 && (
                                 <DetailRow
-                                  label="Express-Aufschlag (+10%)"
+                                  label={`Express-Aufschlag (+${expressProzent}%)`}
                                   value={`${fmt(result.expressSurcharge)} €`}
                                   withDivider
                                 />

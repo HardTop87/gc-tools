@@ -150,20 +150,8 @@ export function loadPricingConfigResult() {
   return { config: fallback, source: 'invalid-stored', errors };
 }
 
-export function loadPricingConfig() {
-  return loadPricingConfigResult().config;
-}
-
-export function hasStoredPricingConfig() {
-  try {
-    return localStorage.getItem(STORAGE_KEY) !== null;
-  } catch {
-    return false;
-  }
-}
-
 // Persistiert nur gültige Configs — localStorage darf nie einen Stand enthalten,
-// den loadPricingConfig wieder verwerfen müsste. Gibt zurück, ob gespeichert wurde.
+// den loadPricingConfigResult wieder verwerfen müsste. Gibt zurück, ob gespeichert wurde.
 export function savePricingConfig(config) {
   if (!validatePricingConfig(config).ok) return false;
   try {
@@ -172,15 +160,6 @@ export function savePricingConfig(config) {
     // Quota/Privacy-Fehler bewusst schlucken — Config lebt dann nur im State
   }
   return true;
-}
-
-export function resetPricingConfig() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignorieren
-  }
-  return getDefaultPricingConfig();
 }
 
 // ---------------------------------------------------------------------------

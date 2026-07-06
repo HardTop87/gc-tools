@@ -90,7 +90,7 @@ function findCellValue(row, candidates) {
   return '';
 }
 
-export function parseCurrency(val) {
+function parseCurrency(val) {
   if (typeof val === 'number') {
     return Number.isFinite(val) ? val : 0;
   }

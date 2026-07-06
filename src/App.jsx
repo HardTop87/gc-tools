@@ -94,14 +94,10 @@ export default function App() {
     setIsAuthenticated(true);
   };
 
-  // In Produktion läuft die App unter /gc-tools/ (Vite base); der Router muss
-  // denselben Pfad-Präfix kennen, sonst matchen die Routen nicht.
-  const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
-
   return (
     <ThemeProvider>
     <div className="min-h-screen bg-gray-50/50 dark:bg-gray-950">
-      <BrowserRouter basename={basename}>
+      <BrowserRouter>
         <Routes>
           <Route
             path="/login"

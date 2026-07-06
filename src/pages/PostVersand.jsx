@@ -23,7 +23,6 @@ const RATES = {
     intl: { standard: 1.25, kompakt: 1.80, gross: 3.30, maxi: 6.50, paket: 15.99 }
 };
 
-const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
 const isLetterPostLabel = (label) => !/paket/i.test(String(label || ''));
 const isNoShippingRecord = (record) => record?.label === 'Kein Versand' || Boolean(record?.errorMsg);
@@ -126,7 +125,7 @@ const tokenizeName = (str) => {
     if (!str) return [];
     return String(str)
         .toLowerCase()
-        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|dipl\-ing|ing\.|-bibliothek/g, ' ')
+        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|dipl-ing|ing\.|-bibliothek/g, ' ')
         .replace(/[^a-z0-9äöüß\s-]/g, ' ')
         .split(/[\s-]+/)
         .map((t) => t.trim())
@@ -148,7 +147,7 @@ const splitStreetAndNumber = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return { street: '', number: '' };
 
-    const match = raw.match(/^(.*?)(\s+\d+[a-zA-Z\/-]*\s*)$/);
+    const match = raw.match(/^(.*?)(\s+\d+[a-zA-Z/-]*\s*)$/);
     if (!match) {
         return { street: raw, number: '' };
     }
@@ -548,7 +547,7 @@ export default function PostVersandManager() {
         return { plz: raw, land: normalizeCountryCode(fallbackLand) || 'DEU' };
     };
 
-    const buildPlzInput = (plz, land) => {
+    const buildPlzInput = (plz) => {
         const cleanPlz = String(plz || '').trim();
         if (!cleanPlz) return '';
         return cleanPlz;
@@ -581,7 +580,7 @@ export default function PostVersandManager() {
             zusatz: item.zusatz || '',
             strasse: splitAddress.street || item.strasse || '',
             nummer: item.nummer || splitAddress.number || '',
-            plz: buildPlzInput(parsed.plz, parsed.land),
+            plz: buildPlzInput(parsed.plz),
             stadt: item.ort || item.stadt || '',
             land: parsed.land,
             adressTyp: item.type || item.adressTyp || (/postfach/i.test(item.strasse || '') ? 'POBOX' : 'HOUSE'),
@@ -639,25 +638,6 @@ export default function PostVersandManager() {
         setCurrentItemToMatch((prev) => (prev ? { ...prev, isFrozen: !prev.isFrozen } : prev));
     };
 
-    const getFuzzySuggestions = (item) => {
-        if (!item || dbData.length === 0) return [];
-        const sourceCloud = cleanForMatch(`${item.name || ''} ${item.anrede || ''} ${item.titel || ''} ${item.vorname || ''} ${item.nachname || ''} ${item.zusatz || ''}`);
-        const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
-        const rawPlz = formatPLZ(parsed.plz, parsed.land);
-        let scored = dbData.map(dbRow => {
-            let score = 0;
-            const dbPlz = formatPLZ(dbRow.PLZ || dbRow.plz, dbRow.LAND || dbRow.landCode);
-            const dbNameClean = cleanForMatch(dbRow.NAME);
-            if (dbPlz === rawPlz) score += 50;
-            const sourceWords = sourceCloud.split(' ').filter(w=>w.length>2);
-            let matches = 0;
-            sourceWords.forEach(sw => { if (dbNameClean.includes(sw)) matches++; });
-            score += (matches * 15);
-            return { dbRow, score };
-        });
-        return scored.filter(s => s.score > 10).sort((a,b) => b.score - a.score).slice(0, 3);
-    };
-
     const manualSearchResults = useMemo(() => {
         if (!manualSearchQuery || dbData.length === 0) return [];
         const tokens = normalizeSearchText(manualSearchQuery)
@@ -703,7 +683,7 @@ export default function PostVersandManager() {
         return scored;
     }, [manualSearchQuery, dbData]);
 
-    const modalUnmatchedList = preMatchResults?.unmatchedList || [];
+    const modalUnmatchedList = useMemo(() => preMatchResults?.unmatchedList || [], [preMatchResults]);
     const modalItemIndex = useMemo(() => {
         if (!currentItemToMatch) return -1;
         return modalUnmatchedList.findIndex((item) => item.id === currentItemToMatch.id);
@@ -918,7 +898,7 @@ export default function PostVersandManager() {
         }
     }, [view]);
 
-    const renderDbCard = (dbRow, isSuggestion = false) => {
+    const renderDbCard = (dbRow) => {
         const isPlzMatch = currentItemToMatch && formatPLZ(dbRow.PLZ || dbRow.plz, dbRow.LAND) === formatPLZ(currentItemToMatch.plz, currentItemToMatch.land);
         return (
             <div className={`flex flex-col w-full pr-4`}>
@@ -1422,7 +1402,7 @@ export default function PostVersandManager() {
                                             </div>
                                             {manualSearchResults.map((dbRow, idx) => (
                                                 <div key={`manual-${idx}`} className="bg-white dark:bg-gray-800 p-4 rounded-2xl border-2 border-slate-200 dark:border-gray-700 hover:border-[#8e014d] flex flex-col justify-between items-start transition-colors shadow-sm gap-3">
-                                                    {renderDbCard(dbRow, false)}
+                                                    {renderDbCard(dbRow)}
                                                     <button onClick={() => applyDbResultToEditor(dbRow)} className="w-full bg-slate-100 text-slate-600 hover:bg-[#8e014d] hover:text-white py-3 rounded-xl font-bold uppercase text-[10px] flex justify-center items-center gap-2 transition-colors"><CheckSquare size={14}/> Übernehmen</button>
                                                 </div>
                                             ))}

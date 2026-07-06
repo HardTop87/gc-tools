@@ -52,7 +52,7 @@ export function getCelloLabels(config) {
 }
 
 export function getInitialRSTForm(config) {
-  const initialFormat = config.formate[0].key;
+  const initialFormat = config.formate[0]?.key ?? '';
   const contentOptions = getContentPaperOptions(config, initialFormat);
   const contentPaperId = contentOptions[0]?.id ?? '';
   const coverOptions = getCoverPaperOptions(config, initialFormat, contentPaperId);
@@ -180,27 +180,23 @@ function calcCelloCosts({ config, settings, hasUmschlag, coverPaper, celloType, 
     return {
       celloTypeEffektiv: 'ohne',
       celloGrundkosten: 0,
-      celloGrundkostenFaktor: 0,
       celloBogenkosten: 0,
       celloStueckpreis: 0,
       celloKostenGesamt: 0,
     };
   }
 
-  const faktor = 1;
   const basisStueckpreis = config.cello.arten.find((a) => a.key === normalizedType)?.stueckpreis ?? 0;
   // Banner-Formate: Bogen-Stückpreis × celloFaktorBanner (Grundkosten unverändert)
   const stueckpreis = basisStueckpreis * (isBanner ? settings.celloFaktorBanner : 1);
-  const effektiverBogenpreis = stueckpreis * faktor;
   const fixGrundkosten = Math.max(settings.celloGrundkosten, 0);
-  const bogenkosten = bogenUmschlag * effektiverBogenpreis;
+  const bogenkosten = bogenUmschlag * stueckpreis;
 
   return {
     celloTypeEffektiv: normalizedType,
     celloGrundkosten: fixGrundkosten,
-    celloGrundkostenFaktor: faktor,
     celloBogenkosten: bogenkosten,
-    celloStueckpreis: effektiverBogenpreis,
+    celloStueckpreis: stueckpreis,
     celloKostenGesamt: fixGrundkosten + bogenkosten,
   };
 }
@@ -339,7 +335,6 @@ function calcSingleRoute(route, inputs, config, settings) {
   const {
     celloTypeEffektiv,
     celloGrundkosten,
-    celloGrundkostenFaktor,
     celloBogenkosten,
     celloStueckpreis,
     celloKostenGesamt,
@@ -416,7 +411,6 @@ function calcSingleRoute(route, inputs, config, settings) {
     celloKosten: celloKostenGesamt,
     celloGrundkosten,
     celloBogenkosten,
-    celloGrundkostenFaktor,
     celloStueckpreis,
     celloType: celloTypeEffektiv,
     umschlagZuschlag,
@@ -427,46 +421,32 @@ function calcSingleRoute(route, inputs, config, settings) {
   };
 }
 
-function pickRecommendedRouteName(validRoutes, settings) {
+// Prioritätsreihenfolge = Reihenfolge der Routen in der Config. Eine Route
+// wird empfohlen, wenn sie höchstens um ihre Toleranz (settings[preferDeltaRef],
+// z. B. preferInternDelta/preferKoppDelta) teurer ist als die günstigste der
+// nachrangigen Routen; sonst rückt die nächste Route nach.
+function pickRecommendedRouteName(validRoutes, config, settings) {
   if (!validRoutes.length) return null;
 
-  const preferInternDelta = Number.isFinite(settings.preferInternDelta)
-    ? settings.preferInternDelta
-    : 20;
-  const preferKoppDelta = Number.isFinite(settings.preferKoppDelta)
-    ? settings.preferKoppDelta
-    : 30;
+  const priority = config.routen.map((route) => route.key);
+  const sorted = [...validRoutes].sort(
+    (a, b) => priority.indexOf(a.key) - priority.indexOf(b.key),
+  );
 
-  const eigen = validRoutes.find((route) => route.typ === 'eigen');
-  const kopp = validRoutes.find((route) => route.key === 'kopp');
-  const ilda = validRoutes.find((route) => route.key === 'ilda');
-  const extern = validRoutes.filter((route) => route.typ !== 'eigen');
-  const cheapestExternal = extern.length
-    ? extern.reduce((best, route) => (route.gesamt < best.gesamt ? route : best), extern[0])
-    : null;
+  for (let i = 0; i < sorted.length; i += 1) {
+    const candidate = sorted[i];
+    const lowerPriority = sorted.slice(i + 1);
+    if (!lowerPriority.length) return candidate.name;
 
-  if (eigen && cheapestExternal) {
-    if (eigen.gesamt <= cheapestExternal.gesamt + preferInternDelta) {
-      return eigen.name;
-    }
-  } else if (eigen) {
-    return eigen.name;
+    const routeConfig = config.routen.find((route) => route.key === candidate.key);
+    const delta = Number.isFinite(settings[routeConfig?.preferDeltaRef])
+      ? settings[routeConfig.preferDeltaRef]
+      : 0;
+    const cheapestRest = Math.min(...lowerPriority.map((route) => route.gesamt));
+    if (candidate.gesamt <= cheapestRest + delta) return candidate.name;
   }
 
-  if (kopp && ilda) {
-    if (kopp.gesamt <= ilda.gesamt + preferKoppDelta) {
-      return kopp.name;
-    }
-    return ilda.name;
-  }
-
-  if (kopp) return kopp.name;
-  if (ilda) return ilda.name;
-
-  return validRoutes.reduce(
-    (best, route) => (route.gesamt < best.gesamt ? route : best),
-    validRoutes[0],
-  ).name;
+  return sorted[sorted.length - 1].name;
 }
 
 export function calculateRSTPrice(formValues, config, settingsOverrides = null) {
@@ -495,6 +475,6 @@ export function calculateRSTPrice(formValues, config, settingsOverrides = null) 
     results,
     validResults,
     cheapestPrice,
-    recommendedName: pickRecommendedRouteName(validResults, settings),
+    recommendedName: pickRecommendedRouteName(validResults, config, settings),
   };
 }

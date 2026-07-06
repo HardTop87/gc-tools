@@ -1,6 +1,6 @@
 {
   "meta": {
-    "version": "2.0.0",
+    "version": "2.1.0",
     "stand": "2026-07-06",
     "kommentar": "Update lt. Spec Rev. 2 (Mail Guido 29.03.2026, RST GC-AR-V2_gc.xlsx): GC (Horizon), DIN A6, berechnete Seitenlimits, Umschlag-Zuschlag GC, Cello-Banner-Faktor."
   },
@@ -675,7 +675,8 @@
       "wvTabelleRef": "gc_horizon",
       "umschlagZuschlag": true,
       "maxDickeRef": "maxDickeGC",
-      "nutzenRef": "nutzenGC"
+      "nutzenRef": "nutzenGC",
+      "preferDeltaRef": "preferInternDelta"
     },
     {
       "key": "kopp",
@@ -694,7 +695,8 @@
       "wvTabelleRef": "kopp",
       "umschlagZuschlag": false,
       "maxDickeRef": "maxDickePartner",
-      "nutzenRef": "nutzenPartner"
+      "nutzenRef": "nutzenPartner",
+      "preferDeltaRef": "preferKoppDelta"
     },
     {
       "key": "ilda",
@@ -719,7 +721,8 @@
       },
       "umschlagZuschlag": false,
       "maxDickeRef": "maxDickePartner",
-      "nutzenRef": "nutzenPartner"
+      "nutzenRef": "nutzenPartner",
+      "preferDeltaRef": null
     }
   ],
   "wvTabellen": {

@@ -1,23 +1,11 @@
+import Papa from 'papaparse';
 import defaultConfig from '../data/pricingConfig.default.json';
 
 const STORAGE_KEY = 'gc_rst_pricingConfig';
+// Ungültige gespeicherte Configs werden hierhin gesichert statt still verworfen
+const BACKUP_KEY = 'gc_rst_pricingConfig_backup';
 
-export const REQUIRED_SETTINGS = [
-  'baseGrundpreis1c',
-  'baseGrundpreis4c',
-  'dynFaktorBanner',
-  'celloGrundkosten',
-  'celloFaktorBanner',
-  'setupKosten',
-  'preferInternDelta',
-  'preferKoppDelta',
-  'expressFaktor',
-  'gcUmschlagGrundkosten',
-  'gcUmschlagStueckpreis',
-  'gcUmschlagAbAuflage',
-  'maxDickeGC',
-  'maxDickePartner',
-];
+export const REQUIRED_SETTINGS = Object.keys(defaultConfig.settings);
 
 export function getDefaultPricingConfig() {
   return JSON.parse(JSON.stringify(defaultConfig));
@@ -38,6 +26,14 @@ export function validatePricingConfig(config) {
   for (const key of REQUIRED_SETTINGS) {
     const value = config.settings?.[key];
     if (!Number.isFinite(value)) errors.push(`settings.${key} fehlt oder ist keine Zahl.`);
+    else if (value < 0) errors.push(`settings.${key} darf nicht negativ sein.`);
+  }
+
+  if (!(config.papiere?.length >= 1)) errors.push('papiere: mindestens ein Papier erforderlich.');
+  if (!(config.formate?.length >= 1)) errors.push('formate: mindestens ein Format erforderlich.');
+  if (!(config.routen?.length >= 1)) errors.push('routen: mindestens eine Route erforderlich.');
+  if (!(Object.keys(config.wvTabellen ?? {}).length >= 1)) {
+    errors.push('wvTabellen: mindestens eine Tabelle erforderlich.');
   }
 
   const paperIds = new Set();
@@ -101,7 +97,12 @@ export function validatePricingConfig(config) {
     for (const fk of r?.formate ?? []) {
       if (!formatKeys.has(fk)) errors.push(`${where}: unbekanntes Format "${fk}".`);
     }
-    if (!REQUIRED_SETTINGS.includes(r?.maxDickeRef)) errors.push(`${where}: maxDickeRef verweist nicht auf eine Einstellung.`);
+    if (!(config.settings?.[r?.maxDickeRef] > 0)) {
+      errors.push(`${where}: maxDickeRef muss auf eine Einstellung > 0 verweisen.`);
+    }
+    if (r?.preferDeltaRef != null && !Number.isFinite(config.settings?.[r.preferDeltaRef])) {
+      errors.push(`${where}: preferDeltaRef "${r.preferDeltaRef}" existiert nicht in den Einstellungen.`);
+    }
     if (!['nutzenGC', 'nutzenPartner'].includes(r?.nutzenRef)) errors.push(`${where}: nutzenRef ungültig.`);
     const refs = typeof r?.wvTabelleRef === 'string' ? [r.wvTabelleRef] : Object.values(r?.wvTabelleRef ?? {});
     if (!refs.length) errors.push(`${where}: wvTabelleRef fehlt.`);
@@ -117,25 +118,60 @@ export function validatePricingConfig(config) {
   return { ok: errors.length === 0, errors };
 }
 
-export function loadPricingConfig() {
+// Lädt die Config und meldet, woher sie stammt:
+// 'localStorage' (gültige gespeicherte Config), 'default' (nichts gespeichert)
+// oder 'invalid-stored' (gespeicherte Config ungültig → Default aktiv,
+// Original nach BACKUP_KEY gesichert, Fehlerliste in errors).
+export function loadPricingConfigResult() {
+  const fallback = getDefaultPricingConfig();
+  let raw = null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (validatePricingConfig(parsed).ok) return parsed;
-    }
+    raw = localStorage.getItem(STORAGE_KEY);
   } catch {
-    // localStorage nicht verfügbar oder korrupte Daten → Default
+    return { config: fallback, source: 'default', errors: [] };
   }
-  return getDefaultPricingConfig();
+  if (!raw) return { config: fallback, source: 'default', errors: [] };
+
+  let errors;
+  try {
+    const parsed = JSON.parse(raw);
+    const validation = validatePricingConfig(parsed);
+    if (validation.ok) return { config: parsed, source: 'localStorage', errors: [] };
+    errors = validation.errors;
+  } catch (error) {
+    errors = [`Gespeicherte Config ist kein gültiges JSON: ${error.message}`];
+  }
+
+  try {
+    localStorage.setItem(BACKUP_KEY, raw);
+  } catch {
+    // Backup ist Best-Effort
+  }
+  return { config: fallback, source: 'invalid-stored', errors };
 }
 
+export function loadPricingConfig() {
+  return loadPricingConfigResult().config;
+}
+
+export function hasStoredPricingConfig() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+// Persistiert nur gültige Configs — localStorage darf nie einen Stand enthalten,
+// den loadPricingConfig wieder verwerfen müsste. Gibt zurück, ob gespeichert wurde.
 export function savePricingConfig(config) {
+  if (!validatePricingConfig(config).ok) return false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch {
     // Quota/Privacy-Fehler bewusst schlucken — Config lebt dann nur im State
   }
+  return true;
 }
 
 export function resetPricingConfig() {
@@ -161,38 +197,49 @@ export function buildPaperPriceRows(config) {
 }
 
 export function buildPaperPriceCsv(config) {
-  const lines = [PAPER_CSV_HEADER.join(';')];
-  for (const row of buildPaperPriceRows(config)) {
-    lines.push(PAPER_CSV_HEADER.map((col) => String(row[col]).replace('.', ',')).join(';'));
-  }
-  return lines.join('\n');
+  const rows = buildPaperPriceRows(config).map((row) => ({
+    ...row,
+    // Dezimalkomma nur für den Preis (deutschsprachiges Excel); IDs/Namen unangetastet
+    preis_pro_1000: String(row.preis_pro_1000).replace('.', ','),
+  }));
+  return Papa.unparse(rows, { delimiter: ';', columns: PAPER_CSV_HEADER });
 }
 
-function parseGermanNumber(value) {
+// Akzeptiert deutsche und englische Schreibweisen: "35,5", "35.5",
+// "1.234,5", "1,234.5", "1.234.567". Bei Komma UND Punkt gilt das zuletzt
+// stehende Zeichen als Dezimaltrennzeichen; ein einzelnes Trennzeichen wird
+// als Dezimaltrennzeichen gelesen, mehrfach vorkommende als Tausendertrenner.
+export function parseFlexibleNumber(value) {
   if (typeof value === 'number') return value;
-  const parsed = parseFloat(String(value ?? '').trim().replace(/\./g, '').replace(',', '.'));
+  let s = String(value ?? '').trim();
+  if (!s) return NaN;
+
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma !== -1 && lastDot !== -1) {
+    if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (lastComma !== -1) {
+    const commas = s.match(/,/g).length;
+    s = commas > 1 ? s.replace(/,/g, '') : s.replace(',', '.');
+  } else if (lastDot !== -1) {
+    const dots = s.match(/\./g).length;
+    if (dots > 1) s = s.replace(/\./g, '');
+  }
+
+  const parsed = parseFloat(s);
   return Number.isFinite(parsed) ? parsed : NaN;
 }
 
-export function parsePaperPriceCsv(text) {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-  if (!lines.length) return { rows: [], errors: ['CSV ist leer.'] };
-
-  const delimiter = lines[0].includes(';') ? ';' : ',';
-  const header = lines[0].split(delimiter).map((h) => h.trim().toLowerCase());
-  const idIdx = header.indexOf('id');
-  const preisIdx = header.indexOf('preis_pro_1000');
-  const dickeIdx = header.indexOf('dicke_um');
-  if (idIdx === -1 || preisIdx === -1) {
-    return { rows: [], errors: ['CSV benötigt mindestens die Spalten "id" und "preis_pro_1000".'] };
-  }
-
+// Gemeinsame Zeilenprüfung für CSV- UND XLSX-Import (identische Regeln,
+// identisches Zahlenparsing). rawRows: Objekte mit kleingeschriebenen Keys.
+export function normalizePaperPriceRows(rawRows) {
   const rows = [];
   const errors = [];
-  lines.slice(1).forEach((line, i) => {
-    const cells = line.split(delimiter);
-    const id = (cells[idIdx] ?? '').trim();
-    const preis = parseGermanNumber(cells[preisIdx]);
+
+  rawRows.forEach((raw, i) => {
+    const id = String(raw.id ?? '').trim();
+    const preis = parseFlexibleNumber(raw.preis_pro_1000);
     if (!id) {
       errors.push(`Zeile ${i + 2}: id fehlt.`);
       return;
@@ -202,8 +249,8 @@ export function parsePaperPriceCsv(text) {
       return;
     }
     const row = { id, preis_pro_1000: preis };
-    if (dickeIdx !== -1 && String(cells[dickeIdx] ?? '').trim() !== '') {
-      const dicke = parseGermanNumber(cells[dickeIdx]);
+    if (raw.dicke_um !== undefined && String(raw.dicke_um).trim() !== '') {
+      const dicke = parseFlexibleNumber(raw.dicke_um);
       if (!(dicke > 0)) {
         errors.push(`Zeile ${i + 2} (${id}): dicke_um muss eine Zahl > 0 sein.`);
         return;
@@ -214,6 +261,19 @@ export function parsePaperPriceCsv(text) {
   });
 
   return { rows, errors };
+}
+
+export function parsePaperPriceCsv(text) {
+  const parsed = Papa.parse(text, {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: (header) => header.trim().toLowerCase(),
+  });
+  const fields = parsed.meta?.fields ?? [];
+  if (!fields.includes('id') || !fields.includes('preis_pro_1000')) {
+    return { rows: [], errors: ['CSV benötigt mindestens die Spalten "id" und "preis_pro_1000".'] };
+  }
+  return normalizePaperPriceRows(parsed.data);
 }
 
 // Wendet importierte Preiszeilen an: Matching über id, aktualisiert nur

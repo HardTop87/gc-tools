@@ -18,37 +18,39 @@ import {
   buildPaperPriceCsv,
   buildPaperPriceRows,
   getDefaultPricingConfig,
-  loadPricingConfig,
+  hasStoredPricingConfig,
+  loadPricingConfigResult,
+  normalizePaperPriceRows,
   parsePaperPriceCsv,
   resetPricingConfig,
   savePricingConfig,
   validatePricingConfig,
 } from '../utils/pricingConfig';
 
-const SETTINGS_META = [
-  { key: 'baseGrundpreis1c', label: 'Klick-Grundpreis SW (1c)', einheit: '€', step: 0.001, hinweis: 'pro Seite SRA3' },
-  { key: 'baseGrundpreis4c', label: 'Klick-Grundpreis Farbe (4c)', einheit: '€', step: 0.001, hinweis: 'pro Seite SRA3' },
-  { key: 'dynFaktorBanner', label: 'Klick-Faktor Banner', einheit: '×', step: 0.1, hinweis: 'Multiplikator bei Banner-Formaten' },
-  { key: 'celloGrundkosten', label: 'Cello Grundkosten', einheit: '€', step: 1, hinweis: 'einmalig pro Auftrag' },
-  { key: 'celloFaktorBanner', label: 'Cello-Faktor Banner', einheit: '×', step: 0.1, hinweis: 'auf den Bogen-Stückpreis' },
-  { key: 'setupKosten', label: 'Einrichtekosten', einheit: '€', step: 1, hinweis: 'einmalig pro Auftrag, jede Route' },
-  { key: 'expressFaktor', label: 'Express-Aufschlag', einheit: 'Faktor', step: 0.01, hinweis: '0,1 = +10 % auf die Gesamtsumme' },
-  { key: 'preferInternDelta', label: 'Empfehlung: GC bis +', einheit: '€', step: 1, hinweis: 'Toleranz GC vs. günstigster Partner' },
-  { key: 'preferKoppDelta', label: 'Empfehlung: Kopp bis +', einheit: '€', step: 1, hinweis: 'Toleranz Kopp vs. ILDA' },
-  { key: 'gcUmschlagGrundkosten', label: 'GC Umschlag-Zuschlag: Grundkosten', einheit: '€', step: 0.5, hinweis: 'Rillung/Umschlag Horizon' },
-  { key: 'gcUmschlagStueckpreis', label: 'GC Umschlag-Zuschlag: pro Stück', einheit: '€', step: 0.01, hinweis: 'zusätzlich zu den Grundkosten' },
-  { key: 'gcUmschlagAbAuflage', label: 'GC Umschlag-Zuschlag ab Auflage', einheit: 'Ex.', step: 1, hinweis: 'darunter kein Zuschlag' },
-  { key: 'maxDickeGC', label: 'Max. Broschürendicke GC', einheit: 'µm', step: 50, hinweis: 'Basis der Seitenlimits (Horizon)' },
-  { key: 'maxDickePartner', label: 'Max. Broschürendicke Partner', einheit: 'µm', step: 50, hinweis: 'Basis der Seitenlimits (Kopp/ILDA)' },
-];
+// Optionale Anzeige-Metadaten je Setting; unbekannte Settings aus einer
+// importierten Config werden trotzdem gerendert (Fallback: Key als Label).
+const SETTINGS_META = {
+  baseGrundpreis1c: { label: 'Klick-Grundpreis SW (1c)', einheit: '€', step: 0.001, hinweis: 'pro Seite SRA3' },
+  baseGrundpreis4c: { label: 'Klick-Grundpreis Farbe (4c)', einheit: '€', step: 0.001, hinweis: 'pro Seite SRA3' },
+  dynFaktorBanner: { label: 'Klick-Faktor Banner', einheit: '×', step: 0.1, hinweis: 'Multiplikator bei Banner-Formaten' },
+  celloGrundkosten: { label: 'Cello Grundkosten', einheit: '€', step: 1, hinweis: 'einmalig pro Auftrag' },
+  celloFaktorBanner: { label: 'Cello-Faktor Banner', einheit: '×', step: 0.1, hinweis: 'auf den Bogen-Stückpreis' },
+  setupKosten: { label: 'Einrichtekosten', einheit: '€', step: 1, hinweis: 'einmalig pro Auftrag, jede Route' },
+  expressFaktor: { label: 'Express-Aufschlag', einheit: 'Faktor', step: 0.01, hinweis: '0,1 = +10 % auf die Gesamtsumme' },
+  preferInternDelta: { label: 'Empfehlung: GC bis +', einheit: '€', step: 1, hinweis: 'Toleranz GC vs. günstigster Partner' },
+  preferKoppDelta: { label: 'Empfehlung: Kopp bis +', einheit: '€', step: 1, hinweis: 'Toleranz Kopp vs. ILDA' },
+  gcUmschlagGrundkosten: { label: 'GC Umschlag-Zuschlag: Grundkosten', einheit: '€', step: 0.5, hinweis: 'Rillung/Umschlag Horizon' },
+  gcUmschlagStueckpreis: { label: 'GC Umschlag-Zuschlag: pro Stück', einheit: '€', step: 0.01, hinweis: 'zusätzlich zu den Grundkosten' },
+  gcUmschlagAbAuflage: { label: 'GC Umschlag-Zuschlag ab Auflage', einheit: 'Ex.', step: 1, min: 1, hinweis: 'darunter kein Zuschlag' },
+  maxDickeGC: { label: 'Max. Broschürendicke GC', einheit: 'µm', step: 50, min: 1, hinweis: 'Basis der Seitenlimits (Horizon)' },
+  maxDickePartner: { label: 'Max. Broschürendicke Partner', einheit: 'µm', step: 50, min: 1, hinweis: 'Basis der Seitenlimits (Kopp/ILDA)' },
+};
 
-const WV_TABLE_LABELS = {
-  gc_horizon: 'GC (Horizon)',
-  kopp: 'Partner Kopp',
-  ilda_mitUmschlag: 'ILDA — mit Umschlag',
-  ilda_ohneUmschlag: 'ILDA — ohne Umschlag',
-  ilda_banner_mit: 'ILDA Banner — mit Umschlag',
-  ilda_banner_ohne: 'ILDA Banner — ohne Umschlag',
+const WV_VARIANT_LABELS = {
+  standard_mit: 'mit Umschlag',
+  standard_ohne: 'ohne Umschlag',
+  banner_mit: 'Banner, mit Umschlag',
+  banner_ohne: 'Banner, ohne Umschlag',
 };
 
 function fmtBogenpreis(preisPro1000) {
@@ -80,10 +82,20 @@ function panelClassName() {
   return 'rounded-3xl border border-slate-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur';
 }
 
-// Zahleneingabe mit lokalem Draft: übernimmt nur valide Zahlen in die Config,
-// erlaubt aber Zwischenzustände beim Tippen ("0,").
+// Zahleneingabe mit lokalem Draft: committet erst bei Blur/Enter (nicht pro
+// Tastendruck) und nur Werte ≥ min — Zwischenzustände wie "0" auf dem Weg zu
+// "0,5" erreichen die Config nie. Ungültige Eingaben fallen auf den alten Wert zurück.
 function NumberField({ value, onCommit, step = 1, className = '', min }) {
   const [draft, setDraft] = useState(null);
+
+  function commit() {
+    if (draft === null) return;
+    const parsed = parseFloat(draft);
+    setDraft(null);
+    if (Number.isFinite(parsed) && (min === undefined || parsed >= min) && parsed !== value) {
+      onCommit(parsed);
+    }
+  }
 
   return (
     <input
@@ -91,12 +103,11 @@ function NumberField({ value, onCommit, step = 1, className = '', min }) {
       step={step}
       min={min}
       value={draft ?? value}
-      onChange={(event) => {
-        setDraft(event.target.value);
-        const parsed = parseFloat(event.target.value);
-        if (Number.isFinite(parsed)) onCommit(parsed);
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
       }}
-      onBlur={() => setDraft(null)}
       className={inputClassName(className)}
     />
   );
@@ -123,14 +134,14 @@ function SectionHeader(props) {
 function ToolbarButton(props) {
   const { icon: Icon, label, onClick, tone = 'default' } = props;
   const toneClass =
-    tone === 'danger'
-      ? 'border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40'
-      : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800';
+    tone === 'inverted'
+      ? 'border-white/25 bg-white/10 text-white hover:bg-white/20'
+      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800';
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex h-9 items-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition dark:bg-gray-900 ${toneClass}`}
+      className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition ${toneClass}`}
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
@@ -139,26 +150,57 @@ function ToolbarButton(props) {
 }
 
 export default function Verwaltung() {
-  const [config, setConfig] = useState(() => loadPricingConfig());
+  const [initialLoad] = useState(() => loadPricingConfigResult());
+  const [config, setConfig] = useState(initialLoad.config);
+  const [isCustomized, setIsCustomized] = useState(() => hasStoredPricingConfig());
   const [wvTableKey, setWvTableKey] = useState('gc_horizon');
   const [pendingImport, setPendingImport] = useState(null);
-  const [message, setMessage] = useState(null);
+  const [message, setMessage] = useState(() =>
+    initialLoad.source === 'invalid-stored'
+      ? {
+          type: 'error',
+          text:
+            'Die gespeicherte Konfiguration war ungültig und wurde ignoriert — es gelten die Standardwerte. ' +
+            'Der alte Stand liegt als Backup im Browser-Speicher.\n' +
+            initialLoad.errors.join('\n'),
+        }
+      : null,
+  );
   const paperFileRef = useRef(null);
   const configFileRef = useRef(null);
 
-  const isDefault = useMemo(
-    () => JSON.stringify(config) === JSON.stringify(getDefaultPricingConfig()),
-    [config],
-  );
+  const defaultVersion = useMemo(() => getDefaultPricingConfig().meta.version, []);
+  const hasNewerDefault = isCustomized && config.meta.version !== defaultVersion;
+
+  // Tabellen-Labels aus den Routen ableiten, die sie referenzieren —
+  // per Config ergänzte Tabellen bekommen so automatisch sinnvolle Namen.
+  const wvTableLabels = useMemo(() => {
+    const labels = {};
+    for (const route of config.routen) {
+      const ref = route.wvTabelleRef;
+      if (typeof ref === 'string') {
+        labels[ref] ??= route.name;
+      } else {
+        for (const [variantKey, tableName] of Object.entries(ref ?? {})) {
+          labels[tableName] ??= `${route.name} — ${WV_VARIANT_LABELS[variantKey] ?? variantKey}`;
+        }
+      }
+    }
+    return labels;
+  }, [config.routen]);
 
   function updateConfig(mutator) {
-    setConfig((prev) => {
-      const next = JSON.parse(JSON.stringify(prev));
-      mutator(next);
-      next.meta.stand = todayIso();
-      savePricingConfig(next);
-      return next;
-    });
+    const next = JSON.parse(JSON.stringify(config));
+    mutator(next);
+    next.meta.stand = todayIso();
+    const validation = validatePricingConfig(next);
+    if (!validation.ok) {
+      showMessage('error', `Änderung verworfen — die Config wäre ungültig:\n${validation.errors.join('\n')}`);
+      return;
+    }
+    savePricingConfig(next);
+    setIsCustomized(true);
+    setConfig(next);
   }
 
   function showMessage(type, text) {
@@ -171,6 +213,7 @@ export default function Verwaltung() {
     }
     const fresh = resetPricingConfig();
     setConfig(fresh);
+    setIsCustomized(false);
     setPendingImport(null);
     showMessage('ok', 'Config auf Standard zurückgesetzt.');
   }
@@ -222,34 +265,13 @@ export default function Verwaltung() {
         const workbook = XLSX.read(await file.arrayBuffer());
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const raw = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-        const rows = [];
-        const errors = [];
-        raw.forEach((row, i) => {
-          const id = String(row.id ?? '').trim();
-          const preis = typeof row.preis_pro_1000 === 'number'
-            ? row.preis_pro_1000
-            : parseFloat(String(row.preis_pro_1000).replace(',', '.'));
-          if (!id) {
-            errors.push(`Zeile ${i + 2}: id fehlt.`);
-            return;
-          }
-          if (!(preis > 0)) {
-            errors.push(`Zeile ${i + 2} (${id}): preis_pro_1000 muss eine Zahl > 0 sein.`);
-            return;
-          }
-          const entry = { id, preis_pro_1000: preis };
-          if (row.dicke_um !== '' && row.dicke_um !== undefined) {
-            const dicke = typeof row.dicke_um === 'number'
-              ? row.dicke_um
-              : parseFloat(String(row.dicke_um).replace(',', '.'));
-            if (!(dicke > 0)) {
-              errors.push(`Zeile ${i + 2} (${id}): dicke_um muss eine Zahl > 0 sein.`);
-              return;
-            }
-            entry.dicke_um = dicke;
-          }
-          rows.push(entry);
-        });
+        // gleiche Zeilenprüfung wie beim CSV-Import (normalizePaperPriceRows)
+        const lowercased = raw.map((row) =>
+          Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [String(key).trim().toLowerCase(), value]),
+          ),
+        );
+        const { rows, errors } = normalizePaperPriceRows(lowercased);
         preparePaperImport(rows, errors, file.name);
       } else {
         const text = await file.text();
@@ -284,11 +306,16 @@ export default function Verwaltung() {
     if (!pendingImport) return;
     savePricingConfig(pendingImport.nextConfig);
     setConfig(pendingImport.nextConfig);
+    setIsCustomized(true);
     showMessage('ok', `Import "${pendingImport.sourceName}" übernommen.`);
     setPendingImport(null);
   }
 
-  const wvTable = config.wvTabellen[wvTableKey];
+  // Ausgewählten Tab gegen die (ggf. importierte) Config abgleichen —
+  // fehlt der Key, fällt die Anzeige auf die erste vorhandene Tabelle zurück.
+  const wvTableKeys = Object.keys(config.wvTabellen ?? {});
+  const effectiveWvKey = wvTableKeys.includes(wvTableKey) ? wvTableKey : wvTableKeys[0];
+  const wvTable = effectiveWvKey ? config.wvTabellen[effectiveWvKey] : {};
   const wvRows = Object.keys(wvTable).map(Number).sort((a, b) => a - b);
   const wvCols = [...new Set(wvRows.flatMap((r) => Object.keys(wvTable[r]).map(Number)))].sort(
     (a, b) => a - b,
@@ -316,34 +343,18 @@ export default function Verwaltung() {
                 </h1>
                 <p className="mt-1 text-sm text-white/70">
                   Version {config.meta.version} · Stand {config.meta.stand}
-                  {isDefault ? '' : ' · lokal angepasst'}
+                  {isCustomized ? ' · lokal angepasst' : ''}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleExportJson}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Config (JSON)
-                </button>
-                <button
-                  type="button"
+                <ToolbarButton icon={Download} label="Config (JSON)" onClick={handleExportJson} tone="inverted" />
+                <ToolbarButton
+                  icon={Upload}
+                  label="Config importieren"
                   onClick={() => configFileRef.current?.click()}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20"
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  Config importieren
-                </button>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/20"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Auf Standard zurücksetzen
-                </button>
+                  tone="inverted"
+                />
+                <ToolbarButton icon={RotateCcw} label="Auf Standard zurücksetzen" onClick={handleReset} tone="inverted" />
               </div>
             </div>
           </div>
@@ -357,6 +368,14 @@ export default function Verwaltung() {
           onChange={handlePaperFile}
           className="hidden"
         />
+
+        {hasNewerDefault && (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+            Die im Repo hinterlegte Standard-Config hat Version {defaultVersion}, deine lokal
+            angepasste basiert auf {config.meta.version}. „Auf Standard zurücksetzen“ übernimmt den
+            neuen Stand — vorher bei Bedarf die aktuelle Config als JSON exportieren.
+          </div>
+        )}
 
         {message && (
           <div
@@ -463,7 +482,7 @@ export default function Verwaltung() {
                       <NumberField
                         value={paper.preisPro1000}
                         step={0.5}
-                        min={0}
+                        min={0.001}
                         className="w-28 text-right"
                         onCommit={(value) =>
                           updateConfig((next) => {
@@ -490,25 +509,29 @@ export default function Verwaltung() {
             subtitle="Wirken sofort auf die Kalkulation; Standardwerte stehen in der Repo-Config"
           />
           <div className="grid gap-x-8 gap-y-4 px-6 py-6 sm:px-8 md:grid-cols-2 xl:grid-cols-3">
-            {SETTINGS_META.map((meta) => (
-              <label key={meta.key} className="block space-y-1">
-                <span className="flex items-baseline justify-between text-sm font-medium text-slate-700 dark:text-gray-300">
-                  {meta.label}
-                  <span className="text-xs text-slate-400 dark:text-gray-500">{meta.einheit}</span>
-                </span>
-                <NumberField
-                  value={config.settings[meta.key]}
-                  step={meta.step}
-                  className="w-full"
-                  onCommit={(value) =>
-                    updateConfig((next) => {
-                      next.settings[meta.key] = value;
-                    })
-                  }
-                />
-                <span className="block text-xs text-slate-400 dark:text-gray-500">{meta.hinweis}</span>
-              </label>
-            ))}
+            {Object.keys(config.settings).map((key) => {
+              const meta = SETTINGS_META[key] ?? {};
+              return (
+                <label key={key} className="block space-y-1">
+                  <span className="flex items-baseline justify-between text-sm font-medium text-slate-700 dark:text-gray-300">
+                    {meta.label ?? key}
+                    <span className="text-xs text-slate-400 dark:text-gray-500">{meta.einheit ?? ''}</span>
+                  </span>
+                  <NumberField
+                    value={config.settings[key]}
+                    step={meta.step ?? 0.01}
+                    min={meta.min ?? 0}
+                    className="w-full"
+                    onCommit={(value) =>
+                      updateConfig((next) => {
+                        next.settings[key] = value;
+                      })
+                    }
+                  />
+                  <span className="block text-xs text-slate-400 dark:text-gray-500">{meta.hinweis ?? ''}</span>
+                </label>
+              );
+            })}
           </div>
         </section>
 
@@ -521,18 +544,18 @@ export default function Verwaltung() {
           />
           <div className="px-6 py-4 sm:px-8">
             <div className="mb-4 flex flex-wrap gap-2">
-              {Object.keys(config.wvTabellen).map((key) => (
+              {wvTableKeys.map((key) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setWvTableKey(key)}
                   className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                    key === wvTableKey
+                    key === effectiveWvKey
                       ? 'bg-[#8e014d] text-white'
                       : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
                   }`}
                 >
-                  {WV_TABLE_LABELS[key] ?? key}
+                  {wvTableLabels[key] ?? key}
                 </button>
               ))}
             </div>
@@ -561,11 +584,11 @@ export default function Verwaltung() {
                               <NumberField
                                 value={value}
                                 step={0.1}
-                                min={0}
+                                min={0.001}
                                 className="w-[4.5rem] px-1 text-right"
                                 onCommit={(nextValue) =>
                                   updateConfig((next) => {
-                                    next.wvTabellen[wvTableKey][row][col] = nextValue;
+                                    next.wvTabellen[effectiveWvKey][row][col] = nextValue;
                                   })
                                 }
                               />

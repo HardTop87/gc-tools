@@ -7,7 +7,9 @@ import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
   getDefaultPricingConfig,
+  parseFlexibleNumber,
   parsePaperPriceCsv,
+  savePricingConfig,
   validatePricingConfig,
 } from './pricingConfig';
 
@@ -230,6 +232,40 @@ describe('Express & Empfehlung', () => {
     const calc = calculateRSTPrice(baseForm({ auflage: '50' }), config);
     expect(calc.recommendedName).toBe('GC (Horizon)');
   });
+
+  it('Empfehlungslogik ist datengetrieben: eine vierte, günstigere Route kann gewinnen', () => {
+    const custom = getDefaultPricingConfig();
+    const cheapTable = JSON.parse(JSON.stringify(custom.wvTabellen.ilda_ohneUmschlag));
+    for (const row of Object.values(cheapTable)) {
+      for (const staffel of Object.keys(row)) row[staffel] = row[staffel] / 2;
+    }
+    custom.wvTabellen.test_partner = cheapTable;
+    custom.routen.push({
+      key: 'test',
+      name: 'Partner Test',
+      typ: 'partner',
+      wtStandard: 5,
+      wtExpress: 4,
+      formate: ['A5_Hoch', 'A5_Quer', 'A4_Hoch'],
+      minAuflage: null,
+      maxAuflage: null,
+      wvTabelleRef: 'test_partner',
+      umschlagZuschlag: false,
+      maxDickeRef: 'maxDickePartner',
+      nutzenRef: 'nutzenPartner',
+      preferDeltaRef: null,
+    });
+    expect(validatePricingConfig(custom).ok).toBe(true);
+
+    // Auflage 501: GC scheidet aus (max 500); Partner Test ist klar am günstigsten
+    const calc = calculateRSTPrice(baseForm({ auflage: '501' }), custom);
+    expect(routeResult(calc, 'gc_horizon').error).toContain('maximal 500');
+    const test = routeResult(calc, 'test');
+    const kopp = routeResult(calc, 'kopp');
+    const ilda = routeResult(calc, 'ilda');
+    expect(test.gesamt).toBeLessThan(Math.min(kopp.gesamt, ilda.gesamt) - 30);
+    expect(calc.recommendedName).toBe('Partner Test');
+  });
 });
 
 describe('pricingConfig: Validierung & Papierpreis-Import', () => {
@@ -247,6 +283,59 @@ describe('pricingConfig: Validierung & Papierpreis-Import', () => {
     expect(errors.join('\n')).toContain('preisPro1000');
     expect(errors.join('\n')).toContain('nicht lückenlos');
     expect(errors.join('\n')).toContain('GIBT_ES_NICHT');
+  });
+
+  it('parseFlexibleNumber liest deutsche UND englische Schreibweisen korrekt', () => {
+    expect(parseFlexibleNumber('35,5')).toBe(35.5);
+    expect(parseFlexibleNumber('35.5')).toBe(35.5); // vorher: 355 (10×-Bug)
+    expect(parseFlexibleNumber('1.234,5')).toBe(1234.5);
+    expect(parseFlexibleNumber('1,234.5')).toBe(1234.5);
+    expect(parseFlexibleNumber('1.234.567')).toBe(1234567);
+    expect(parseFlexibleNumber(42)).toBe(42);
+    expect(parseFlexibleNumber('abc')).toBeNaN();
+    expect(parseFlexibleNumber('')).toBeNaN();
+  });
+
+  it('CSV-Export quotet Sonderzeichen: Namen mit ";" und "." überleben den Roundtrip', () => {
+    const custom = getDefaultPricingConfig();
+    custom.papiere[0].name = 'Munken 2.0; matt';
+    const csv = buildPaperPriceCsv(custom);
+    const { rows, errors } = parsePaperPriceCsv(csv);
+    expect(errors).toEqual([]);
+    expect(rows).toHaveLength(custom.papiere.length);
+    expect(rows[0].id).toBe(custom.papiere[0].id);
+    expect(rows[0].preis_pro_1000).toBe(custom.papiere[0].preisPro1000);
+  });
+
+  it('lehnt leere formate/papiere/routen und negative Settings ab', () => {
+    const empty = getDefaultPricingConfig();
+    empty.formate = [];
+    empty.routen = [];
+    const emptyResult = validatePricingConfig(empty);
+    expect(emptyResult.ok).toBe(false);
+    expect(emptyResult.errors.join('\n')).toContain('mindestens ein Format');
+
+    const negative = getDefaultPricingConfig();
+    negative.settings.setupKosten = -5;
+    const negativeResult = validatePricingConfig(negative);
+    expect(negativeResult.ok).toBe(false);
+    expect(negativeResult.errors.join('\n')).toContain('setupKosten');
+  });
+
+  it('maxDickeRef darf auf per Config ergänzte Settings verweisen', () => {
+    const custom = getDefaultPricingConfig();
+    custom.settings.maxDickeNeuerPartner = 2000;
+    custom.routen[1].maxDickeRef = 'maxDickeNeuerPartner';
+    expect(validatePricingConfig(custom).ok).toBe(true);
+
+    custom.routen[1].maxDickeRef = 'gibtEsNicht';
+    expect(validatePricingConfig(custom).ok).toBe(false);
+  });
+
+  it('savePricingConfig persistiert keine ungültige Config', () => {
+    const broken = getDefaultPricingConfig();
+    broken.papiere[0].preisPro1000 = 0;
+    expect(savePricingConfig(broken)).toBe(false);
   });
 
   it('CSV-Roundtrip: Export → Parse → Apply ändert nur bekannte IDs', () => {

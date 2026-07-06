@@ -1,6 +1,6 @@
 # RST-Rechner — Kompletter Export der Berechnungslogik (Rückstichheftung)
 
-> **Version 2.0.0 · Stand 2026-07-06.** Ersetzt den Export vom 2026-07-05.
+> **Version 2.1.0 · Stand 2026-07-06.** Ersetzt den Export vom 2026-07-05.
 > Umgesetzt: Update-Spec Rev. 2 vom 06.07.2026 (GC Horizon, DIN A6, berechnete Seitenlimits,
 > GC-Umschlag-Zuschlag, Cello-Banner-Faktor, zentrale versionierte Config).
 >
@@ -749,4 +749,4 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 
 ---
 
-*Generiert am 2026-07-06 direkt aus `pricingConfig.default.json` (Version 2.0.0) und der produktiven Engine.*
+*Generiert am 2026-07-06 direkt aus `pricingConfig.default.json` (Version 2.1.0) und der produktiven Engine.*

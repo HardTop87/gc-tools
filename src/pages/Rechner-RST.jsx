@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-import { loadPricingConfig } from '../utils/pricingConfig';
+import { loadPricingConfigResult } from '../utils/pricingConfig';
 import {
   DRUCK_OPTIONS,
   calculateRSTPrice,
@@ -66,7 +66,8 @@ function panelClassName() {
 }
 
 export default function NeuesTool() {
-  const [config] = useState(() => loadPricingConfig());
+  const [configLoad] = useState(() => loadPricingConfigResult());
+  const config = configLoad.config;
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [calculation, setCalculation] = useState(null);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
@@ -133,6 +134,19 @@ export default function NeuesTool() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1800px]">
+        {configLoad.source === 'invalid-stored' && (
+          <div className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Die gespeicherte Preiskonfiguration war ungültig und wurde ignoriert — es gelten die
+              Standardwerte. Details in der{' '}
+              <Link to="/verwaltung" className="underline underline-offset-2">
+                Verwaltung
+              </Link>
+              .
+            </span>
+          </div>
+        )}
         <header className="mb-6 overflow-hidden rounded-[28px] border border-[#8e014d]/20 bg-[#8e014d] text-white shadow-[0_30px_80px_-30px_rgba(142,1,77,0.5)]">
           <div className="grid gap-6 px-6 py-6 sm:px-8 lg:grid-cols-[1.4fr_0.8fr] lg:px-10 lg:py-8">
             <div className="space-y-4">
@@ -797,7 +811,7 @@ export default function NeuesTool() {
                                 value={`${fmt(result.celloKosten)} €`}
                               />
                               <DetailSubRow
-                                value={`${celloLabels[result.celloType] || 'Ohne'} · Grund ${fmt(result.celloGrundkosten)} € · Bogen ${fmt(result.celloBogenkosten)} € (${fmt(result.celloGrundkostenFaktor * 100, 0)}%)`}
+                                value={`${celloLabels[result.celloType] || 'Ohne'} · Grund ${fmt(result.celloGrundkosten)} € · Bogen ${fmt(result.celloBogenkosten)} €`}
                               />
                               <DetailRow
                                 label="Einrichtekosten"

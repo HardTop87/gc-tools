@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
@@ -17,13 +17,13 @@ import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
   buildPaperPriceRows,
+  fetchSharedConfig,
   getDefaultPricingConfig,
-  hasStoredPricingConfig,
   loadPricingConfigResult,
   normalizePaperPriceRows,
   parsePaperPriceCsv,
-  resetPricingConfig,
   savePricingConfig,
+  saveSharedConfig,
   validatePricingConfig,
 } from '../utils/pricingConfig';
 
@@ -150,27 +150,44 @@ function ToolbarButton(props) {
 }
 
 export default function Verwaltung() {
-  const [initialLoad] = useState(() => loadPricingConfigResult());
-  const [config, setConfig] = useState(initialLoad.config);
-  const [isCustomized, setIsCustomized] = useState(() => hasStoredPricingConfig());
+  // Startwert aus Offline-Cache/Default; der geteilte Stand wird sofort nachgeladen.
+  const [config, setConfig] = useState(() => loadPricingConfigResult().config);
   const [wvTableKey, setWvTableKey] = useState('gc_horizon');
   const [pendingImport, setPendingImport] = useState(null);
-  const [message, setMessage] = useState(() =>
-    initialLoad.source === 'invalid-stored'
-      ? {
-          type: 'error',
-          text:
-            'Die gespeicherte Konfiguration war ungültig und wurde ignoriert — es gelten die Standardwerte. ' +
-            'Der alte Stand liegt als Backup im Browser-Speicher.\n' +
-            initialLoad.errors.join('\n'),
-        }
-      : null,
-  );
+  const [message, setMessage] = useState(null);
+  const [sharedStatus, setSharedStatus] = useState({ state: 'loading' });
+  const [publishState, setPublishState] = useState({ status: 'idle' });
   const paperFileRef = useRef(null);
   const configFileRef = useRef(null);
 
   const defaultVersion = useMemo(() => getDefaultPricingConfig().meta.version, []);
-  const hasNewerDefault = isCustomized && config.meta.version !== defaultVersion;
+  const hasNewerDefault = config.meta.version !== defaultVersion;
+
+  // Geteilten Preisstand beim Öffnen laden.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const result = await fetchSharedConfig();
+      if (!alive) return;
+      if (result.config) {
+        setConfig(result.config);
+        setSharedStatus({ state: 'shared' });
+      } else if (result.source === 'none') {
+        setSharedStatus({ state: 'none' });
+      } else if (result.source === 'invalid') {
+        setSharedStatus({ state: 'invalid' });
+        showMessage(
+          'error',
+          `Der geteilte Preisstand ist ungültig und wird nicht verwendet:\n${result.errors.join('\n')}`,
+        );
+      } else {
+        setSharedStatus({ state: 'offline' });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Tabellen-Labels aus den Routen ableiten, die sie referenzieren —
   // per Config ergänzte Tabellen bekommen so automatisch sinnvolle Namen.
@@ -189,6 +206,22 @@ export default function Verwaltung() {
     return labels;
   }, [config.routen]);
 
+  // Veröffentlicht einen Stand im geteilten Speicher (für alle sichtbar).
+  async function publish(nextConfig) {
+    setPublishState({ status: 'saving' });
+    const result = await saveSharedConfig(nextConfig);
+    if (result.ok) {
+      setPublishState({ status: 'saved' });
+      setSharedStatus({ state: 'shared' });
+    } else {
+      setPublishState({ status: 'error' });
+      showMessage(
+        'error',
+        `Für alle veröffentlichen fehlgeschlagen — die Änderung ist nur lokal gespeichert:\n${result.errors.join('\n')}`,
+      );
+    }
+  }
+
   function updateConfig(mutator) {
     const next = JSON.parse(JSON.stringify(config));
     mutator(next);
@@ -198,9 +231,9 @@ export default function Verwaltung() {
       showMessage('error', `Änderung verworfen — die Config wäre ungültig:\n${validation.errors.join('\n')}`);
       return;
     }
-    savePricingConfig(next);
-    setIsCustomized(true);
+    savePricingConfig(next); // lokaler Cache
     setConfig(next);
+    publish(next); // für alle veröffentlichen
   }
 
   function showMessage(type, text) {
@@ -208,14 +241,16 @@ export default function Verwaltung() {
   }
 
   function handleReset() {
-    if (!window.confirm('Alle Anpassungen verwerfen und auf die im Repo hinterlegte Standard-Config zurücksetzen?')) {
+    if (!window.confirm('Den geteilten Preisstand für ALLE auf den Repo-Standard zurücksetzen?')) {
       return;
     }
-    const fresh = resetPricingConfig();
+    const fresh = getDefaultPricingConfig();
+    fresh.meta.stand = todayIso();
+    savePricingConfig(fresh);
     setConfig(fresh);
-    setIsCustomized(false);
     setPendingImport(null);
-    showMessage('ok', 'Config auf Standard zurückgesetzt.');
+    showMessage('ok', 'Auf Standard zurückgesetzt.');
+    publish(fresh);
   }
 
   function handleExportJson() {
@@ -306,8 +341,8 @@ export default function Verwaltung() {
     if (!pendingImport) return;
     savePricingConfig(pendingImport.nextConfig);
     setConfig(pendingImport.nextConfig);
-    setIsCustomized(true);
     showMessage('ok', `Import "${pendingImport.sourceName}" übernommen.`);
+    publish(pendingImport.nextConfig);
     setPendingImport(null);
   }
 
@@ -343,7 +378,11 @@ export default function Verwaltung() {
                 </h1>
                 <p className="mt-1 text-sm text-white/70">
                   Version {config.meta.version} · Stand {config.meta.stand}
-                  {isCustomized ? ' · lokal angepasst' : ''}
+                  {sharedStatus.state === 'shared' && ' · geteilter Stand'}
+                  {sharedStatus.state === 'none' && ' · noch nicht veröffentlicht'}
+                  {sharedStatus.state === 'offline' && ' · geteilter Speicher offline'}
+                  {publishState.status === 'saving' && ' · speichere …'}
+                  {publishState.status === 'saved' && ' · ✓ für alle gespeichert'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -369,11 +408,19 @@ export default function Verwaltung() {
           className="hidden"
         />
 
+        {sharedStatus.state === 'none' && (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+            Es ist noch kein geteilter Preisstand veröffentlicht. Sobald du etwas änderst, eine
+            Preisliste importierst oder „Auf Standard zurücksetzen“ klickst, wird der Stand für alle
+            angelegt und ist überall sichtbar.
+          </div>
+        )}
+
         {hasNewerDefault && (
           <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
-            Die im Repo hinterlegte Standard-Config hat Version {defaultVersion}, deine lokal
-            angepasste basiert auf {config.meta.version}. „Auf Standard zurücksetzen“ übernimmt den
-            neuen Stand — vorher bei Bedarf die aktuelle Config als JSON exportieren.
+            Der im Repo hinterlegte Standard hat Version {defaultVersion}, der aktuelle Stand basiert
+            auf {config.meta.version}. „Auf Standard zurücksetzen“ veröffentlicht den neuen Standard
+            für alle — vorher bei Bedarf die aktuelle Config als JSON exportieren.
           </div>
         )}
 

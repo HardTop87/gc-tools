@@ -183,6 +183,80 @@ export function resetPricingConfig() {
   return getDefaultPricingConfig();
 }
 
+// ---------------------------------------------------------------------------
+// Geteilter Preisstand (Vercel Blob über /api/config)
+// Der Blob ist die Quelle der Wahrheit; localStorage dient nur als
+// Offline-Cache, damit bei kurzem Netzausfall der zuletzt bekannte Stand
+// gilt statt der Repo-Standardwerte.
+// ---------------------------------------------------------------------------
+const SHARED_API = '/api/config';
+const SHARED_TIMEOUT_MS = 6000;
+
+// Liest den geteilten Stand. source:
+//  'shared'  → gültiger geteilter Stand geladen (Cache aktualisiert)
+//  'none'    → es wurde noch nie ein Stand veröffentlicht
+//  'invalid' → geteilter Stand ist ungültig (errors gesetzt)
+//  'error'   → nicht erreichbar/Timeout (offline)
+export async function fetchSharedConfig() {
+  let response;
+  try {
+    response = await fetch(SHARED_API, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(SHARED_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return { config: null, source: 'error', errors: [String(error?.message || error)] };
+  }
+
+  if (response.status === 204) return { config: null, source: 'none', errors: [] };
+  if (!response.ok) return { config: null, source: 'error', errors: [`HTTP ${response.status}`] };
+
+  let parsed;
+  try {
+    parsed = await response.json();
+  } catch (error) {
+    return { config: null, source: 'error', errors: [String(error?.message || error)] };
+  }
+
+  const validation = validatePricingConfig(parsed);
+  if (!validation.ok) return { config: null, source: 'invalid', errors: validation.errors };
+
+  savePricingConfig(parsed); // Offline-Cache aktualisieren
+  return { config: parsed, source: 'shared', errors: [] };
+}
+
+// Veröffentlicht einen Stand für alle. Validiert vorher; aktualisiert bei
+// Erfolg auch den lokalen Cache.
+export async function saveSharedConfig(config) {
+  const validation = validatePricingConfig(config);
+  if (!validation.ok) return { ok: false, errors: validation.errors };
+
+  let response;
+  try {
+    response = await fetch(SHARED_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  } catch (error) {
+    return { ok: false, errors: [String(error?.message || error)] };
+  }
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      if (body?.error) detail = body.error;
+    } catch {
+      // Antwort ohne JSON-Body — Standard-Detail behalten
+    }
+    return { ok: false, errors: [detail] };
+  }
+
+  savePricingConfig(config); // Offline-Cache aktualisieren
+  return { ok: true, errors: [] };
+}
+
 export const PAPER_CSV_HEADER = ['id', 'name', 'familie', 'gsm', 'dicke_um', 'preis_pro_1000'];
 
 export function buildPaperPriceRows(config) {

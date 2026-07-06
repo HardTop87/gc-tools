@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-import { loadPricingConfigResult } from '../utils/pricingConfig';
+import { fetchSharedConfig, loadPricingConfigResult } from '../utils/pricingConfig';
 import {
   DRUCK_OPTIONS,
   calculateRSTPrice,
@@ -90,8 +90,11 @@ function panelClassName() {
 }
 
 export default function NeuesTool() {
-  const [configLoad] = useState(() => loadPricingConfigResult());
-  const config = configLoad.config;
+  // Startwert aus dem Offline-Cache bzw. Repo-Default, danach lädt ein Effect
+  // den geteilten Stand nach. So rendert die Seite sofort und ohne Flackern.
+  const [config, setConfig] = useState(() => loadPricingConfigResult().config);
+  const [configStale, setConfigStale] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [calculation, setCalculation] = useState(null);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
@@ -137,12 +140,54 @@ export default function NeuesTool() {
     }
   }, [form.hasUmschlag, form.celloUmschlag]);
 
+  // Geteilten Preisstand laden: beim Öffnen und immer, wenn der Tab wieder
+  // aktiv wird — so aktualisiert sich auch ein lange offener Tab.
+  useEffect(() => {
+    let alive = true;
+    const refresh = async () => {
+      const result = await fetchSharedConfig();
+      if (!alive) return;
+      if (result.config) {
+        setConfig(result.config);
+        setConfigStale(false);
+      } else if (result.source === 'error') {
+        setConfigStale(true);
+      }
+      // 'none' (noch nichts veröffentlicht) / 'invalid' → aktuellen Stand behalten
+    };
+    refresh();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', refresh);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+
   function updateForm(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleCalculate() {
-    setCalculation(calculateRSTPrice(form, config));
+  // Vor JEDER Berechnung den aktuellen geteilten Stand holen, damit ein
+  // Angebot nie mit veralteten Preisen erzeugt wird. Bei Offline-Fehler wird
+  // mit dem letzten bekannten Stand gerechnet und deutlich gewarnt.
+  async function handleCalculate() {
+    setIsCalculating(true);
+    let effectiveConfig = config;
+    const result = await fetchSharedConfig();
+    if (result.config) {
+      effectiveConfig = result.config;
+      setConfig(result.config);
+      setConfigStale(false);
+    } else if (result.source === 'error') {
+      setConfigStale(true);
+    }
+    setCalculation(calculateRSTPrice(form, effectiveConfig));
+    setIsCalculating(false);
   }
 
   const results = calculation?.results ?? null;
@@ -152,16 +197,12 @@ export default function NeuesTool() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1800px]">
-        {configLoad.source === 'invalid-stored' && (
+        {configStale && (
           <div className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Die gespeicherte Preiskonfiguration war ungültig und wurde ignoriert — es gelten die
-              Standardwerte. Details in der{' '}
-              <Link to="/verwaltung" className="underline underline-offset-2">
-                Verwaltung
-              </Link>
-              .
+              Der geteilte Preisstand ist gerade nicht erreichbar — es gilt der zuletzt geladene
+              Stand ({config.meta.stand}). Die Preise sind möglicherweise nicht aktuell.
             </span>
           </div>
         )}
@@ -488,10 +529,11 @@ export default function NeuesTool() {
               <button
                 type="button"
                 onClick={handleCalculate}
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#8e014d] px-4 text-sm font-semibold text-white transition hover:bg-[#70013d]"
+                disabled={isCalculating}
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#8e014d] px-4 text-sm font-semibold text-white transition hover:bg-[#70013d] disabled:opacity-70"
               >
                 <Calculator className="h-4 w-4" />
-                Preis berechnen
+                {isCalculating ? 'Aktuelle Preise laden …' : 'Preis berechnen'}
               </button>
             </div>
           </aside>

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
     ArrowLeft, Download, UploadCloud, AlertTriangle,
     Search, XCircle, FileText, Package, Truck, Zap,
-    Database, CheckCircle, Clock, Loader2, ListFilter,
+    Database, CheckCircle, Clock, ListFilter,
     Unlink, CheckSquare, Info, ArrowUp, ChevronLeft, ChevronRight, Lock, Unlock
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -24,14 +24,6 @@ const RATES = {
 };
 
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
-
-const formatETA = (ms) => {
-    if (!ms || ms < 0) return "Berechne...";
-    const totalSec = Math.round(ms / 1000);
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${m} Min. ${s} Sek.`;
-};
 
 const isLetterPostLabel = (label) => !/paket/i.test(String(label || ''));
 const isNoShippingRecord = (record) => record?.label === 'Kein Versand' || Boolean(record?.errorMsg);
@@ -255,10 +247,6 @@ const parseCsvFile = (file, onComplete, onError) => {
 };
 
 export default function PostVersandManager() {
-    const [apiKey, setApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || '');
-    const [selectedProvider, setSelectedProvider] = useState('groq');
-    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
-    const [ollamaModel, setOllamaModel] = useState('qwen2.5-coder:14b');
     const [weights, setWeights] = useState(INITIAL_WEIGHTS);
     
     const [rawData, setRawData] = useState([]);
@@ -287,8 +275,7 @@ export default function PostVersandManager() {
     const [results, setResults] = useState(null);
     const [view, setView] = useState('upload'); 
     const [searchTerm, setSearchTerm] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [procStats, setProcStats] = useState({ ai: 0, db: 0, total: 0, eta: 0, progress: 0 });
+    const [procStats, setProcStats] = useState({ manuell: 0, db: 0, total: 0, eta: 0, progress: 0 });
     const [uploadEncoding, setUploadEncoding] = useState({ source: '', db: '' });
     const [showOnlyMismatches, setShowOnlyMismatches] = useState(false);
     const [expandedMatchRows, setExpandedMatchRows] = useState({});
@@ -489,7 +476,7 @@ export default function PostVersandManager() {
     };
 
     const prepareDbMatch = () => {
-        if (selectedProvider !== 'ollama' && !apiKey && dbData.length === 0) return alert("Ohne API Key musst du zumindest eine Datenbank hochladen!");
+        if (dbData.length === 0) return alert("Bitte lade zuerst eine Datenbank hoch, um automatisch abzugleichen.");
         const matchedList = []; const unmatchedList = [];
 
         rawData.forEach((row, index) => {
@@ -831,24 +818,6 @@ export default function PostVersandManager() {
     };
 
 
-    const runAiProcessing = async () => {
-        if (!preMatchResults) return;
-        setIsProcessing(true);
-
-        // KI-Flow bewusst deaktiviert: Verarbeitung erfolgt nur manuell im Editor.
-        const prepared = finalizeManualToPreview(preMatchResults.matchedList, preMatchResults.unmatchedList);
-        setProcStats({
-            ai: preMatchResults.unmatchedList.length,
-            db: preMatchResults.matchedList.filter((m) => m.fromDB).length,
-            total: rawData.length,
-            eta: 0,
-            progress: 100,
-        });
-        setResults(prepared);
-        setView('preview');
-        setIsProcessing(false);
-    };
-
     const finishManualEditing = () => {
         if (!preMatchResults) return;
 
@@ -866,7 +835,7 @@ export default function PostVersandManager() {
 
         const prepared = finalizeManualToPreview(preMatchResults.matchedList, mergedUnmatched);
         setProcStats({
-            ai: mergedUnmatched.length,
+            manuell: mergedUnmatched.length,
             db: preMatchResults.matchedList.filter((m) => m.fromDB).length,
             total: rawData.length,
             eta: 0,
@@ -1075,7 +1044,7 @@ export default function PostVersandManager() {
                         </div>
                         <div className="flex items-center gap-4">
                             <ThemeToggle />
-                            {view !== 'upload' && !isProcessing && (
+                            {view !== 'upload' && (
                                 <button
                                     onClick={() => { setView('upload'); setResults(null); setPreMatchResults(null); }}
                                     className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
@@ -1127,41 +1096,6 @@ export default function PostVersandManager() {
                                                 </select>
                                             </div>
                                         ))}
-                                    </div>
-                                    <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="flex flex-col gap-1">
-                                            <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">Groq API Key</label>
-                                            <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} className="w-full bg-slate-800 text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]" />
-                                        </div>
-                                        <div className="flex flex-col gap-1">
-                                            <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">Anbieter</label>
-                                            <select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)} className="w-full bg-slate-800 border-none text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]">
-                                                <option value="groq">Groq (Cloud)</option>
-                                                <option value="ollama">Ollama (Lokal)</option>
-                                            </select>
-                                        </div>
-                                        <div className="flex flex-col gap-1 md:col-span-2">
-                                            <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">KI-Modell</label>
-                                            {selectedProvider === 'groq' ? (
-                                                <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="w-full bg-slate-800 border-none text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]">
-                                                <option value="llama-3.3-70b-versatile">Llama 3.3 70B (empfohlen)</option>
-                                                <option value="llama-3.1-8b-instant">Llama 3.1 8B (schnell, hohes Limit)</option>
-                                                </select>
-                                            ) : (
-                                                <input
-                                                    type="text"
-                                                    list="ollama-model-options"
-                                                    value={ollamaModel}
-                                                    onChange={(e) => setOllamaModel(e.target.value)}
-                                                    className="w-full bg-slate-800 text-white text-[10px] p-4 rounded-xl outline-none focus:ring-2 ring-[#8e014d]"
-                                                    placeholder="z.B. qwen2.5-coder:14b"
-                                                />
-                                            )}
-                                            <datalist id="ollama-model-options">
-                                                <option value="qwen2.5-coder:14b" />
-                                                <option value="llama3.1:8b" />
-                                            </datalist>
-                                        </div>
                                     </div>
                                     <button onClick={prepareDbMatch} className="w-full bg-[#8e014d] py-5 rounded-2xl font-black text-xl hover:bg-[#b00260] transition-all flex justify-center items-center gap-3"><ListFilter fill="currentColor"/> DATENBANK ABGLEICHEN</button>
                                 </div>
@@ -1504,8 +1438,8 @@ export default function PostVersandManager() {
                 {view === 'preview' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-end gap-4 mb-6">
-                            <h2 className="text-4xl font-black tracking-tighter uppercase italic">{isProcessing ? 'Verarbeitung...' : 'Vorschau'}</h2>
-                            {!isProcessing && results && (
+                            <h2 className="text-4xl font-black tracking-tighter uppercase italic">Vorschau</h2>
+                            {results && (
                                 <div className="flex gap-4 items-center">
                                     <div className="relative w-64"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-gray-500" size={14} /><input type="text" placeholder="Suchen..." className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-800 dark:text-gray-100 outline-none focus:border-[#8e014d]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
                                     <button onClick={() => setView('final')} className="bg-[#8e014d] text-white px-10 py-3 rounded-2xl font-black uppercase shadow-lg hover:scale-105 transition-all">Downloads</button>
@@ -1515,16 +1449,9 @@ export default function PostVersandManager() {
                         <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border-2 border-slate-200 dark:border-gray-700 flex flex-wrap gap-10 items-center justify-between shadow-sm">
                             <div className="flex gap-10">
                                 <div className="text-center"><p className="text-3xl font-black text-emerald-600">{procStats.db}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Aus Datenbank</p></div>
-                                <div className="text-center"><p className="text-3xl font-black text-[#8e014d]">{procStats.ai}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Manuell geprüft</p></div>
+                                <div className="text-center"><p className="text-3xl font-black text-[#8e014d]">{procStats.manuell}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Manuell geprüft</p></div>
                                 <div className="text-center"><p className="text-3xl font-black text-slate-800 dark:text-gray-100">{previewShipmentCount}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Sendungen gesamt</p></div>
                             </div>
-                            {isProcessing && procStats.ai > 0 && (
-                                <div className="flex-1 max-w-md ml-auto">
-                                    <div className="flex justify-between text-[10px] font-black uppercase text-slate-400 dark:text-gray-500 mb-2"><span className="flex items-center gap-1"><Loader2 className="animate-spin" size={12}/> Verarbeitung läuft...</span><span className="text-[#8e014d]">{procStats.progress}%</span></div>
-                                    <div className="w-full bg-slate-100 dark:bg-gray-800 rounded-full h-3 overflow-hidden p-0.5"><div className="bg-[#8e014d] h-full transition-all duration-500" style={{ width: `${procStats.progress}%` }}></div></div>
-                                    <div className="text-right text-[10px] text-slate-500 dark:text-gray-400 font-bold">Restzeit: {formatETA(procStats.eta)}</div>
-                                </div>
-                            )}
                         </div>
                         {results && (
                             <div className="bg-white dark:bg-gray-900 border-2 border-slate-200 dark:border-gray-700 rounded-[2.5rem] overflow-hidden shadow-xl mt-6">

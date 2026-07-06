@@ -57,8 +57,32 @@ function fmtKg(kg) {
   );
 }
 
+function fmtNum(n, digits = 4) {
+  return Number(n).toLocaleString('de-DE', { maximumFractionDigits: digits });
+}
+
 function inputBaseClassName() {
   return 'h-10 w-full rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm text-slate-900 dark:text-gray-100 shadow-sm outline-none transition placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:border-[#8e014d] focus:ring-2 focus:ring-[#8e014d]/10';
+}
+
+function RefGroup({ title, children }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
+        {title}
+      </p>
+      <dl className="space-y-1.5">{children}</dl>
+    </div>
+  );
+}
+
+function RefRow({ label, value }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-100 pb-1.5 dark:border-gray-800">
+      <dt className="text-sm text-slate-600 dark:text-gray-400">{label}</dt>
+      <dd className="text-sm font-semibold tabular-nums text-slate-900 dark:text-gray-100">{value}</dd>
+    </div>
+  );
 }
 
 function panelClassName() {
@@ -68,13 +92,11 @@ function panelClassName() {
 export default function NeuesTool() {
   const [configLoad] = useState(() => loadPricingConfigResult());
   const config = configLoad.config;
-  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [calculation, setCalculation] = useState(null);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
-  const [settings, setSettings] = useState(() =>
-    Object.fromEntries(Object.entries(config.settings).map(([key, value]) => [key, String(value)])),
-  );
 
+  const settings = config.settings;
   const formatOptions = getFormatOptions(config);
   const routes = config.routen;
   const celloLabels = getCelloLabels(config);
@@ -83,7 +105,7 @@ export default function NeuesTool() {
   const celloOptions = getCelloOptions(config, form.pUmschlagId);
   const selectedContentPaper = contentPaperOptions.find((paper) => paper.id === form.pInhaltId);
   const selectedCoverPaper = coverPaperOptions.find((paper) => paper.id === form.pUmschlagId);
-  const expressProzent = Math.round((parseFloat(settings.expressFaktor) || 0) * 100);
+  const expressProzent = Math.round((settings.expressFaktor || 0) * 100);
 
   useEffect(() => {
     const contentStillValid = contentPaperOptions.some((paper) => paper.id === form.pInhaltId);
@@ -119,12 +141,8 @@ export default function NeuesTool() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function updateSettings(key, value) {
-    setSettings((prev) => ({ ...prev, [key]: value }));
-  }
-
   function handleCalculate() {
-    setCalculation(calculateRSTPrice(form, config, settings));
+    setCalculation(calculateRSTPrice(form, config));
   }
 
   const results = calculation?.results ?? null;
@@ -215,9 +233,9 @@ export default function NeuesTool() {
                 <Settings2 className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">Basis-Einstellungen</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">Aktive Preisbasis</p>
                 <p className="text-sm text-slate-500 dark:text-gray-400">
-                  Grundpreise, Multiplikatoren, Auftrag und Empfehlungslogik
+                  Gepflegt in der Verwaltung · Version {config.meta.version} · Stand {config.meta.stand}
                 </p>
               </div>
             </div>
@@ -230,211 +248,51 @@ export default function NeuesTool() {
 
           {settingsOpen && (
             <div className="border-t border-slate-200 dark:border-gray-700 px-6 py-6 sm:px-8">
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                    Grundpreise SRA3
-                  </p>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">SW (1c) €</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      value={settings.baseGrundpreis1c}
-                      onChange={(event) =>
-                        updateSettings('baseGrundpreis1c', event.target.value)
-                      }
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Farbe (4c) €</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      value={settings.baseGrundpreis4c}
-                      onChange={(event) =>
-                        updateSettings('baseGrundpreis4c', event.target.value)
-                      }
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                </div>
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-gray-800">
+                <p className="text-sm text-slate-500 dark:text-gray-400">
+                  Diese Werte fließen in jede Kalkulation ein. Änderungen erfolgen zentral in der Verwaltung.
+                </p>
+                <Link
+                  to="/verwaltung"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-[#8e014d] px-3 text-xs font-semibold text-white transition hover:bg-[#70013d]"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  In der Verwaltung ändern
+                </Link>
+              </div>
 
-                <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                    Multiplikatoren
-                  </p>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Faktor Banner</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.1"
-                      value={settings.dynFaktorBanner}
-                      onChange={(event) => updateSettings('dynFaktorBanner', event.target.value)}
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Faktor Cello Banner
-                    </span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.1"
-                      value={settings.celloFaktorBanner}
-                      onChange={(event) =>
-                        updateSettings('celloFaktorBanner', event.target.value)
-                      }
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                </div>
+              <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
+                <RefGroup title="Grundpreise SRA3">
+                  <RefRow label="SW (1c)" value={`${fmtNum(settings.baseGrundpreis1c)} €`} />
+                  <RefRow label="Farbe (4c)" value={`${fmtNum(settings.baseGrundpreis4c)} €`} />
+                </RefGroup>
 
-                <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                    GC Umschlag-Zuschlag
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block space-y-1.5">
-                      <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Grund €</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={settings.gcUmschlagGrundkosten}
-                        onChange={(event) =>
-                          updateSettings('gcUmschlagGrundkosten', event.target.value)
-                        }
-                        className={inputBaseClassName()}
-                      />
-                    </label>
-                    <label className="block space-y-1.5">
-                      <span className="text-sm font-medium text-slate-700 dark:text-gray-300">€/Stück</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={settings.gcUmschlagStueckpreis}
-                        onChange={(event) =>
-                          updateSettings('gcUmschlagStueckpreis', event.target.value)
-                        }
-                        className={inputBaseClassName()}
-                      />
-                    </label>
-                  </div>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">ab Auflage</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={settings.gcUmschlagAbAuflage}
-                      onChange={(event) =>
-                        updateSettings('gcUmschlagAbAuflage', event.target.value)
-                      }
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                </div>
+                <RefGroup title="Multiplikatoren">
+                  <RefRow label="Faktor Banner" value={`× ${fmtNum(settings.dynFaktorBanner)}`} />
+                  <RefRow label="Faktor Cello Banner" value={`× ${fmtNum(settings.celloFaktorBanner)}`} />
+                </RefGroup>
 
-                <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                    Max. Broschürendicke (µm)
-                  </p>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">GC (Horizon)</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="50"
-                      value={settings.maxDickeGC}
-                      onChange={(event) => updateSettings('maxDickeGC', event.target.value)}
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Kopp / ILDA</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="50"
-                      value={settings.maxDickePartner}
-                      onChange={(event) => updateSettings('maxDickePartner', event.target.value)}
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                </div>
+                <RefGroup title="GC Umschlag-Zuschlag">
+                  <RefRow label="Grundkosten" value={`${fmtNum(settings.gcUmschlagGrundkosten)} €`} />
+                  <RefRow label="pro Stück" value={`${fmtNum(settings.gcUmschlagStueckpreis)} €`} />
+                  <RefRow label="ab Auflage" value={`${fmtNum(settings.gcUmschlagAbAuflage)} Ex.`} />
+                </RefGroup>
 
-                <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                    Auftrag
-                  </p>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Grundkosten Cello €
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={settings.celloGrundkosten}
-                      onChange={(event) =>
-                        updateSettings('celloGrundkosten', event.target.value)
-                      }
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">
-                      Einrichtekosten €
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={settings.setupKosten}
-                      onChange={(event) => updateSettings('setupKosten', event.target.value)}
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                </div>
+                <RefGroup title="Max. Broschürendicke">
+                  <RefRow label="GC (Horizon)" value={`${fmtNum(settings.maxDickeGC)} µm`} />
+                  <RefRow label="Kopp / ILDA" value={`${fmtNum(settings.maxDickePartner)} µm`} />
+                </RefGroup>
 
-                <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                    Empfehlung
-                  </p>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Intern bis + €</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={settings.preferInternDelta}
-                      onChange={(event) =>
-                        updateSettings('preferInternDelta', event.target.value)
-                      }
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-700 dark:text-gray-300">Kopp bis + €</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={settings.preferKoppDelta}
-                      onChange={(event) =>
-                        updateSettings('preferKoppDelta', event.target.value)
-                      }
-                      className={inputBaseClassName()}
-                    />
-                  </label>
-                </div>
+                <RefGroup title="Auftrag">
+                  <RefRow label="Grundkosten Cello" value={`${fmtNum(settings.celloGrundkosten)} €`} />
+                  <RefRow label="Einrichtekosten" value={`${fmtNum(settings.setupKosten)} €`} />
+                  <RefRow label="Express-Aufschlag" value={`+${expressProzent} %`} />
+                </RefGroup>
+
+                <RefGroup title="Empfehlung">
+                  <RefRow label="GC bis +" value={`${fmtNum(settings.preferInternDelta)} €`} />
+                  <RefRow label="Kopp bis +" value={`${fmtNum(settings.preferKoppDelta)} €`} />
+                </RefGroup>
               </div>
             </div>
           )}

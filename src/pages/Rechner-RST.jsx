@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 
-import { fetchSharedConfig, loadPricingConfigResult } from '../utils/pricingConfig';
+import { configRev, fetchSharedConfig, loadPricingConfigResult } from '../utils/pricingConfig';
 import {
   DRUCK_OPTIONS,
   calculateRSTPrice,
@@ -98,6 +98,8 @@ export default function NeuesTool() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [calculation, setCalculation] = useState(null);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
+  const mountedRef = useRef(true);
+  const refreshSeqRef = useRef(0);
 
   const settings = config.settings;
   const formatOptions = getFormatOptions(config);
@@ -140,31 +142,29 @@ export default function NeuesTool() {
     }
   }, [form.hasUmschlag, form.celloUmschlag]);
 
-  // Geteilten Preisstand laden: beim Öffnen und immer, wenn der Tab wieder
-  // aktiv wird — so aktualisiert sich auch ein lange offener Tab.
+  // Geteilten Preisstand laden: beim Öffnen und wenn der Tab wieder sichtbar
+  // wird. Nur EIN Listener (visibilitychange); veraltete Antworten werden über
+  // eine Sequenznummer verworfen, damit eine langsamere ältere Antwort nie einen
+  // neueren Stand überschreibt.
   useEffect(() => {
-    let alive = true;
+    mountedRef.current = true;
     const refresh = async () => {
+      const seq = ++refreshSeqRef.current;
       const result = await fetchSharedConfig();
-      if (!alive) return;
-      if (result.config) {
-        setConfig(result.config);
-        setConfigStale(false);
-      } else if (result.source === 'error') {
-        setConfigStale(true);
-      }
-      // 'none' (noch nichts veröffentlicht) / 'invalid' → aktuellen Stand behalten
+      if (!mountedRef.current || seq !== refreshSeqRef.current) return;
+      if (result.config) setConfig(result.config);
+      // Server erreichbar (shared/none/invalid) → keine Offline-Warnung;
+      // nur ein echter Netz-/Timeout-Fehler ('error') setzt configStale.
+      setConfigStale(result.source === 'error');
     };
     refresh();
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh();
     };
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', refresh);
     return () => {
-      alive = false;
+      mountedRef.current = false;
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', refresh);
     };
   }, []);
 
@@ -177,18 +177,28 @@ export default function NeuesTool() {
   // mit dem letzten bekannten Stand gerechnet und deutlich gewarnt.
   async function handleCalculate() {
     setIsCalculating(true);
-    let effectiveConfig = config;
-    const result = await fetchSharedConfig();
-    if (result.config) {
-      effectiveConfig = result.config;
-      setConfig(result.config);
-      setConfigStale(false);
-    } else if (result.source === 'error') {
-      setConfigStale(true);
+    try {
+      let effectiveConfig = config;
+      const result = await fetchSharedConfig();
+      if (!mountedRef.current) return;
+      if (result.config) {
+        effectiveConfig = result.config;
+        setConfig(result.config);
+      }
+      setConfigStale(result.source === 'error');
+      setCalculation({
+        ...calculateRSTPrice(form, effectiveConfig),
+        basedOnRev: configRev(effectiveConfig),
+        basedOnStand: effectiveConfig.meta.stand,
+      });
+    } finally {
+      if (mountedRef.current) setIsCalculating(false);
     }
-    setCalculation(calculateRSTPrice(form, effectiveConfig));
-    setIsCalculating(false);
   }
+
+  // Ein bereits angezeigtes Ergebnis gilt als veraltet, sobald der geteilte
+  // Stand sich seither geändert hat (z. B. jemand hat Preise veröffentlicht).
+  const resultStale = calculation != null && calculation.basedOnRev !== configRev(config);
 
   const results = calculation?.results ?? null;
   const cheapestPrice = calculation?.cheapestPrice ?? Infinity;
@@ -561,6 +571,16 @@ export default function NeuesTool() {
                   <p className="text-sm italic text-slate-500">
                     Bitte Produktdaten eingeben und auf „Preis berechnen“ klicken.
                   </p>
+                </div>
+              )}
+
+              {results && resultStale && (
+                <div className="mb-5 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    Der geteilte Preisstand hat sich seit dieser Berechnung geändert (berechnet mit
+                    Stand {calculation.basedOnStand}). Bitte erneut auf „Preis berechnen“ klicken.
+                  </span>
                 </div>
               )}
 

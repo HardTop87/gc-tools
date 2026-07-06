@@ -191,6 +191,29 @@ export function resetPricingConfig() {
 // ---------------------------------------------------------------------------
 const SHARED_API = '/api/config';
 const SHARED_TIMEOUT_MS = 6000;
+const PENDING_KEY = 'gc_rst_pendingPublish';
+
+// Revision eines Config-Objekts (fehlt beim Repo-Default → 0).
+export function configRev(config) {
+  return Number.isFinite(config?.meta?.rev) ? config.meta.rev : 0;
+}
+
+// Auth-Header: das App-Passwort ist ohnehin im Bundle; der Header verhindert
+// anonymen Zugriff auf den Endpunkt (curl/Scanner), nicht mehr und nicht weniger.
+function authHeaders(extra = {}) {
+  const pw = import.meta.env.VITE_APP_PASSWORD;
+  return pw ? { ...extra, 'x-gc-auth': pw } : { ...extra };
+}
+
+// AbortSignal.timeout gibt es nicht überall (ältere Safari/WebViews) — Fallback.
+function timeoutSignal(ms) {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(ms);
+  }
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
 
 // Liest den geteilten Stand. source:
 //  'shared'  → gültiger geteilter Stand geladen (Cache aktualisiert)
@@ -202,7 +225,8 @@ export async function fetchSharedConfig() {
   try {
     response = await fetch(SHARED_API, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(SHARED_TIMEOUT_MS),
+      headers: authHeaders(),
+      signal: timeoutSignal(SHARED_TIMEOUT_MS),
     });
   } catch (error) {
     return { config: null, source: 'error', errors: [String(error?.message || error)] };
@@ -225,9 +249,14 @@ export async function fetchSharedConfig() {
   return { config: parsed, source: 'shared', errors: [] };
 }
 
-// Veröffentlicht einen Stand für alle. Validiert vorher; aktualisiert bei
-// Erfolg auch den lokalen Cache.
-export async function saveSharedConfig(config) {
+// Veröffentlicht einen Stand für alle. baseRev = Revision, auf der die Änderung
+// aufsetzt; der Server lehnt mit 409 ab, wenn zwischenzeitlich jemand anders
+// veröffentlicht hat. Rückgabe:
+//  { ok:true, rev }                    → veröffentlicht, neue Revision
+//  { ok:false, conflict:true, currentRev } → Konflikt (neu laden nötig)
+//  { ok:false, offline:true, errors }  → nicht erreichbar
+//  { ok:false, errors }                → ungültig/abgelehnt
+export async function saveSharedConfig(config, baseRev = configRev(config)) {
   const validation = validatePricingConfig(config);
   if (!validation.ok) return { ok: false, errors: validation.errors };
 
@@ -235,11 +264,21 @@ export async function saveSharedConfig(config) {
   try {
     response = await fetch(SHARED_API, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ config, baseRev }),
     });
   } catch (error) {
-    return { ok: false, errors: [String(error?.message || error)] };
+    return { ok: false, offline: true, errors: [String(error?.message || error)] };
+  }
+
+  if (response.status === 409) {
+    let currentRev = null;
+    try {
+      currentRev = (await response.json())?.currentRev ?? null;
+    } catch {
+      // ohne Body weiter
+    }
+    return { ok: false, conflict: true, currentRev, errors: ['Zwischenzeitlich geändert.'] };
   }
 
   if (!response.ok) {
@@ -250,11 +289,50 @@ export async function saveSharedConfig(config) {
     } catch {
       // Antwort ohne JSON-Body — Standard-Detail behalten
     }
-    return { ok: false, errors: [detail] };
+    // 5xx = Server/Netz → als offline behandeln (Retry möglich); 4xx = Ablehnung
+    const offline = response.status >= 500;
+    return { ok: false, offline, errors: [detail] };
   }
 
-  savePricingConfig(config); // Offline-Cache aktualisieren
-  return { ok: true, errors: [] };
+  let rev = configRev(config) + 1;
+  try {
+    const body = await response.json();
+    if (Number.isFinite(body?.rev)) rev = body.rev;
+  } catch {
+    // ohne Body: geschätzte Revision behalten
+  }
+  const stored = { ...config, meta: { ...config.meta, rev } };
+  savePricingConfig(stored); // Offline-Cache aktualisieren
+  return { ok: true, rev };
+}
+
+// Nicht veröffentlichte Änderung merken, damit sie bei einem Netzausfall nicht
+// beim nächsten Laden still vom Blob-Stand überschrieben wird.
+export function setPendingPublish(config) {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(config));
+  } catch {
+    // ignorieren
+  }
+}
+
+export function getPendingPublish() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return validatePricingConfig(parsed).ok ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingPublish() {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // ignorieren
+  }
 }
 
 export const PAPER_CSV_HEADER = ['id', 'name', 'familie', 'gsm', 'dicke_um', 'preis_pro_1000'];

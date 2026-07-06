@@ -17,13 +17,16 @@ import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
   buildPaperPriceRows,
+  clearPendingPublish,
+  configRev,
   fetchSharedConfig,
   getDefaultPricingConfig,
+  getPendingPublish,
   loadPricingConfigResult,
   normalizePaperPriceRows,
   parsePaperPriceCsv,
-  savePricingConfig,
   saveSharedConfig,
+  setPendingPublish,
   validatePricingConfig,
 } from '../utils/pricingConfig';
 
@@ -160,19 +163,30 @@ export default function Verwaltung() {
   const paperFileRef = useRef(null);
   const configFileRef = useRef(null);
 
+  // Publish-Pipeline: debounced + serialisiert (nie zwei POSTs gleichzeitig),
+  // mit Revision als Basis für die Konfliktprüfung des Servers.
+  const loadedRevRef = useRef(0);
+  const publishTimerRef = useRef(null);
+  const inFlightRef = useRef(false);
+  const pendingConfigRef = useRef(null);
+  const savedResetRef = useRef(null);
+
   const defaultVersion = useMemo(() => getDefaultPricingConfig().meta.version, []);
   const hasNewerDefault = config.meta.version !== defaultVersion;
 
-  // Geteilten Preisstand beim Öffnen laden.
+  // Geteilten Preisstand beim Öffnen laden; danach eine ggf. noch nicht
+  // veröffentlichte Änderung aus einer früheren Sitzung erneut anstoßen.
   useEffect(() => {
     let alive = true;
     (async () => {
       const result = await fetchSharedConfig();
       if (!alive) return;
       if (result.config) {
+        loadedRevRef.current = configRev(result.config);
         setConfig(result.config);
         setSharedStatus({ state: 'shared' });
       } else if (result.source === 'none') {
+        loadedRevRef.current = 0;
         setSharedStatus({ state: 'none' });
       } else if (result.source === 'invalid') {
         setSharedStatus({ state: 'invalid' });
@@ -183,10 +197,20 @@ export default function Verwaltung() {
       } else {
         setSharedStatus({ state: 'offline' });
       }
+
+      const pending = getPendingPublish();
+      if (alive && pending) {
+        setConfig(pending);
+        showMessage('ok', 'Eine noch nicht veröffentlichte Änderung wird erneut veröffentlicht.');
+        schedulePublish(pending, 0);
+      }
     })();
     return () => {
       alive = false;
+      if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
+      if (savedResetRef.current) clearTimeout(savedResetRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Tabellen-Labels aus den Routen ableiten, die sie referenzieren —
@@ -206,20 +230,83 @@ export default function Verwaltung() {
     return labels;
   }, [config.routen]);
 
-  // Veröffentlicht einen Stand im geteilten Speicher (für alle sichtbar).
-  async function publish(nextConfig) {
+  function showMessage(type, text) {
+    setMessage({ type, text });
+  }
+
+  // Plant eine Veröffentlichung (debounced). Die zu veröffentlichende Config
+  // wird zusätzlich als "pending" persistiert, damit sie bei Navigieren/Offline
+  // nicht verloren geht.
+  function schedulePublish(nextConfig, delay = 900) {
+    pendingConfigRef.current = nextConfig;
+    setPendingPublish(nextConfig);
     setPublishState({ status: 'saving' });
-    const result = await saveSharedConfig(nextConfig);
+    if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
+    publishTimerRef.current = setTimeout(runPublish, delay);
+  }
+
+  async function runPublish() {
+    if (inFlightRef.current) return; // nach Abschluss wird erneut geprüft
+    const toPublish = pendingConfigRef.current;
+    if (!toPublish) return;
+    pendingConfigRef.current = null;
+    inFlightRef.current = true;
+
+    const result = await saveSharedConfig(toPublish, loadedRevRef.current);
+    inFlightRef.current = false;
+
     if (result.ok) {
-      setPublishState({ status: 'saved' });
+      loadedRevRef.current = result.rev;
+      clearPendingPublish();
       setSharedStatus({ state: 'shared' });
-    } else {
-      setPublishState({ status: 'error' });
+      setPublishState({ status: 'saved' });
+      if (savedResetRef.current) clearTimeout(savedResetRef.current);
+      savedResetRef.current = setTimeout(
+        () => setPublishState((prev) => (prev.status === 'saved' ? { status: 'idle' } : prev)),
+        4000,
+      );
+    } else if (result.conflict) {
+      // Jemand anderes hat zwischenzeitlich veröffentlicht → aktuellen Stand
+      // laden, damit man darauf weiterarbeitet; die eigene Änderung wurde NICHT
+      // übernommen und muss erneut vorgenommen werden.
+      clearPendingPublish();
+      setPublishState({ status: 'idle' });
+      const fresh = await fetchSharedConfig();
+      if (fresh.config) {
+        loadedRevRef.current = configRev(fresh.config);
+        setConfig(fresh.config);
+      }
       showMessage(
         'error',
-        `Für alle veröffentlichen fehlgeschlagen — die Änderung ist nur lokal gespeichert:\n${result.errors.join('\n')}`,
+        'Zwischenzeitlich hat jemand anderes gespeichert — deine letzte Änderung wurde NICHT ' +
+          'übernommen. Der aktuelle Stand wurde geladen; bitte die Änderung erneut vornehmen.',
       );
+    } else if (result.offline) {
+      setPublishState({ status: 'offline' });
+      showMessage(
+        'error',
+        'Der geteilte Speicher ist gerade nicht erreichbar. Die Änderung ist lokal gemerkt und ' +
+          'wird beim nächsten Öffnen erneut veröffentlicht.',
+      );
+    } else {
+      setPublishState({ status: 'error' });
+      clearPendingPublish();
+      showMessage('error', `Veröffentlichen abgelehnt:\n${result.errors.join('\n')}`);
     }
+
+    // Kamen während des Publish weitere Änderungen? Dann erneut anstoßen.
+    if (pendingConfigRef.current) {
+      if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
+      publishTimerRef.current = setTimeout(runPublish, 300);
+    }
+  }
+
+  // Übernimmt eine Änderung: sofort im UI (State), persistiert als "pending",
+  // und stößt die Veröffentlichung an. Der lokale Cache (= letzter geteilter
+  // Stand) wird bewusst NICHT hier geschrieben, sondern erst bei Publish-Erfolg.
+  function applyChange(nextConfig) {
+    setConfig(nextConfig);
+    schedulePublish(nextConfig);
   }
 
   function updateConfig(mutator) {
@@ -231,13 +318,7 @@ export default function Verwaltung() {
       showMessage('error', `Änderung verworfen — die Config wäre ungültig:\n${validation.errors.join('\n')}`);
       return;
     }
-    savePricingConfig(next); // lokaler Cache
-    setConfig(next);
-    publish(next); // für alle veröffentlichen
-  }
-
-  function showMessage(type, text) {
-    setMessage({ type, text });
+    applyChange(next);
   }
 
   function handleReset() {
@@ -246,11 +327,9 @@ export default function Verwaltung() {
     }
     const fresh = getDefaultPricingConfig();
     fresh.meta.stand = todayIso();
-    savePricingConfig(fresh);
-    setConfig(fresh);
     setPendingImport(null);
-    showMessage('ok', 'Auf Standard zurückgesetzt.');
-    publish(fresh);
+    showMessage('ok', 'Auf Standard zurückgesetzt — wird veröffentlicht.');
+    applyChange(fresh);
   }
 
   function handleExportJson() {
@@ -339,10 +418,9 @@ export default function Verwaltung() {
 
   function applyPendingImport() {
     if (!pendingImport) return;
-    savePricingConfig(pendingImport.nextConfig);
-    setConfig(pendingImport.nextConfig);
-    showMessage('ok', `Import "${pendingImport.sourceName}" übernommen.`);
-    publish(pendingImport.nextConfig);
+    const next = { ...pendingImport.nextConfig, meta: { ...pendingImport.nextConfig.meta, stand: todayIso() } };
+    showMessage('ok', `Import "${pendingImport.sourceName}" übernommen — wird veröffentlicht.`);
+    applyChange(next);
     setPendingImport(null);
   }
 
@@ -383,6 +461,8 @@ export default function Verwaltung() {
                   {sharedStatus.state === 'offline' && ' · geteilter Speicher offline'}
                   {publishState.status === 'saving' && ' · speichere …'}
                   {publishState.status === 'saved' && ' · ✓ für alle gespeichert'}
+                  {publishState.status === 'offline' && ' · ⚠ nicht veröffentlicht (offline)'}
+                  {publishState.status === 'error' && ' · ⚠ nicht veröffentlicht'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">

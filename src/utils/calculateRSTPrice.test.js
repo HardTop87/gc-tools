@@ -6,6 +6,7 @@ import {
 import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
+  configRev,
   getDefaultPricingConfig,
   parseFlexibleNumber,
   parsePaperPriceCsv,
@@ -283,6 +284,13 @@ describe('pricingConfig: Validierung & Papierpreis-Import', () => {
     expect(errors.join('\n')).toContain('preisPro1000');
     expect(errors.join('\n')).toContain('nicht lückenlos');
     expect(errors.join('\n')).toContain('GIBT_ES_NICHT');
+  });
+
+  it('configRev liefert 0 ohne meta.rev, sonst den Wert (Basis der Konfliktprüfung)', () => {
+    expect(configRev(getDefaultPricingConfig())).toBe(0);
+    expect(configRev({ meta: { rev: 7 } })).toBe(7);
+    expect(configRev(null)).toBe(0);
+    expect(configRev({ meta: {} })).toBe(0);
   });
 
   it('parseFlexibleNumber liest deutsche UND englische Schreibweisen korrekt', () => {

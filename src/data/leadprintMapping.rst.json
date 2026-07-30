@@ -1,0 +1,824 @@
+{
+  "meta": {
+    "product": "rst",
+    "stand": "2026-07-07",
+    "shopId": 666,
+    "quelle": "Leadprint-Mapping-ausgefüllt.xlsx",
+    "hinweis": "IDs gelten für die RST-Optionsfelder dieses Shops. Andere Produkte nutzen eigene Felder/IDs → eigenes Mapping je Produkt.",
+    "staffelnUeber500": "mit in den Shop",
+    "grenzstaffeln": [
+      99,
+      501
+    ],
+    "preisRouten": "alle (GC, Kopp, ILDA) — Empfehlungslogik der Engine; ILDA gewinnt nur in der Partner-Zone (Seiten über GC-Limit, ab 100 Ex.)"
+  },
+  "artikel": [
+    {
+      "key": "A4_Hoch|1c|ohne",
+      "format": "A4_Hoch",
+      "farbigkeit": "1c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A4 Hoch 1/1",
+      "artikelnummer": "BRO-RST-A4H-11",
+      "leadprintId": 1112051233
+    },
+    {
+      "key": "A4_Hoch|4c|ohne",
+      "format": "A4_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A4 Hoch 4/4",
+      "artikelnummer": "BRO-RST-A4H-44",
+      "leadprintId": 1112051356
+    },
+    {
+      "key": "A5_Hoch|1c|ohne",
+      "format": "A5_Hoch",
+      "farbigkeit": "1c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A5 Hoch 1/1",
+      "artikelnummer": "BRO-RST-A5H-11",
+      "leadprintId": 1112051377
+    },
+    {
+      "key": "A5_Hoch|4c|ohne",
+      "format": "A5_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A5 Hoch 4/4",
+      "artikelnummer": "BRO-RST-A5H-44",
+      "leadprintId": 1112051509
+    },
+    {
+      "key": "A5_Quer|1c|ohne",
+      "format": "A5_Quer",
+      "farbigkeit": "1c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A5 Quer 1/1",
+      "artikelnummer": "BRO-RST-A5Q-11",
+      "leadprintId": null
+    },
+    {
+      "key": "A5_Quer|4c|ohne",
+      "format": "A5_Quer",
+      "farbigkeit": "4c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A5 Quer 4/4",
+      "artikelnummer": "BRO-RST-A5Q-44",
+      "leadprintId": null
+    },
+    {
+      "key": "A6_Hoch|1c|ohne",
+      "format": "A6_Hoch",
+      "farbigkeit": "1c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A6 Hoch 1/1",
+      "artikelnummer": "BRO-RST-A6H-11",
+      "leadprintId": null
+    },
+    {
+      "key": "A6_Hoch|4c|ohne",
+      "format": "A6_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "ohne",
+      "bezeichnung": "Rückstichheftung A6 Hoch 4/4",
+      "artikelnummer": "BRO-RST-A6H-44",
+      "leadprintId": null
+    },
+    {
+      "key": "A4_Hoch|1c|mit",
+      "format": "A4_Hoch",
+      "farbigkeit": "1c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A4 Hoch 1/1 mit Umschlag",
+      "artikelnummer": "BRO-RST-A4H-11-U",
+      "leadprintId": null
+    },
+    {
+      "key": "A4_Hoch|4c|mit",
+      "format": "A4_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A4 Hoch 4/4 mit Umschlag",
+      "artikelnummer": "BRO-RST-A4H-44-U",
+      "leadprintId": null
+    },
+    {
+      "key": "A5_Hoch|1c|mit",
+      "format": "A5_Hoch",
+      "farbigkeit": "1c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A5 Hoch 1/1 mit Umschlag",
+      "artikelnummer": "BRO-RST-A5H-11-U",
+      "leadprintId": null
+    },
+    {
+      "key": "A5_Hoch|4c|mit",
+      "format": "A5_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A5 Hoch 4/4 mit Umschlag",
+      "artikelnummer": "BRO-RST-A5H-44-U",
+      "leadprintId": null
+    },
+    {
+      "key": "A5_Quer|1c|mit",
+      "format": "A5_Quer",
+      "farbigkeit": "1c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A5 Quer 1/1 mit Umschlag",
+      "artikelnummer": "BRO-RST-A5Q-11-U",
+      "leadprintId": null
+    },
+    {
+      "key": "A5_Quer|4c|mit",
+      "format": "A5_Quer",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A5 Quer 4/4 mit Umschlag",
+      "artikelnummer": "BRO-RST-A5Q-44-U",
+      "leadprintId": null
+    },
+    {
+      "key": "A6_Hoch|1c|mit",
+      "format": "A6_Hoch",
+      "farbigkeit": "1c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A6 Hoch 1/1 mit Umschlag",
+      "artikelnummer": "BRO-RST-A6H-11-U",
+      "leadprintId": null
+    },
+    {
+      "key": "A6_Hoch|4c|mit",
+      "format": "A6_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "bezeichnung": "Rückstichheftung A6 Hoch 4/4 mit Umschlag",
+      "artikelnummer": "BRO-RST-A6H-44-U",
+      "leadprintId": null
+    }
+  ],
+  "auflagen": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    10,
+    20,
+    50,
+    99,
+    100,
+    200,
+    300,
+    400,
+    500,
+    501,
+    600,
+    700,
+    800,
+    900,
+    1000
+  ],
+  "sorten": {
+    "CC_100": {
+      "sortenId": 1942,
+      "shopId": "CC_100",
+      "shopName": "100g ColorCopy"
+    },
+    "CC_120": {
+      "sortenId": 1943,
+      "shopId": "CC_120",
+      "shopName": "120g ColorCopy"
+    },
+    "CC_160": {
+      "sortenId": 1944,
+      "shopId": "CC_160",
+      "shopName": "160g ColorCopy"
+    },
+    "N_80": {
+      "sortenId": 1933,
+      "shopId": "N_80",
+      "shopName": "80g Natur"
+    },
+    "N_90": {
+      "sortenId": 1934,
+      "shopId": "N_90",
+      "shopName": "90g Natur"
+    },
+    "N_100": {
+      "sortenId": 1935,
+      "shopId": "N_100",
+      "shopName": "100g Natur"
+    },
+    "N_120": {
+      "sortenId": 1936,
+      "shopId": "N_120",
+      "shopName": "120g Natur"
+    },
+    "BD_115": {
+      "sortenId": 1961,
+      "shopId": "BDM_115",
+      "shopName": "115g Bilderdruck matt"
+    },
+    "BD_135": {
+      "sortenId": 1962,
+      "shopId": "BDM_135",
+      "shopName": "135g Bilderdruck matt"
+    },
+    "BD_150": {
+      "sortenId": 1963,
+      "shopId": "BDM_150",
+      "shopName": "150g Bilderdruck matt"
+    },
+    "BD_170": {
+      "sortenId": 1964,
+      "shopId": "BDM_170",
+      "shopName": "170g Bilderdruck matt"
+    },
+    "R_80": {
+      "sortenId": 3128,
+      "shopId": "R_80",
+      "shopName": "80g Recycling"
+    },
+    "R_100": {
+      "sortenId": 6313,
+      "shopId": "R_100",
+      "shopName": "100g Recycling"
+    },
+    "R_90": {
+      "sortenId": 6389,
+      "shopId": "R_90",
+      "shopName": "90g Recycling"
+    }
+  },
+  "umschlagListenwerte": {
+    "CC_160": {
+      "listenwertId": 16082,
+      "shopId": "CC_160",
+      "shopName": "160g ColorCopy"
+    },
+    "CC_200": {
+      "listenwertId": 16083,
+      "shopId": "CC_200",
+      "shopName": "200g ColorCopy"
+    },
+    "CC_250": {
+      "listenwertId": 16084,
+      "shopId": "CC_250",
+      "shopName": "250g ColorCopy"
+    },
+    "CC_300": {
+      "listenwertId": 16376,
+      "shopId": "CC_300",
+      "shopName": "300g ColorCopy"
+    },
+    "CC_350": {
+      "listenwertId": 55101,
+      "shopId": "CC_350",
+      "shopName": "350g ColorCopy"
+    },
+    "N_160": {
+      "listenwertId": 16359,
+      "shopId": "N_160",
+      "shopName": "160g Natur"
+    },
+    "N_200": {
+      "listenwertId": 16079,
+      "shopId": "N_200",
+      "shopName": "200g Natur"
+    },
+    "N_250": {
+      "listenwertId": 16080,
+      "shopId": "N_250",
+      "shopName": "250g Natur"
+    },
+    "N_300": {
+      "listenwertId": 16081,
+      "shopId": "N_300",
+      "shopName": "300g Natur"
+    },
+    "BD_170": {
+      "listenwertId": 16377,
+      "shopId": "BDM_170",
+      "shopName": "170g Bilderdruck matt"
+    },
+    "BD_200": {
+      "listenwertId": 16378,
+      "shopId": "BDM_200",
+      "shopName": "200g Bilderdruck matt"
+    },
+    "BD_250": {
+      "listenwertId": 16379,
+      "shopId": "BDM_250",
+      "shopName": "250g Bilderdruck matt"
+    },
+    "BD_300": {
+      "listenwertId": 16380,
+      "shopId": "BDM_300",
+      "shopName": "300g Bilderdruck matt"
+    },
+    "BD_350": {
+      "listenwertId": 55102,
+      "shopId": "BDM_350",
+      "shopName": "350g Bilderdruck matt"
+    },
+    "R_300": {
+      "listenwertId": 55104,
+      "shopId": "R_300",
+      "shopName": "300g Recycling"
+    }
+  },
+  "optionsfelder": {
+    "Endformat": {
+      "gruppenId": 12913,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "rai (Sprung zwischen Format-Artikeln)",
+      "werte": {
+        "A4_Hoch": 52310,
+        "A5_Hoch": 52311,
+        "A5_Quer": 52312,
+        "A6_Hoch": 55105
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "DIN A4 Hochformat (210 x 297 mm)",
+          "id": 52310,
+          "schluessel": "A4_Hoch",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "DIN A5 Hochformat (148 x 210 mm)",
+          "id": 52311,
+          "schluessel": "A5_Hoch",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "DIN A5 Querformat (210 x 148 mm)",
+          "id": 52312,
+          "schluessel": "A5_Quer",
+          "hinweis": "Listenwert ggf. anlegen"
+        },
+        {
+          "bezeichnung": "DIN A6 Hochformat (105 x 148 mm)",
+          "id": 55105,
+          "schluessel": "A6_Hoch",
+          "hinweis": "Listenwert ggf. anlegen"
+        }
+      ]
+    },
+    "Bindung": {
+      "gruppenId": 5561,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "static (eine Option, 0 €, informativ)",
+      "werte": {
+        "rst": 16105
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "Drahtheftung 2-fach",
+          "id": 16105,
+          "schluessel": "rst",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Drahtheftung 4-fach",
+          "id": null,
+          "schluessel": "",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Klebebindung",
+          "id": null,
+          "schluessel": "",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Softcover (Hotmelt-Klebebindung)",
+          "id": null,
+          "schluessel": "",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Hardcover (Hotmelt-Klebebindung)",
+          "id": null,
+          "schluessel": "",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Wire-O (Drahtspiralbindung)",
+          "id": null,
+          "schluessel": "",
+          "hinweis": ""
+        }
+      ]
+    },
+    "Seitenanzahl Innenteil": {
+      "gruppenId": 5628,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "computed (Aufschlag je Preiszeile aus der Engine)",
+      "werte": {
+        "8": 16360,
+        "12": 16361,
+        "16": 16362,
+        "20": 16363,
+        "24": 16364,
+        "28": 16365,
+        "32": 16366,
+        "36": 16367,
+        "40": 16368,
+        "44": 16385,
+        "48": 16386,
+        "52": 16387,
+        "56": 16388,
+        "60": 16389,
+        "64": 16390,
+        "68": 16391,
+        "72": 16392,
+        "76": 16393,
+        "80": 16394,
+        "84": 16395,
+        "88": 16396,
+        "92": 16397,
+        "96": 16398,
+        "100": 16399,
+        "104": 16400,
+        "108": 16401,
+        "112": 16402,
+        "116": 16403,
+        "120": 16404
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "8 Seiten",
+          "id": 16360,
+          "schluessel": "8",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "12 Seiten",
+          "id": 16361,
+          "schluessel": "12",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "16 Seiten",
+          "id": 16362,
+          "schluessel": "16",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "20 Seiten",
+          "id": 16363,
+          "schluessel": "20",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "24 Seiten",
+          "id": 16364,
+          "schluessel": "24",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "28 Seiten",
+          "id": 16365,
+          "schluessel": "28",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "32 Seiten",
+          "id": 16366,
+          "schluessel": "32",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "36 Seiten",
+          "id": 16367,
+          "schluessel": "36",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "40 Seiten",
+          "id": 16368,
+          "schluessel": "40",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "44 Seiten",
+          "id": 16385,
+          "schluessel": "44",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "48 Seiten",
+          "id": 16386,
+          "schluessel": "48",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "52 Seiten",
+          "id": 16387,
+          "schluessel": "52",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "56 Seiten",
+          "id": 16388,
+          "schluessel": "56",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "60 Seiten",
+          "id": 16389,
+          "schluessel": "60",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "64 Seiten",
+          "id": 16390,
+          "schluessel": "64",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "68 Seiten",
+          "id": 16391,
+          "schluessel": "68",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "72 Seiten",
+          "id": 16392,
+          "schluessel": "72",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "76 Seiten",
+          "id": 16393,
+          "schluessel": "76",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "80 Seiten",
+          "id": 16394,
+          "schluessel": "80",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "84 Seiten",
+          "id": 16395,
+          "schluessel": "84",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "88 Seiten",
+          "id": 16396,
+          "schluessel": "88",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "92 Seiten",
+          "id": 16397,
+          "schluessel": "92",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "96 Seiten",
+          "id": 16398,
+          "schluessel": "96",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "100 Seiten",
+          "id": 16399,
+          "schluessel": "100",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "104 Seiten",
+          "id": 16400,
+          "schluessel": "104",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "108 Seiten",
+          "id": 16401,
+          "schluessel": "108",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "112 Seiten",
+          "id": 16402,
+          "schluessel": "112",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "116 Seiten",
+          "id": 16403,
+          "schluessel": "116",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "120 Seiten",
+          "id": 16404,
+          "schluessel": "120",
+          "hinweis": ""
+        }
+      ]
+    },
+    "Farbigkeit Innenteil": {
+      "gruppenId": 5559,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "rai (Sprung 1/1 ↔ 4/4-Artikel)",
+      "werte": {
+        "1c": 16098,
+        "4c": 16099
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "1/1 beidseitig schwarz",
+          "id": 16098,
+          "schluessel": "1c",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "4/4 beidseitig farbig",
+          "id": 16099,
+          "schluessel": "4c",
+          "hinweis": ""
+        }
+      ]
+    },
+    "Papier Innenteil": {
+      "gruppenId": null,
+      "optionstyp": "—",
+      "strategie": "KEIN Optionsfeld — läuft über Sorten (Zeilenachse), siehe Blatt \"Papiere\"",
+      "werte": {},
+      "listenwerte": []
+    },
+    "Seitenanzahl Umschlag (RST)": {
+      "gruppenId": 5563,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "rai-Umschalter ohne-U ↔ mit-U (Optionen unbepreist)",
+      "werte": {
+        "ohne": 52314,
+        "mit": 16136
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "ohne Umschlag",
+          "id": 52314,
+          "schluessel": "ohne",
+          "hinweis": "Standard im ohne-U-Artikel"
+        },
+        {
+          "bezeichnung": "4 Seiten",
+          "id": 16136,
+          "schluessel": "mit",
+          "hinweis": "rai → mit-U-Zwilling; Standard im mit-U-Artikel"
+        }
+      ]
+    },
+    "Farbigkeit Umschlag (RST)": {
+      "gruppenId": 5556,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "computed (nur mit-U-Artikel; Aufschlag 4/4 je Zeile aus Engine)",
+      "werte": {
+        "1c": 16085,
+        "4c": 16086
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "1/1 beidseitig schwarz",
+          "id": 16085,
+          "schluessel": "1c",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "4/4 beidseitig farbig",
+          "id": 16086,
+          "schluessel": "4c",
+          "hinweis": ""
+        }
+      ]
+    },
+    "Papier Umschlag (RST)": {
+      "gruppenId": 5555,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "computed (nur mit-U-Artikel; Familienregel über leere Zellen)",
+      "werte": {},
+      "listenwerte": []
+    },
+    "Veredelung Umschlag (RST)": {
+      "gruppenId": 5562,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "computed (nur mit-U-Artikel, nur CC/BD-Zeilen)",
+      "werte": {
+        "ohne": 16107,
+        "glaenzend": 16109,
+        "matt": 16108,
+        "softtouch": 16110
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "ohne",
+          "id": 16107,
+          "schluessel": "ohne",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Cellophanierung glänzend, 1/0 einseitig (außen)",
+          "id": 16109,
+          "schluessel": "glaenzend",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Cellophanierung matt-kratzfest, 1/0 einseitig (außen)",
+          "id": 16108,
+          "schluessel": "matt",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "Cellophanierung softtouch, 1/0 einseitig (außen)",
+          "id": 16110,
+          "schluessel": "softtouch",
+          "hinweis": ""
+        }
+      ]
+    },
+    "Produktionsgeschwindigkeit": {
+      "gruppenId": 13453,
+      "optionstyp": "auflagenunabhängig",
+      "strategie": "static (Prozent auf errechneten Druckpreis)",
+      "werte": {
+        "standard": [
+          55097,
+          55098
+        ],
+        "express": [
+          55099,
+          55100
+        ]
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "Standard",
+          "id": 55097,
+          "schluessel": "standard",
+          "hinweis": "0 %, für GC und Kopp"
+        },
+        {
+          "bezeichnung": "Standard",
+          "id": 55098,
+          "schluessel": "standard",
+          "hinweis": "0 %, für ILDA"
+        },
+        {
+          "bezeichnung": "Express",
+          "id": 55099,
+          "schluessel": "express",
+          "hinweis": "+ 10 %, für GC und Kopp"
+        },
+        {
+          "bezeichnung": "Express",
+          "id": 55100,
+          "schluessel": "express",
+          "hinweis": "+ 10 %, für ILDA"
+        }
+      ]
+    },
+    "SquareFold": {
+      "gruppenId": 5629,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "off (nicht im Rechner) — unbepreist lassen",
+      "werte": {},
+      "listenwerte": [
+        {
+          "bezeichnung": "ohne",
+          "id": null,
+          "schluessel": "",
+          "hinweis": ""
+        },
+        {
+          "bezeichnung": "mit SquareFold",
+          "id": null,
+          "schluessel": "",
+          "hinweis": ""
+        }
+      ]
+    }
+  },
+  "offen": [
+    "Artikel A5_Quer|1c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A5_Quer|4c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A6_Hoch|1c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A6_Hoch|4c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A4_Hoch|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A4_Hoch|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A5_Hoch|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A5_Hoch|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A5_Quer|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A5_Quer|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A6_Hoch|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
+    "Artikel A6_Hoch|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)"
+  ]
+}

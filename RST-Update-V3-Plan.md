@@ -131,6 +131,14 @@ beide → alle). Abgleich mit unseren Zulässigkeitslisten:
 
 ## 6. Umsetzungsplan
 
+> **Status 30.07.2026:** Schritte 1–3 und 5 umgesetzt (Commit 68d7ab9 + Folge-Commit),
+> Schritt 4 (Deploy + Veröffentlichen) erledigt und verifiziert: deploytes Bundle und
+> geteilter Stand führen beide Version 2.2.0 (Blob rev 4).
+> Beim Zurücksetzen gilt die Reihenfolge **push → Vercel-Deploy abwarten → Browser
+> neu laden → „Auf Standard zurücksetzen"**; wird vor dem Deploy zurückgesetzt, lädt
+> die App die *alte* Default-Config aus dem noch nicht aktualisierten Bundle.
+
+
 **Schritt 1 — Config auf 2.2.0 heben** (`src/data/pricingConfig.default.json`)
 1. 30 Papierpreise aus Spalte F übernehmen; `isPlaceholder` bei **R_90** entfernen.
 2. `N_100_BAN` löschen; `N_80_BAN` (60 €, 107 µm) und `N_120_BAN` (90 €, 173 µm) anlegen;

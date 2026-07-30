@@ -1,18 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  AlertCircle,
-  AlertTriangle,
-  ArrowLeft,
-  Calculator,
-  ChevronDown,
-  FileText,
-  Settings2,
-  Sparkles,
-} from 'lucide-react';
-import { ThemeToggle } from '../components/ThemeToggle';
+import { AlertTriangle } from 'lucide-react';
 
-import { configRev, fetchSharedConfig, loadPricingConfigResult } from '../utils/pricingConfig';
+import { fetchSharedConfig, loadPricingConfigResult } from '../utils/pricingConfig';
 import {
   DRUCK_OPTIONS,
   calculateRSTPrice,
@@ -26,85 +16,52 @@ import {
 
 const druckOptions = DRUCK_OPTIONS;
 
-function fmt(n, digits = 2) {
-  return n.toFixed(digits).replace('.', ',');
-}
-
-function fmtG(g) {
-  if (g >= 1000) {
-    return (
-      (g / 1000).toLocaleString('de-DE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }) + ' kg'
-    );
-  }
-
+function eur(n, digits = 2) {
   return (
-    g.toLocaleString('de-DE', {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }) + ' g'
+    Number(n).toLocaleString('de-DE', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }) + ' €'
   );
 }
 
-function fmtKg(kg) {
+function num(n, digits = 0) {
+  return Number(n).toLocaleString('de-DE', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+const FIELD_LABEL = 'text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint';
+const FIELD_CONTROL =
+  'tok-field h-[38px] rounded-[10px] border border-line2 bg-input px-2.5 text-sm text-ink';
+
+function Field({ label, className = '', children }) {
   return (
-    kg.toLocaleString('de-DE', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }) + ' kg'
+    <label className={`flex flex-col gap-[5px] ${className}`}>
+      <span className={FIELD_LABEL}>{label}</span>
+      {children}
+    </label>
   );
 }
 
-function fmtNum(n, digits = 4) {
-  return Number(n).toLocaleString('de-DE', { maximumFractionDigits: digits });
+function Divider() {
+  return <div className="hidden w-px self-stretch bg-line xl:block" />;
 }
 
-function inputBaseClassName() {
-  return 'h-10 w-full rounded-xl border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm text-slate-900 dark:text-gray-100 shadow-sm outline-none transition placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:border-[#8e014d] focus:ring-2 focus:ring-[#8e014d]/10';
-}
-
-function RefGroup({ title, children }) {
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-        {title}
-      </p>
-      <dl className="space-y-1.5">{children}</dl>
-    </div>
-  );
-}
-
-function RefRow({ label, value }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-100 pb-1.5 dark:border-gray-800">
-      <dt className="text-sm text-slate-600 dark:text-gray-400">{label}</dt>
-      <dd className="text-sm font-semibold tabular-nums text-slate-900 dark:text-gray-100">{value}</dd>
-    </div>
-  );
-}
-
-function panelClassName() {
-  return 'rounded-3xl border border-slate-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur';
-}
-
-export default function NeuesTool() {
+export default function RechnerRST() {
   // Startwert aus dem Offline-Cache bzw. Repo-Default, danach lädt ein Effect
   // den geteilten Stand nach. So rendert die Seite sofort und ohne Flackern.
   const [config, setConfig] = useState(() => loadPricingConfigResult().config);
   const [configStale, setConfigStale] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [calculation, setCalculation] = useState(null);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
   const mountedRef = useRef(true);
   const refreshSeqRef = useRef(0);
 
   const settings = config.settings;
   const formatOptions = getFormatOptions(config);
-  const routes = config.routen;
-  const celloLabels = getCelloLabels(config);
+  const celloLabels = useMemo(() => getCelloLabels(config), [config]);
   const contentPaperOptions = getContentPaperOptions(config, form.formatKey);
   const coverPaperOptions = getCoverPaperOptions(config, form.formatKey, form.pInhaltId);
   const celloOptions = getCelloOptions(config, form.pUmschlagId);
@@ -172,272 +129,327 @@ export default function NeuesTool() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  // Vor JEDER Berechnung den aktuellen geteilten Stand holen, damit ein
-  // Angebot nie mit veralteten Preisen erzeugt wird. Bei Offline-Fehler wird
-  // mit dem letzten bekannten Stand gerechnet und deutlich gewarnt.
+  // Gerechnet wird live bei jeder Eingabe aus dem aktuell geladenen Stand.
+  const calculation = useMemo(() => calculateRSTPrice(form, config), [form, config]);
+
+  // Fallback-Button: holt den geteilten Stand nach; die Neuberechnung ergibt
+  // sich automatisch aus dem neuen config-State.
   async function handleCalculate() {
     setIsCalculating(true);
     try {
-      let effectiveConfig = config;
       const result = await fetchSharedConfig();
       if (!mountedRef.current) return;
-      if (result.config) {
-        effectiveConfig = result.config;
-        setConfig(result.config);
-      }
+      if (result.config) setConfig(result.config);
       setConfigStale(result.source === 'error');
-      setCalculation({
-        ...calculateRSTPrice(form, effectiveConfig),
-        basedOnRev: configRev(effectiveConfig),
-        basedOnStand: effectiveConfig.meta.stand,
-      });
     } finally {
       if (mountedRef.current) setIsCalculating(false);
     }
   }
 
-  // Ein bereits angezeigtes Ergebnis gilt als veraltet, sobald der geteilte
-  // Stand sich seither geändert hat (z. B. jemand hat Preise veröffentlicht).
-  const resultStale = calculation != null && calculation.basedOnRev !== configRev(config);
+  const results = calculation.results;
+  const cheapestPrice = calculation.cheapestPrice;
+  const recommendedName = calculation.recommendedName;
+  const recommended = results.find((r) => !r.error && r.name === recommendedName) ?? null;
+  const firstResult = results[0];
+  const bogenteileGesamt =
+    (parseInt(form.seiten, 10) || 8) / 4 + (form.hasUmschlag ? 1 : 0);
+  const auflageNum = parseInt(form.auflage, 10) || 1;
 
-  const results = calculation?.results ?? null;
-  const cheapestPrice = calculation?.cheapestPrice ?? Infinity;
-  const recommendedName = calculation?.recommendedName ?? null;
+  const summaryLine = `${formatOptions.find((o) => o.value === form.formatKey)?.label ?? '—'} · ${auflageNum} Ex. · ${form.seiten} Seiten${
+    form.hasUmschlag ? ' + Umschlag' : ''
+  } · ${
+    Number.isFinite(cheapestPrice)
+      ? `günstigste Route: ${results.find((r) => !r.error && r.gesamt === cheapestPrice)?.name}`
+      : 'keine Route möglich'
+  }`;
+
+  const techLine =
+    firstResult && !firstResult.error
+      ? `${firstResult.formatName} · ${firstResult.nutzen} Nutzen · ${num(firstResult.weightPerCopyG, 1)} g / Stück · ${num(
+          firstResult.bogenInhalt + firstResult.bogenUmschlag,
+        )} Bögen`
+      : `Kombination bei ${firstResult?.name ?? 'GC'} nicht möglich`;
+  const maxSeitenLabel =
+    firstResult && !firstResult.error ? firstResult.maxSeiten : '—';
+
+  // Zeilen der Vergleichstabelle. `pick` liefert Anzeigewert, optionale
+  // Zweitzeile und — für die Diff-Hervorhebung — den Zahlenwert.
+  const matrix = useMemo(() => {
+    const valid = results.filter((r) => !r.error);
+    const anyZuschlag = valid.some((r) => r.umschlagZuschlag > 0);
+    const anyExpress = valid.some((r) => r.expressSurcharge > 0);
+
+    const out = [];
+    let dataIndex = 0;
+
+    const head = (label) => out.push({ kind: 'head', label });
+    const row = (label, pick, options = {}) => {
+      dataIndex += 1;
+      const zebra = !options.strong && dataIndex % 2 === 0;
+      const cells = results.map((result) => {
+        if (result.error) return { value: '—', sub: '', muted: true };
+        const picked = pick(result);
+        let chip = null;
+        if (options.diff && recommended && picked.n != null) {
+          const reference = pick(recommended).n;
+          if (reference != null && Math.abs(picked.n - reference) > 0.005) {
+            chip = picked.n > reference ? 'up' : 'down';
+          }
+        }
+        const highlight =
+          options.strong && Number.isFinite(cheapestPrice) && result.gesamt === cheapestPrice;
+        return { value: picked.v, sub: picked.sub ?? '', chip, highlight };
+      });
+      out.push({ kind: 'row', label, cells, zebra, strong: !!options.strong, thick: !!options.thick });
+    };
+
+    head('Technik');
+    row('Druck-Format', (r) => ({ v: `${r.formatName} · ${r.nutzen} Nutzen` }));
+    row(
+      'Bögen gesamt',
+      (r) => ({
+        v: `${num(r.bogenInhalt + r.bogenUmschlag)} Stk`,
+        n: r.bogenInhalt + r.bogenUmschlag,
+        sub: `Makulatur ${r.makulaturInhalt} (I)${r.bogenUmschlag ? ` · ${r.makulaturUmschlag} (U)` : ''}`,
+      }),
+      { diff: true },
+    );
+    row('Gewicht / Stück', (r) => ({ v: `${num(r.weightPerCopyG, 1)} g` }));
+    row('Gewicht Auflage', (r) => ({ v: `${num(r.weightTotalKg, 2)} kg` }));
+
+    head('Kosten');
+    row(
+      'Papierkosten',
+      (r) => ({
+        v: eur(r.kostenPapierGesamt),
+        n: r.kostenPapierGesamt,
+        sub: r.bogenUmschlag
+          ? `Inhalt ${eur(r.kostenPapierInhalt)} / Umschlag ${eur(r.kostenPapierUmschlag)}`
+          : '',
+      }),
+      { diff: true },
+    );
+    row(
+      'Druckkosten',
+      (r) => ({
+        v: eur(r.kostenKlickGesamt),
+        n: r.kostenKlickGesamt,
+        sub: r.bogenUmschlag
+          ? `Inhalt ${eur(r.kostenKlickInhalt)} / Umschlag ${eur(r.kostenKlickUmschlag)}`
+          : '',
+      }),
+      { diff: true },
+    );
+    row(
+      'Verarbeitung',
+      (r) => ({
+        v: eur(r.wvKosten),
+        n: r.wvKosten,
+        sub: `${bogenteileGesamt} Bogenteile · Auflage ${auflageNum}`,
+      }),
+      { diff: true },
+    );
+    if (anyZuschlag) {
+      row(
+        'Umschlag-Zuschlag (Rillung)',
+        (r) => ({ v: eur(r.umschlagZuschlag), n: r.umschlagZuschlag }),
+        { diff: true },
+      );
+    }
+    row(
+      'Cellophanierung',
+      (r) => ({
+        v: eur(r.celloKosten),
+        n: r.celloKosten,
+        sub: `${celloLabels[r.celloType] || 'Ohne'} · Grund ${eur(r.celloGrundkosten)} · Bogen ${eur(r.celloBogenkosten)}`,
+      }),
+      { diff: true },
+    );
+    row('Einrichtekosten', (r) => ({ v: eur(r.setupKosten), n: r.setupKosten }), { diff: true });
+    if (anyExpress) {
+      row(
+        `Express-Aufschlag (+${expressProzent} %)`,
+        (r) => ({ v: eur(r.expressSurcharge), n: r.expressSurcharge }),
+        { diff: true },
+      );
+    }
+    row(
+      'Gesamt',
+      (r) => ({ v: eur(r.gesamt), n: r.gesamt, sub: `${eur(r.stueckPreis, 4)} / Stück` }),
+      { strong: true, thick: true },
+    );
+
+    head('Kennzahlen');
+    row('DB Druck', (r) => ({
+      v: `${num(r.dbDruckInhalt, 3)} (I)${r.bogenUmschlag ? ` · ${num(r.dbDruckUmschlag, 3)} (U)` : ''}`,
+    }));
+    row('DB Papier', (r) => ({
+      v: `${num(r.dbPapierInhalt, 3)} (I)${r.bogenUmschlag ? ` · ${num(r.dbPapierUmschlag, 3)} (U)` : ''}`,
+    }));
+    row('Gewichts-Zuschlag', (r) => ({
+      v: `${eur(r.gewichtszuschlagInhalt, 3)} (I)${
+        r.bogenUmschlag ? ` · ${eur(r.gewichtszuschlagUmschlag, 3)} (U)` : ''
+      }`,
+    }));
+    row('Max. Seiten (Papierdicke)', (r) => ({ v: `${r.maxSeiten} Seiten` }));
+    row('Lieferzeit', (r) => ({ v: `${r.produktionszeitWT} Werktage`, n: r.produktionszeitWT }), {
+      diff: true,
+    });
+
+    return out;
+  }, [
+    results,
+    recommended,
+    cheapestPrice,
+    celloLabels,
+    expressProzent,
+    bogenteileGesamt,
+    auflageNum,
+  ]);
+
+  const gridTemplate = `260px repeat(${results.length}, minmax(0, 1fr))`;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-[1800px]">
-        {configStale && (
-          <div className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              Der geteilte Preisstand ist gerade nicht erreichbar — es gilt der zuletzt geladene
-              Stand ({config.meta.stand}). Die Preise sind möglicherweise nicht aktuell.
-            </span>
+    <div className="mx-auto max-w-[1560px] px-6 pb-16 pt-6">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-ink">
+            Kalkulator Rückstichheftung
+          </h1>
+          <div className="mt-[5px] text-[13px] text-dim">
+            Preisbasis {config.meta.version} · Stand {config.meta.stand} · gepflegt in der{' '}
+            <Link to="/verwaltung" className="text-brand-fg hover:underline">
+              Verwaltung
+            </Link>
           </div>
-        )}
-        <header className="mb-6 overflow-hidden rounded-[28px] border border-[#8e014d]/20 bg-[#8e014d] text-white shadow-[0_30px_80px_-30px_rgba(142,1,77,0.5)]">
-          <div className="grid gap-6 px-6 py-6 sm:px-8 lg:grid-cols-[1.4fr_0.8fr] lg:px-10 lg:py-8">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Link
-                  to="/"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Dashboard
-                </Link>
-                <ThemeToggle />
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/80">
-                <Sparkles className="h-3.5 w-3.5" />
-                Internes Kalkulationstool
-              </div>
-              <div className="space-y-2">
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                  Kalkulator Rückstichheftung
-                </h1>
-                <p className="max-w-3xl text-sm leading-6 text-white/70 sm:text-base">
-                  Broschüren- und Heftkalkulation mit GC (Horizon), Kopp und ILDA.
-                  Preise und Tabellen werden in der{' '}
-                  <Link to="/verwaltung" className="underline decoration-white/40 underline-offset-2 hover:text-white">
-                    Verwaltung
-                  </Link>{' '}
-                  gepflegt.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="mb-2 flex items-center gap-2 text-white/70">
-                  <FileText className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">
-                    Formate
-                  </span>
-                </div>
-                <p className="text-2xl font-semibold">{formatOptions.length}</p>
-                <p className="mt-1 text-sm text-white/50">Standard und Banner</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="mb-2 flex items-center gap-2 text-white/70">
-                  <Calculator className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em]">
-                    Produzenten
-                  </span>
-                </div>
-                <p className="text-2xl font-semibold">{routes.length}</p>
-                <p className="mt-1 text-sm text-white/50">GC (Horizon), Kopp, ILDA</p>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className={`${panelClassName()} mb-6 overflow-hidden`}>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen((prev) => !prev)}
-            className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left sm:px-8"
-          >
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-[#8e014d] p-2 text-white">
-                <Settings2 className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">Aktive Preisbasis</p>
-                <p className="text-sm text-slate-500 dark:text-gray-400">
-                  Gepflegt in der Verwaltung · Version {config.meta.version} · Stand {config.meta.stand}
-                </p>
-              </div>
-            </div>
-            <ChevronDown
-              className={`h-5 w-5 text-slate-500 dark:text-gray-400 transition ${
-                settingsOpen ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-
-          {settingsOpen && (
-            <div className="border-t border-slate-200 dark:border-gray-700 px-6 py-6 sm:px-8">
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-gray-800">
-                <p className="text-sm text-slate-500 dark:text-gray-400">
-                  Diese Werte fließen in jede Kalkulation ein. Änderungen erfolgen zentral in der Verwaltung.
-                </p>
-                <Link
-                  to="/verwaltung"
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-[#8e014d] px-3 text-xs font-semibold text-white transition hover:bg-[#70013d]"
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                  In der Verwaltung ändern
-                </Link>
-              </div>
-
-              <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
-                <RefGroup title="Grundpreise SRA3">
-                  <RefRow label="SW (1c)" value={`${fmtNum(settings.baseGrundpreis1c)} €`} />
-                  <RefRow label="Farbe (4c)" value={`${fmtNum(settings.baseGrundpreis4c)} €`} />
-                </RefGroup>
-
-                <RefGroup title="Multiplikatoren">
-                  <RefRow label="Faktor Banner" value={`× ${fmtNum(settings.dynFaktorBanner)}`} />
-                  <RefRow label="Faktor Cello Banner" value={`× ${fmtNum(settings.celloFaktorBanner)}`} />
-                </RefGroup>
-
-                <RefGroup title="GC Umschlag-Zuschlag">
-                  <RefRow label="Grundkosten" value={`${fmtNum(settings.gcUmschlagGrundkosten)} €`} />
-                  <RefRow label="pro Stück" value={`${fmtNum(settings.gcUmschlagStueckpreis)} €`} />
-                  <RefRow label="ab Auflage" value={`${fmtNum(settings.gcUmschlagAbAuflage)} Ex.`} />
-                </RefGroup>
-
-                <RefGroup title="Max. Broschürendicke">
-                  <RefRow label="GC (Horizon)" value={`${fmtNum(settings.maxDickeGC)} µm`} />
-                  <RefRow label="Kopp / ILDA" value={`${fmtNum(settings.maxDickePartner)} µm`} />
-                </RefGroup>
-
-                <RefGroup title="Auftrag">
-                  <RefRow label="Grundkosten Cello" value={`${fmtNum(settings.celloGrundkosten)} €`} />
-                  <RefRow label="Einrichtekosten" value={`${fmtNum(settings.setupKosten)} €`} />
-                  <RefRow label="Express-Aufschlag" value={`+${expressProzent} %`} />
-                </RefGroup>
-
-                <RefGroup title="Empfehlung">
-                  <RefRow label="GC bis +" value={`${fmtNum(settings.preferInternDelta)} €`} />
-                  <RefRow label="Kopp bis +" value={`${fmtNum(settings.preferKoppDelta)} €`} />
-                </RefGroup>
-              </div>
-            </div>
-          )}
         </div>
+      </div>
 
-        <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-          <aside className={`${panelClassName()} h-fit xl:sticky xl:top-6`}>
-            <div className="border-b border-slate-200 dark:border-gray-700 px-6 py-5">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-[#8e014d] p-2 text-white">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-gray-100">Produktdaten</h2>
-                  <p className="text-sm text-slate-500 dark:text-gray-400">Eingaben für die Kalkulation</p>
-                </div>
-              </div>
-            </div>
+      {configStale && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-warn-bd bg-warn-soft px-4 py-3 text-[13px] text-warn">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Der geteilte Preisstand ist gerade nicht erreichbar — es gilt der zuletzt geladene Stand
+            ({config.meta.stand}). Die Preise sind möglicherweise nicht aktuell.
+          </span>
+        </div>
+      )}
 
-            <div className="space-y-4 px-6 py-6">
-              <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Endformat</span>
+      {/* Eingabeleiste */}
+      <div className="sticky top-[52px] z-40 mb-[18px] rounded-2xl border border-line bg-surface p-[14px_16px] shadow-card">
+        <div className="flex flex-wrap items-end gap-x-[18px] gap-y-3.5">
+          <Field label="Endformat" className="min-w-[200px]">
+            <select
+              value={form.formatKey}
+              onChange={(event) => updateForm('formatKey', event.target.value)}
+              className={FIELD_CONTROL}
+            >
+              {formatOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Auflage" className="w-[100px]">
+            <input
+              type="number"
+              min="1"
+              value={form.auflage}
+              onChange={(event) => updateForm('auflage', event.target.value)}
+              className={`${FIELD_CONTROL} tabular-nums`}
+            />
+          </Field>
+
+          <Field label="Seiten" className="w-[92px]">
+            <input
+              type="number"
+              min="8"
+              step="4"
+              value={form.seiten}
+              onChange={(event) => updateForm('seiten', event.target.value)}
+              className={`${FIELD_CONTROL} tabular-nums`}
+            />
+          </Field>
+
+          <Divider />
+
+          <Field label="Inhalt · Papier" className="min-w-[196px]">
+            <select
+              value={form.pInhaltId}
+              onChange={(event) => updateForm('pInhaltId', event.target.value)}
+              className={FIELD_CONTROL}
+            >
+              {contentPaperOptions.map((paper) => (
+                <option key={paper.id} value={paper.id}>
+                  {paper.name}
+                  {paper.isPlaceholder ? ' ⚠ Platzhalter' : ''}
+                </option>
+              ))}
+            </select>
+            {selectedContentPaper?.isPlaceholder && (
+              <span className="flex items-center gap-1.5 text-[11.5px] text-warn">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Vorläufiger Preis — Klärung mit Guido steht aus.
+              </span>
+            )}
+          </Field>
+
+          <Field label="Inhalt · Druck" className="min-w-[150px]">
+            <select
+              value={form.dInhaltKey}
+              onChange={(event) => updateForm('dInhaltKey', event.target.value)}
+              className={FIELD_CONTROL}
+            >
+              {druckOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Divider />
+
+          <label className="flex h-[38px] cursor-pointer items-center gap-[9px] rounded-[10px] border border-line2 bg-surface2 px-[13px] text-[13.5px] font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={form.hasUmschlag}
+              onChange={(event) => updateForm('hasUmschlag', event.target.checked)}
+              className="h-[15px] w-[15px] accent-brand"
+            />
+            Mit Umschlag
+          </label>
+
+          {form.hasUmschlag && (
+            <div className="flex flex-wrap items-end gap-3.5 rounded-[0_12px_12px_0] border-l-[3px] border-brand bg-brand-soft px-3.5 py-2">
+              <Field label="Umschlag · Papier" className="min-w-[186px]">
                 <select
-                  value={form.formatKey}
-                  onChange={(event) => updateForm('formatKey', event.target.value)}
-                  className={inputBaseClassName()}
+                  value={form.pUmschlagId}
+                  onChange={(event) => updateForm('pUmschlagId', event.target.value)}
+                  className={FIELD_CONTROL}
                 >
-                  {formatOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block space-y-1.5">
-                  <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Auflage</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={form.auflage}
-                    onChange={(event) => updateForm('auflage', event.target.value)}
-                    className={inputBaseClassName()}
-                  />
-                </label>
-
-                <label className="block space-y-1.5">
-                  <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Seiten</span>
-                  <input
-                    type="number"
-                    min="8"
-                    step="4"
-                    value={form.seiten}
-                    onChange={(event) => updateForm('seiten', event.target.value)}
-                    className={inputBaseClassName()}
-                  />
-                </label>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 px-4 py-3">
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                  Inhalt
-                </p>
-              </div>
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Papier</span>
-                <select
-                  value={form.pInhaltId}
-                  onChange={(event) => updateForm('pInhaltId', event.target.value)}
-                  className={inputBaseClassName()}
-                >
-                  {contentPaperOptions.map((paper) => (
+                  {coverPaperOptions.map((paper) => (
                     <option key={paper.id} value={paper.id}>
                       {paper.name}
                       {paper.isPlaceholder ? ' ⚠ Platzhalter' : ''}
                     </option>
                   ))}
                 </select>
-                {selectedContentPaper?.isPlaceholder && (
-                  <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                {selectedCoverPaper?.isPlaceholder && (
+                  <span className="flex items-center gap-1.5 text-[11.5px] text-warn">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                     Vorläufiger Preis — Klärung mit Guido steht aus.
                   </span>
                 )}
-              </label>
+              </Field>
 
-              <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Druck</span>
+              <Field label="Druck" className="min-w-[140px]">
                 <select
-                  value={form.dInhaltKey}
-                  onChange={(event) => updateForm('dInhaltKey', event.target.value)}
-                  className={inputBaseClassName()}
+                  value={form.dUmschlagKey}
+                  onChange={(event) => updateForm('dUmschlagKey', event.target.value)}
+                  className={FIELD_CONTROL}
                 >
                   {druckOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -445,349 +457,187 @@ export default function NeuesTool() {
                     </option>
                   ))}
                 </select>
-              </label>
+              </Field>
 
-              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={form.hasUmschlag}
-                  onChange={(event) => updateForm('hasUmschlag', event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 dark:border-gray-600 text-[#8e014d] focus:ring-[#8e014d]"
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-slate-800 dark:text-gray-200">
-                    Mit Umschlag
-                  </span>
-                  <span className="block text-sm text-slate-500 dark:text-gray-400">4 zusätzliche Seiten</span>
-                </span>
-              </label>
-
-              {form.hasUmschlag && (
-                <div className="space-y-4 rounded-2xl border-l-4 border-[#8e014d] bg-slate-50 dark:bg-gray-800 px-4 py-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-400 dark:text-gray-500">
-                    Umschlag
-                  </p>
-
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Papier</span>
-                    <select
-                      value={form.pUmschlagId}
-                      onChange={(event) => updateForm('pUmschlagId', event.target.value)}
-                      className={inputBaseClassName()}
-                    >
-                      {coverPaperOptions.map((paper) => (
-                        <option key={paper.id} value={paper.id}>
-                          {paper.name}
-                          {paper.isPlaceholder ? ' ⚠ Platzhalter' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {selectedCoverPaper?.isPlaceholder && (
-                      <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                        Vorläufiger Preis — Klärung mit Guido steht aus.
-                      </span>
-                    )}
-                  </label>
-
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Druck</span>
-                    <select
-                      value={form.dUmschlagKey}
-                      onChange={(event) => updateForm('dUmschlagKey', event.target.value)}
-                      className={inputBaseClassName()}
-                    >
-                      {druckOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">
-                      Cellophanierung
-                    </span>
-                    <select
-                      value={form.celloUmschlag}
-                      onChange={(event) => updateForm('celloUmschlag', event.target.value)}
-                      className={inputBaseClassName()}
-                    >
-                      {celloOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              )}
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Produktionszeit</span>
+              <Field label="Cellophanierung" className="min-w-[168px]">
                 <select
-                  value={form.produktionszeit}
-                  onChange={(event) => updateForm('produktionszeit', event.target.value)}
-                  className={inputBaseClassName()}
+                  value={form.celloUmschlag}
+                  onChange={(event) => updateForm('celloUmschlag', event.target.value)}
+                  className={FIELD_CONTROL}
                 >
-                  <option value="standard">Standard</option>
-                  <option value="express">{`Express (+${expressProzent}%)`}</option>
+                  {celloOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
-              </label>
-
-              <button
-                type="button"
-                onClick={handleCalculate}
-                disabled={isCalculating}
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#8e014d] px-4 text-sm font-semibold text-white transition hover:bg-[#70013d] disabled:opacity-70"
-              >
-                <Calculator className="h-4 w-4" />
-                {isCalculating ? 'Aktuelle Preise laden …' : 'Preis berechnen'}
-              </button>
+              </Field>
             </div>
-          </aside>
+          )}
 
-          <section className={panelClassName()}>
-            <div className="border-b border-slate-200 dark:border-gray-700 px-6 py-5 sm:px-8">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-[#8e014d] p-2 text-white">
-                  <Calculator className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-gray-100">
-                    Kalkulierte Produktionswege
-                  </h2>
-                  <p className="text-sm text-slate-500 dark:text-gray-400">
-                    Vergleich von Eigenproduktion und Partnern
-                  </p>
-                </div>
-              </div>
+          <Field label="Produktionszeit" className="min-w-[160px]">
+            <select
+              value={form.produktionszeit}
+              onChange={(event) => updateForm('produktionszeit', event.target.value)}
+              className={FIELD_CONTROL}
+            >
+              <option value="standard">Standard</option>
+              <option value="express">{`Express (+${expressProzent} %)`}</option>
+            </select>
+          </Field>
+
+          <div className="min-w-[20px] flex-1" />
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-faint">rechnet live</span>
+            <button
+              type="button"
+              onClick={handleCalculate}
+              disabled={isCalculating}
+              className="h-[38px] rounded-[10px] bg-brand px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-dark disabled:opacity-70"
+            >
+              {isCalculating ? 'Aktuelle Preise laden …' : 'Preis berechnen'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-x-[22px] gap-y-1 border-t border-line pt-[11px] text-[12.5px] text-dim">
+          <span>{techLine}</span>
+          <span>
+            Papierfamilie {selectedContentPaper?.familie ?? '—'} — Umschlag muss derselben Familie
+            entsprechen
+          </span>
+          <span>max. {maxSeitenLabel} Seiten bei dieser Papierkombination</span>
+        </div>
+      </div>
+
+      {/* Vergleichstabelle */}
+      <div className="overflow-x-auto">
+        <div className="min-w-[1040px] overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+          <div className="grid border-b border-line" style={{ gridTemplateColumns: gridTemplate }}>
+            <div className="flex flex-col justify-end gap-1 p-[18px_20px]">
+              <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint">
+                Vergleich
+              </span>
+              <span className="text-[12.5px] text-dim">{summaryLine}</span>
             </div>
-
-            <div className="px-6 py-6 sm:px-8">
-              {!results && (
-                <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
-                  <p className="text-sm italic text-slate-500">
-                    Bitte Produktdaten eingeben und auf „Preis berechnen“ klicken.
-                  </p>
-                </div>
-              )}
-
-              {results && resultStale && (
-                <div className="mb-5 flex items-start gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>
-                    Der geteilte Preisstand hat sich seit dieser Berechnung geändert (berechnet mit
-                    Stand {calculation.basedOnStand}). Bitte erneut auf „Preis berechnen“ klicken.
-                  </span>
-                </div>
-              )}
-
-              {results && (
-                <div className="grid gap-5 2xl:grid-cols-3 xl:grid-cols-2">
-                  {results.map((result) => {
-                    const isCheapest = !result.error && result.gesamt === cheapestPrice;
-                    const isRecommended = !result.error && result.name === recommendedName;
-                    const hasUm = result.bogenUmschlag > 0;
-
-                    if (result.error) {
-                      return (
-                        <article
-                          key={result.name}
-                          className="rounded-3xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 p-5 text-rose-900 dark:text-rose-300"
-                        >
-                          <div className="mb-3 flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4 shrink-0" />
-                            <h3 className="font-semibold">{result.name}</h3>
-                          </div>
-                          <p className="text-sm leading-6">{result.error}</p>
-                        </article>
-                      );
-                    }
-
-                    return (
-                      <article
-                        key={result.name}
-                        className={`rounded-3xl border bg-white dark:bg-gray-900 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
-                          isCheapest
-                            ? 'border-emerald-400'
-                            : isRecommended
-                              ? 'border-amber-400'
-                              : 'border-slate-200 dark:border-gray-700'
+            {results.map((result) => {
+              const ok = !result.error;
+              const isCheapest = ok && result.gesamt === cheapestPrice;
+              const isRecommended = ok && result.name === recommendedName;
+              const badge = !ok
+                ? ''
+                : isRecommended && isCheapest
+                  ? 'Empfohlen · günstigste'
+                  : isRecommended
+                    ? 'Empfohlen'
+                    : isCheapest
+                      ? 'Günstigste'
+                      : '';
+              return (
+                <div
+                  key={result.key}
+                  className={`border-l border-line p-[18px_20px] ${isRecommended ? 'bg-good-soft' : ''}`}
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[14.5px] font-semibold text-ink">{result.name}</span>
+                    {badge && (
+                      <span
+                        className={`rounded-full px-[7px] py-[3px] text-[10px] font-bold uppercase tracking-[0.06em] ${
+                          isCheapest ? 'bg-good-soft text-good' : 'bg-warn-soft text-warn'
                         }`}
                       >
-                        <div className="mb-4 flex items-start justify-between gap-3">
-                          <div>
-                            <h3 className="text-base font-semibold text-slate-900 dark:text-gray-100">
-                              {result.name}
-                            </h3>
-                            <p className="mt-0.5 text-xs text-slate-500 dark:text-gray-400">
-                              {result.produktionszeit === 'express' ? 'Express' : 'Standard'} · {result.produktionszeitWT} Werktage
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 gap-2">
-                            {isRecommended && (
-                              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                                Empfohlen
-                              </span>
-                            )}
-                            {isCheapest && (
-                              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-                                Günstigste
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mb-5 flex items-start justify-between gap-4">
-                          <div>
-                            <p
-                              className={`text-3xl font-bold tracking-tight ${
-                                isCheapest ? 'text-emerald-600' : 'text-slate-900 dark:text-gray-100'
-                              }`}
-                            >
-                              {fmt(result.gesamt)} €
-                            </p>
-                            <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
-                              {fmt(result.stueckPreis, 4)} € / Stück
-                            </p>
-                          </div>
-
-                          <div className="space-y-1 text-right text-xs text-slate-500 dark:text-gray-400">
-                            <p>
-                              DB Druck: {fmt(result.dbDruckInhalt, 3)}
-                              {hasUm ? ` (I) · ${fmt(result.dbDruckUmschlag, 3)} (U)` : ''}
-                            </p>
-                            <p>
-                              DB Papier: {fmt(result.dbPapierInhalt, 3)}
-                              {hasUm ? ` (I) · ${fmt(result.dbPapierUmschlag, 3)} (U)` : ''}
-                            </p>
-                            <p>
-                              Gew.-Zuschlag: {fmt(result.gewichtszuschlagInhalt, 3)} € (I)
-                              {hasUm
-                                ? ` · ${fmt(result.gewichtszuschlagUmschlag, 3)} € (U)`
-                                : ''}
-                            </p>
-                            <p>
-                              Makulatur: {result.makulaturInhalt} (I)
-                              {hasUm ? ` · ${result.makulaturUmschlag} (U)` : ''}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-gray-700">
-                          <table className="w-full text-sm">
-                            <tbody>
-                              <DetailRow
-                                label="Druck-Format"
-                                value={`${result.formatName} · ${result.nutzen} Nutzen`}
-                              />
-                              <DetailRow
-                                label="Bögen gesamt"
-                                value={`${result.bogenInhalt + result.bogenUmschlag} Stk`}
-                              />
-                              <DetailRow
-                                label="Gewicht / Stück"
-                                value={fmtG(result.weightPerCopyG)}
-                              />
-                              <DetailRow
-                                label="Gewicht Auflage"
-                                value={fmtKg(result.weightTotalKg)}
-                                withDivider
-                              />
-                              <DetailRow
-                                label="Papierkosten"
-                                value={`${fmt(result.kostenPapierGesamt)} €`}
-                              />
-                              {hasUm && (
-                                <DetailSubRow
-                                  value={`Inhalt ${fmt(result.kostenPapierInhalt)} € / Umschlag ${fmt(result.kostenPapierUmschlag)} €`}
-                                />
-                              )}
-                              <DetailRow
-                                label="Druckkosten"
-                                value={`${fmt(result.kostenKlickGesamt)} €`}
-                              />
-                              {hasUm && (
-                                <DetailSubRow
-                                  value={`Inhalt ${fmt(result.kostenKlickInhalt)} € / Umschlag ${fmt(result.kostenKlickUmschlag)} €`}
-                                />
-                              )}
-                              <DetailRow
-                                label="Verarbeitung"
-                                value={`${fmt(result.wvKosten)} €`}
-                                withDivider={result.umschlagZuschlag === 0}
-                              />
-                              {result.umschlagZuschlag > 0 && (
-                                <DetailRow
-                                  label="Umschlag-Zuschlag (Rillung)"
-                                  value={`${fmt(result.umschlagZuschlag)} €`}
-                                  withDivider
-                                />
-                              )}
-                              <DetailRow
-                                label="Cellophanierung"
-                                value={`${fmt(result.celloKosten)} €`}
-                              />
-                              <DetailSubRow
-                                value={`${celloLabels[result.celloType] || 'Ohne'} · Grund ${fmt(result.celloGrundkosten)} € · Bogen ${fmt(result.celloBogenkosten)} €`}
-                              />
-                              <DetailRow
-                                label="Einrichtekosten"
-                                value={`${fmt(result.setupKosten)} €`}
-                                withDivider={result.expressSurcharge === 0}
-                              />
-                              {result.expressSurcharge > 0 && (
-                                <DetailRow
-                                  label={`Express-Aufschlag (+${expressProzent}%)`}
-                                  value={`${fmt(result.expressSurcharge)} €`}
-                                  withDivider
-                                />
-                              )}
-                              <tr className="border-t-2 border-slate-300 dark:border-gray-600 bg-slate-50 dark:bg-gray-800">
-                                <td className="px-4 py-3 font-semibold text-slate-900 dark:text-gray-100">
-                                  Gesamt
-                                </td>
-                                <td
-                                  className={`px-4 py-3 text-right font-bold ${
-                                    isCheapest ? 'text-emerald-600' : 'text-slate-900 dark:text-gray-100'
-                                  }`}
-                                >
-                                  {fmt(result.gesamt)} €
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </article>
-                    );
-                  })}
+                        {badge}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`text-[26px] font-bold tracking-[-0.02em] tabular-nums ${
+                      isCheapest ? 'text-good' : 'text-ink'
+                    }`}
+                  >
+                    {ok ? eur(result.gesamt) : '—'}
+                  </div>
+                  <div className="mt-[3px] text-xs tabular-nums text-dim">
+                    {ok
+                      ? `${eur(result.stueckPreis, 4)} / Stück · ${result.produktionszeitWT} Werktage`
+                      : result.error}
+                  </div>
                 </div>
-              )}
-            </div>
-          </section>
+              );
+            })}
+          </div>
+
+          {matrix.map((entry, index) =>
+            entry.kind === 'head' ? (
+              <div
+                key={`head-${entry.label}`}
+                className="border-t border-line bg-surface p-[13px_20px_7px] text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint"
+              >
+                {entry.label}
+              </div>
+            ) : (
+              <div
+                key={`row-${entry.label}-${index}`}
+                className={`grid border-t ${entry.thick ? 'border-line2' : 'border-line'} ${
+                  entry.strong ? 'bg-surface2' : entry.zebra ? 'bg-zebra' : ''
+                }`}
+                style={{ gridTemplateColumns: gridTemplate }}
+              >
+                <div
+                  className={`p-[9px_20px] text-[13px] text-dim ${entry.strong ? 'font-bold' : ''}`}
+                >
+                  {entry.label}
+                </div>
+                {entry.cells.map((cell, cellIndex) => (
+                  <div
+                    key={cellIndex}
+                    className="border-l border-line p-[9px_20px] text-right"
+                  >
+                    <div
+                      className={`-mr-1.5 inline-block rounded-[5px] px-1.5 py-px text-[13px] tabular-nums ${
+                        entry.strong ? 'font-bold' : ''
+                      } ${
+                        cell.muted
+                          ? 'text-faint'
+                          : cell.chip === 'up'
+                            ? 'bg-diffUp text-diffUp-fg'
+                            : cell.chip === 'down'
+                              ? 'bg-diffDown text-diffDown-fg'
+                              : cell.highlight
+                                ? 'text-good'
+                                : 'text-ink'
+                      }`}
+                    >
+                      {cell.value}
+                    </div>
+                    {cell.sub && (
+                      <div className="mt-0.5 text-[11px] italic tabular-nums text-faint">
+                        {cell.sub}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ),
+          )}
+
+          <div className="flex flex-wrap gap-[18px] border-t border-line p-[12px_20px] text-[11.5px] text-faint">
+            <span>
+              Zwischen Auflagenstaffeln wird linear interpoliert · Preisbasis {config.meta.version} ·
+              Stand {config.meta.stand}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-[11px] w-[11px] rounded-[3px] bg-diffUp" />
+              teurer als Empfehlung
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-[11px] w-[11px] rounded-[3px] bg-diffDown" />
+              günstiger als Empfehlung
+            </span>
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-function DetailRow({ label, value, withDivider = false }) {
-  return (
-    <tr className={withDivider ? 'border-b border-slate-200 dark:border-gray-700' : ''}>
-      <td className="px-4 py-2.5 text-slate-500 dark:text-gray-400">{label}</td>
-      <td className="px-4 py-2.5 text-right font-semibold text-slate-900 dark:text-gray-100">{value}</td>
-    </tr>
-  );
-}
-
-function DetailSubRow({ value }) {
-  return (
-    <tr>
-      <td colSpan={2} className="px-4 pb-2 text-right text-xs italic text-slate-500 dark:text-gray-500">
-        {value}
-      </td>
-    </tr>
   );
 }

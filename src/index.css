@@ -1,3 +1,73 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Design-Tokens des Redesigns (design_handoff_gc_tools_ui). Hell = :root,
+   dunkel über die .dark-Klasse, die der ThemeProvider an <html> setzt. */
+:root {
+  --bg: #f7f7f9;
+  --surface: #ffffff;
+  --surface2: #fafafb;
+  --text: #111827;
+  --dim: #6b7280;
+  --faint: #9ca3af;
+  --border: #e5e7eb;
+  --border2: #d6d8dd;
+  --brand: #8e014d;
+  --brand-dark: #70013d;
+  --brand-fg: #8e014d;
+  --brand-soft: #fdf2f8;
+  --good: #059669;
+  --good-soft: #ecfdf5;
+  --good-bd: #34d399;
+  --warn: #92400e;
+  --warn-soft: #fef3c7;
+  --warn-bd: #fbbf24;
+  --bad: #9f1239;
+  --bad-soft: #fff1f2;
+  --bad-bd: #fda4af;
+  --input: #ffffff;
+  --zebra: #f4f4f6;
+  --diff-up: #fdeaea;
+  --diff-up-fg: #9f1239;
+  --diff-down: #e9f7f0;
+  --diff-down-fg: #047857;
+  --shadow: 0 1px 2px rgba(17, 24, 39, 0.05);
+}
+
+.dark {
+  --bg: #030712;
+  --surface: #111827;
+  --surface2: #1f2937;
+  --text: #f3f4f6;
+  --dim: #9ca3af;
+  --faint: #6b7280;
+  --border: #374151;
+  --border2: #4b5563;
+  --brand: #8e014d;
+  --brand-dark: #70013d;
+  --brand-fg: #f0669f;
+  --brand-soft: rgba(142, 1, 77, 0.18);
+  --good: #34d399;
+  --good-soft: rgba(6, 78, 59, 0.35);
+  --good-bd: #059669;
+  --warn: #fcd34d;
+  --warn-soft: rgba(120, 53, 15, 0.35);
+  --warn-bd: #b45309;
+  --bad: #fda4af;
+  --bad-soft: rgba(136, 19, 55, 0.3);
+  --bad-bd: #9f1239;
+  --input: #1f2937;
+  --zebra: rgba(255, 255, 255, 0.035);
+  --diff-up: rgba(159, 18, 57, 0.22);
+  --diff-up-fg: #fda4af;
+  --diff-down: rgba(4, 120, 87, 0.22);
+  --diff-down-fg: #6ee7b7;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Fokus wie im Prototyp: 2px Outline in Markenfarbe, nach innen versetzt. */
+.tok-field:focus {
+  outline: 2px solid var(--brand-fg);
+  outline-offset: -1px;
+}

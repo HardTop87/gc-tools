@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
-  ArrowLeft,
   CheckCircle2,
   Download,
   FileCheck2,
-  FileUp,
   Link2,
   RefreshCcw,
   Square,
@@ -14,10 +12,9 @@ import {
   WalletCards,
   XCircle,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { ThemeToggle } from '../components/ThemeToggle';
+import { PageHeader, SecondaryButton } from '../components/PageHeader';
 
 const TAB_KEYS = {
   perfect: 'perfect',
@@ -497,10 +494,8 @@ function TabButton({ label, count, isActive, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-4 py-3 text-xs font-black uppercase tracking-wide transition-all ${
-        isActive
-          ? 'border-[#8e014d] bg-[#8e014d] text-white shadow-md'
-          : 'border-gray-200 bg-white text-gray-600 hover:border-[#8e014d]/30 hover:text-[#8e014d] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+      className={`pb-3 pt-2.5 text-[13.5px] font-semibold transition-colors ${
+        isActive ? 'text-ink shadow-[inset_0_-2px_0_var(--brand)]' : 'text-dim hover:text-ink'
       }`}
     >
       {label} ({count})
@@ -508,7 +503,7 @@ function TabButton({ label, count, isActive, onClick }) {
   );
 }
 
-function UploadDropzone({ title, subtitle, onFileSelect, accept }) {
+function UploadDropzone({ eyebrow, title, subtitle, fileName, onFileSelect, accept }) {
   const [isDragging, setIsDragging] = useState(false);
 
   return (
@@ -526,10 +521,8 @@ function UploadDropzone({ title, subtitle, onFileSelect, accept }) {
           onFileSelect(file);
         }
       }}
-      className={`block cursor-pointer rounded-2xl border-2 border-dashed p-6 transition-all ${
-        isDragging
-          ? 'border-[#8e014d] bg-[#fdf2f8] dark:bg-[#8e014d]/10'
-          : 'border-gray-200 bg-white hover:border-[#8e014d]/30 hover:bg-[#fdf2f8]/40 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-[#8e014d]/5'
+      className={`flex cursor-pointer flex-col gap-1.5 rounded-2xl border border-dashed bg-surface p-[18px_20px] transition-colors ${
+        isDragging ? 'border-brand-fg bg-brand-soft' : 'border-line2 hover:border-brand-fg'
       }`}
     >
       <input
@@ -543,14 +536,11 @@ function UploadDropzone({ title, subtitle, onFileSelect, accept }) {
           }
         }}
       />
-      <div className="flex items-center gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#8e014d]/15 bg-[#fdf2f8] text-[#8e014d]">
-          <FileUp size={20} />
-        </div>
-        <div>
-          <p className="text-sm font-black text-gray-900 dark:text-gray-100">{title}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
-        </div>
+      <div className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint">{eyebrow}</div>
+      <div className="text-[14.5px] font-semibold text-ink">{title}</div>
+      <div className="text-[12.5px] leading-[1.5] text-dim">{subtitle}</div>
+      <div className={`mt-auto pt-3 text-xs ${fileName ? 'text-brand-fg' : 'text-faint'}`}>
+        {fileName ? `Geladen: ${fileName}` : 'Noch keine Datei'}
       </div>
     </label>
   );
@@ -853,87 +843,66 @@ export default function PayPalExport() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
-    <div className="mx-auto max-w-7xl">
-      <header className="mb-8 overflow-hidden rounded-[28px] border border-[#8e014d]/20 bg-[#8e014d] text-white shadow-[0_30px_80px_-30px_rgba(142,1,77,0.5)]">
-        <div className="px-6 py-6 sm:px-8 lg:px-10 lg:py-8">
-          <div className="flex items-center justify-between mb-5">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-            >
-              <ArrowLeft size={16} /> Dashboard
-            </Link>
-            <div className="flex items-center gap-4">
-              <ThemeToggle />
-              <button
-                type="button"
-                onClick={resetAll}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-              >
-                <RefreshCcw size={14} /> Reset
-              </button>
-            </div>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/80 mb-3">
-            <FileUp size={12} />
-            Internes Tool
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">PayPal Reconciliation</h1>
-          <p className="mt-1 text-sm text-white/70">Automatischer Soll-Ist-Abgleich mit interaktiver Klärungs-Station.</p>
-        </div>
-      </header>
+    <div className="mx-auto max-w-[1560px] px-6 pb-16 pt-6">
+    <div>
+      <PageHeader
+        title="PayPal Reconciliation"
+        context="Automatischer Soll-Ist-Abgleich mit interaktiver Klärungs-Station."
+      >
+        <SecondaryButton icon={RefreshCcw} label="Reset" onClick={resetAll} />
+      </PageHeader>
 
-      <div className="rounded-3xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 p-8 shadow-xl md:p-10">
+      <div className="mt-[18px]">
 
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid items-stretch gap-3.5 lg:grid-cols-3">
           <UploadDropzone
-            title="Dropzone 1: Shop Export CSV/Excel"
-            subtitle={
-              shopFileName
-                ? `Geladen: ${shopFileName}`
-                : 'Filtert nur Bezahlung = PayPal / PayPalApi und dedupliziert nach Rechnungsnummer'
-            }
+            eyebrow="Dropzone 1"
+            title="Shop Export CSV/Excel"
+            subtitle="Filtert nur Bezahlung = PayPal / PayPalApi und dedupliziert nach Rechnungsnummer"
+            fileName={shopFileName}
             onFileSelect={handleShopFile}
             accept=".csv,.xls,.xlsx"
           />
           <UploadDropzone
-            title="Dropzone 2: PayPal CSV"
-            subtitle={
-              payPalFileName
-                ? `Geladen: ${payPalFileName}`
-                : 'Filtert Typ = Allgemeine Abbuchung aus und bereitet Brutto/Gebühr/Netto auf'
-            }
+            eyebrow="Dropzone 2"
+            title="PayPal CSV"
+            subtitle="Filtert Typ = Allgemeine Abbuchung aus und bereitet Brutto/Gebühr/Netto auf"
+            fileName={payPalFileName}
             onFileSelect={handlePayPalFile}
             accept=".csv,.xls,.xlsx"
           />
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-6 shadow-sm">
-            <label className="mb-2 block text-xs font-black uppercase tracking-wide text-gray-600 dark:text-gray-300">
+          <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-[18px_20px] shadow-card">
+            <label className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint">
               Zielsumme laut PayPal-Kontoauszug PDF
             </label>
             <input
               type="text"
               value={targetSumInput}
               onChange={(event) => setTargetSumInput(event.target.value)}
-              placeholder="z.B. 12.345,67"
-              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-100 outline-none ring-[#8e014d]/20 transition-all focus:border-[#8e014d] focus:ring dark:placeholder-gray-500"
+              placeholder="z. B. 12.345,67"
+              className="tok-field h-10 rounded-[10px] border border-line2 bg-input px-[11px] text-sm tabular-nums text-ink"
             />
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Manueller Kontrollwert für den Kassensturz.</p>
+            <span className="text-[11.5px] text-faint">Manueller Kontrollwert für den Kassensturz.</span>
           </div>
         </div>
 
         {error && (
-          <div className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-3.5 flex items-start gap-3 rounded-xl border border-bad-bd bg-bad-soft px-4 py-3 text-[13px] text-bad">
             <AlertCircle size={18} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {!hasBothFiles && (
-          <div className="mt-8 rounded-2xl border border-[#8e014d]/15 bg-[#fdf2f8] px-5 py-4 text-sm text-[#8e014d]">
-            Lade Shop-Export und PayPal-Datei hoch. Der Abgleich startet automatisch.
+          <div className="mt-3.5 rounded-xl border border-brand-fg bg-brand-soft px-[18px] py-[13px] text-[13px] text-brand-fg">
+            Lade Shop-Export und PayPal-Datei hoch — der Abgleich startet automatisch.
           </div>
         )}
+
+        <p className="mt-2.5 text-xs text-faint">
+          Datensätze sind strikt exklusiv: jede Buchung liegt nur in Matches, unmatched Shop oder
+          unmatched PayPal.
+        </p>
 
         {reconciliation && (
           <div className="mt-8 space-y-6">
@@ -979,21 +948,21 @@ export default function PayPalExport() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-6 border-b border-line">
               <TabButton
-                label="✅ Perfekte Matches"
+                label="Perfekte Matches"
                 count={reconciliation.matched.length}
                 isActive={activeTab === TAB_KEYS.perfect}
                 onClick={() => setActiveTab(TAB_KEYS.perfect)}
               />
               <TabButton
-                label="⚠️ Klärungs-Station"
+                label="Klärungs-Station"
                 count={reconciliation.unmatchedShop.length + reconciliation.unmatchedPayPal.length}
                 isActive={activeTab === TAB_KEYS.station}
                 onClick={() => setActiveTab(TAB_KEYS.station)}
               />
               <TabButton
-                label="❌ Fehlt in PayPal"
+                label="Fehlt in PayPal"
                 count={unresolvedShopVisible.length}
                 isActive={activeTab === TAB_KEYS.missingPaypal}
                 onClick={() => setActiveTab(TAB_KEYS.missingPaypal)}
@@ -1228,14 +1197,6 @@ export default function PayPalExport() {
         )}
       </div>
 
-      <div className="mt-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
-        <div className="flex items-start gap-2">
-          <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[#8e014d]" />
-          <p>
-            Datensätze sind strikt exklusiv: Jede Buchung liegt zu jedem Zeitpunkt nur in Matches, unmatched Shop oder unmatched PayPal.
-          </p>
-        </div>
-      </div>
     </div>
     </div>
   );

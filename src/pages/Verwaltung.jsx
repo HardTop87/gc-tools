@@ -1,18 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Database,
-  Download,
-  FileSpreadsheet,
-  RotateCcw,
-  Settings2,
-  Table2,
-  Upload,
-} from 'lucide-react';
-import { ThemeToggle } from '../components/ThemeToggle';
+import { AlertTriangle, Download, FileSpreadsheet, RotateCcw, Upload } from 'lucide-react';
+import { PageHeader, SecondaryButton } from '../components/PageHeader';
 import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
@@ -56,6 +45,51 @@ const WV_VARIANT_LABELS = {
   banner_ohne: 'Banner, ohne Umschlag',
 };
 
+// Zwei Ebenen: produktübergreifende Basis vs. produktspezifische Werte.
+// Die geplanten Bereiche zeigen den Ausbauweg und sind deaktiviert.
+const SCOPES = [
+  {
+    key: 'basis',
+    label: 'Gemeinsame Basis',
+    hint: 'Gilt für alle Rechner: Papierpreise, Klickpreise, Gewichts-Zuschläge, Auftrags- und Veredelungs-Grundwerte.',
+    tabs: [
+      { key: 'papier', label: 'Papierpreise' },
+      { key: 'klick', label: 'Klick & Bogen' },
+      { key: 'veredelung', label: 'Veredelung & Auftrag' },
+    ],
+  },
+  {
+    key: 'rst',
+    label: 'Rückstichheftung',
+    hint: 'Nur für die Rückstichheftung: Umschlag-Zuschlag, Seitenlimits, Routen-Empfehlung und Verarbeitungstabellen.',
+    tabs: [
+      { key: 'faktoren', label: 'Faktoren & Grenzen' },
+      { key: 'wv', label: 'Verarbeitungstabellen' },
+    ],
+  },
+  { key: 'flyer', label: 'Flyer · geplant', planned: true, hint: '', tabs: [] },
+  { key: 'poster', label: 'Poster · geplant', planned: true, hint: '', tabs: [] },
+  { key: 'abschluss', label: 'Abschlussarbeiten · geplant', planned: true, hint: '', tabs: [] },
+];
+
+// Zuordnung der flachen settings-Keys auf die Anzeige-Gruppen der Tabs.
+// Keys, die hier fehlen, landen generisch in der Gruppe „Weitere“.
+const SETTINGS_GROUPS = {
+  klick: [{ title: 'Klickpreise SRA3', keys: ['baseGrundpreis1c', 'baseGrundpreis4c', 'dynFaktorBanner'] }],
+  veredelung: [
+    { title: 'Cellophanierung', keys: ['celloGrundkosten', 'celloFaktorBanner'] },
+    { title: 'Auftrag', keys: ['setupKosten', 'expressFaktor'] },
+  ],
+  faktoren: [
+    { title: 'GC Umschlag-Zuschlag', keys: ['gcUmschlagGrundkosten', 'gcUmschlagStueckpreis', 'gcUmschlagAbAuflage'] },
+    { title: 'Seitenlimits (Broschürendicke)', keys: ['maxDickeGC', 'maxDickePartner'] },
+    { title: 'Empfehlung der Route', keys: ['preferInternDelta', 'preferKoppDelta'] },
+  ],
+};
+const GROUPED_SETTINGS_KEYS = new Set(
+  Object.values(SETTINGS_GROUPS).flatMap((groups) => groups.flatMap((group) => group.keys)),
+);
+
 function fmtBogenpreis(preisPro1000) {
   return (preisPro1000 / 1000).toLocaleString('de-DE', {
     minimumFractionDigits: 4,
@@ -75,14 +109,6 @@ function downloadBlob(filename, mime, content) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
-}
-
-function inputClassName(extra = '') {
-  return `h-9 rounded-lg border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 text-sm text-slate-900 dark:text-gray-100 shadow-sm outline-none transition focus:border-[#8e014d] focus:ring-2 focus:ring-[#8e014d]/10 ${extra}`;
-}
-
-function panelClassName() {
-  return 'rounded-3xl border border-slate-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur';
 }
 
 // Zahleneingabe mit lokalem Draft: committet erst bei Blur/Enter (nicht pro
@@ -111,50 +137,61 @@ function NumberField({ value, onCommit, step = 1, className = '', min }) {
       onKeyDown={(event) => {
         if (event.key === 'Enter') event.currentTarget.blur();
       }}
-      className={inputClassName(className)}
+      className={`tok-field rounded-[10px] border border-line2 bg-input px-2.5 text-sm text-ink tabular-nums ${className}`}
     />
   );
 }
 
-function SectionHeader(props) {
-  const { icon: Icon, title, subtitle, children } = props;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-gray-700 px-6 py-5 sm:px-8">
-      <div className="flex items-center gap-3">
-        <div className="rounded-2xl bg-[#8e014d] p-2 text-white">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-gray-100">{title}</h2>
-          <p className="text-sm text-slate-500 dark:text-gray-400">{subtitle}</p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
-    </div>
-  );
-}
-
-function ToolbarButton(props) {
-  const { icon: Icon, label, onClick, tone = 'default' } = props;
-  const toneClass =
-    tone === 'inverted'
-      ? 'border-white/25 bg-white/10 text-white hover:bg-white/20'
-      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800';
+function Chip({ label, active, disabled, onClick }) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition ${toneClass}`}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      className={`h-[34px] rounded-full border px-[13px] text-[12.5px] font-medium transition-colors ${
+        active ? 'border-brand-fg bg-brand-soft text-brand-fg' : 'border-line2 bg-transparent text-dim'
+      } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
     >
-      <Icon className="h-3.5 w-3.5" />
       {label}
     </button>
+  );
+}
+
+function FieldCard({ title, fields }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-[18px_20px_20px] shadow-card">
+      <div className="mb-3.5 text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint">
+        {title}
+      </div>
+      <div className="flex flex-col gap-3.5">
+        {fields.map((field) => (
+          <label key={field.key} className="flex flex-col gap-[5px]">
+            <span className="flex justify-between gap-2.5 text-[12.5px] font-semibold text-ink">
+              {field.label}
+              <span className="font-normal text-faint">{field.einheit ?? ''}</span>
+            </span>
+            <NumberField
+              value={field.value}
+              step={field.step ?? 0.01}
+              min={field.min ?? 0}
+              className="h-10 w-full"
+              onCommit={field.onCommit}
+            />
+            {field.hinweis && <span className="text-[11.5px] text-faint">{field.hinweis}</span>}
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 
 export default function Verwaltung() {
   // Startwert aus Offline-Cache/Default; der geteilte Stand wird sofort nachgeladen.
   const [config, setConfig] = useState(() => loadPricingConfigResult().config);
+  const [scopeKey, setScopeKey] = useState('basis');
+  const [tabKey, setTabKey] = useState('papier');
+  const [query, setQuery] = useState('');
+  const [familyFilter, setFamilyFilter] = useState('Alle');
   const [wvTableKey, setWvTableKey] = useState('gc_horizon');
   const [pendingImport, setPendingImport] = useState(null);
   const [message, setMessage] = useState(null);
@@ -424,7 +461,107 @@ export default function Verwaltung() {
     setPendingImport(null);
   }
 
-  // Ausgewählten Tab gegen die (ggf. importierte) Config abgleichen —
+  const scope = SCOPES.find((entry) => entry.key === scopeKey) ?? SCOPES[0];
+  const activeTab = scope.tabs.some((tab) => tab.key === tabKey) ? tabKey : scope.tabs[0]?.key;
+
+  function selectScope(nextScope) {
+    setScopeKey(nextScope.key);
+    setTabKey(nextScope.tabs[0]?.key ?? '');
+  }
+
+  // Papierliste filtern; der Index in config.papiere bleibt für die Bearbeitung erhalten.
+  const families = useMemo(
+    () => ['Alle', ...new Set(config.papiere.map((paper) => paper.familie))],
+    [config.papiere],
+  );
+  const filteredPapers = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return config.papiere
+      .map((paper, index) => ({ paper, index }))
+      .filter(
+        ({ paper }) =>
+          (familyFilter === 'Alle' || paper.familie === familyFilter) &&
+          (!needle || paper.name.toLowerCase().includes(needle)),
+      );
+  }, [config.papiere, query, familyFilter]);
+
+  // Feldgruppen des aktiven Tabs aus den flachen Config-Keys zusammensetzen.
+  const fieldGroups = useMemo(() => {
+    const settingField = (key) => {
+      const meta = SETTINGS_META[key] ?? {};
+      return {
+        key,
+        label: meta.label ?? key,
+        einheit: meta.einheit,
+        step: meta.step,
+        min: meta.min,
+        hinweis: meta.hinweis,
+        value: config.settings[key],
+        onCommit: (value) =>
+          updateConfig((next) => {
+            next.settings[key] = value;
+          }),
+      };
+    };
+
+    const groups = (SETTINGS_GROUPS[activeTab] ?? [])
+      .map((group) => ({
+        title: group.title,
+        fields: group.keys.filter((key) => key in config.settings).map(settingField),
+      }))
+      .filter((group) => group.fields.length > 0);
+
+    if (activeTab === 'klick') {
+      groups.push({
+        title: 'Gewichts-Zuschläge € / Klick',
+        fields: (config.gewichtszuschlaege ?? []).map((entry, index) => ({
+          key: `gz-${entry.abGsm}`,
+          label: `ab ${entry.abGsm} g/m²`,
+          einheit: '€',
+          step: 0.001,
+          hinweis: '',
+          value: entry.zuschlag,
+          onCommit: (value) =>
+            updateConfig((next) => {
+              next.gewichtszuschlaege[index].zuschlag = value;
+            }),
+        })),
+      });
+    }
+
+    if (activeTab === 'veredelung') {
+      const arten = config.cello?.arten ?? [];
+      groups.splice(1, 0, {
+        title: 'Cello-Arten € / Bogen',
+        fields: arten
+          .map((art, index) => ({ art, index }))
+          .filter(({ art }) => art.key !== 'ohne')
+          .map(({ art, index }) => ({
+            key: `cello-${art.key}`,
+            label: art.name,
+            einheit: '€',
+            step: 0.01,
+            hinweis: '',
+            value: art.stueckpreis,
+            onCommit: (value) =>
+              updateConfig((next) => {
+                next.cello.arten[index].stueckpreis = value;
+              }),
+          })),
+      });
+
+      // Unbekannte Keys (z. B. aus einer importierten Config) gehen nicht verloren.
+      const unknown = Object.keys(config.settings).filter((key) => !GROUPED_SETTINGS_KEYS.has(key));
+      if (unknown.length) {
+        groups.push({ title: 'Weitere', fields: unknown.map(settingField) });
+      }
+    }
+
+    return groups.filter((group) => group.fields.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, config]);
+
+  // Ausgewählte WV-Tabelle gegen die (ggf. importierte) Config abgleichen —
   // fehlt der Key, fällt die Anzeige auf die erste vorhandene Tabelle zurück.
   const wvTableKeys = Object.keys(config.wvTabellen ?? {});
   const effectiveWvKey = wvTableKeys.includes(wvTableKey) ? wvTableKey : wvTableKeys[0];
@@ -433,63 +570,50 @@ export default function Verwaltung() {
   const wvCols = [...new Set(wvRows.flatMap((r) => Object.keys(wvTable[r]).map(Number)))].sort(
     (a, b) => a - b,
   );
+  const wvGrid = `84px repeat(${wvCols.length}, minmax(62px, 1fr))`;
+  const paperGrid = 'minmax(220px,1fr) 90px 90px 110px 180px 120px';
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-[1400px] space-y-6">
-        <header className="overflow-hidden rounded-[28px] border border-[#8e014d]/20 bg-[#8e014d] text-white shadow-[0_30px_80px_-30px_rgba(142,1,77,0.5)]">
-          <div className="px-6 py-6 sm:px-8 lg:px-10 lg:py-8">
-            <div className="mb-5 flex items-center justify-between">
-              <Link
-                to="/"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Dashboard
-              </Link>
-              <ThemeToggle />
-            </div>
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                  Verwaltung — RST-Kalkulationsbasis
-                </h1>
-                <p className="mt-1 text-sm text-white/70">
-                  Version {config.meta.version} · Stand {config.meta.stand}
-                  {sharedStatus.state === 'shared' && ' · geteilter Stand'}
-                  {sharedStatus.state === 'none' && ' · noch nicht veröffentlicht'}
-                  {sharedStatus.state === 'offline' && ' · geteilter Speicher offline'}
-                  {publishState.status === 'saving' && ' · speichere …'}
-                  {publishState.status === 'saved' && ' · ✓ für alle gespeichert'}
-                  {publishState.status === 'offline' && ' · ⚠ nicht veröffentlicht (offline)'}
-                  {publishState.status === 'error' && ' · ⚠ nicht veröffentlicht'}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <ToolbarButton icon={Download} label="Config (JSON)" onClick={handleExportJson} tone="inverted" />
-                <ToolbarButton
-                  icon={Upload}
-                  label="Config importieren"
-                  onClick={() => configFileRef.current?.click()}
-                  tone="inverted"
-                />
-                <ToolbarButton icon={RotateCcw} label="Auf Standard zurücksetzen" onClick={handleReset} tone="inverted" />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <input ref={configFileRef} type="file" accept=".json" onChange={handleConfigFile} className="hidden" />
-        <input
-          ref={paperFileRef}
-          type="file"
-          accept=".csv,.xlsx,.xls"
-          onChange={handlePaperFile}
-          className="hidden"
+    <div className="mx-auto max-w-[1560px] px-6 pb-16 pt-6">
+      <PageHeader
+        title="Verwaltung — Kalkulationsbasis"
+        context={
+          <>
+            Gemeinsame Basis und Produkt-Faktoren · Version {config.meta.version} · Stand{' '}
+            {config.meta.stand}
+            {sharedStatus.state === 'shared' && ' · geteilter Stand'}
+            {sharedStatus.state === 'none' && ' · noch nicht veröffentlicht'}
+            {sharedStatus.state === 'offline' && ' · geteilter Speicher offline'}
+            {publishState.status === 'saving' && ' · speichere …'}
+            {publishState.status === 'saved' && (
+              <span className="text-good"> · ✓ für alle gespeichert</span>
+            )}
+            {publishState.status === 'offline' && ' · ⚠ nicht veröffentlicht (offline)'}
+            {publishState.status === 'error' && ' · ⚠ nicht veröffentlicht'}
+          </>
+        }
+      >
+        <SecondaryButton icon={Download} label="Config (JSON)" onClick={handleExportJson} />
+        <SecondaryButton
+          icon={Upload}
+          label="Config importieren"
+          onClick={() => configFileRef.current?.click()}
         />
+        <SecondaryButton icon={RotateCcw} label="Auf Standard zurücksetzen" onClick={handleReset} />
+      </PageHeader>
 
+      <input ref={configFileRef} type="file" accept=".json" onChange={handleConfigFile} className="hidden" />
+      <input
+        ref={paperFileRef}
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        onChange={handlePaperFile}
+        className="hidden"
+      />
+
+      <div className="mt-4 space-y-3">
         {sharedStatus.state === 'none' && (
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+          <div className="rounded-xl border border-line2 bg-surface px-4 py-3 text-[13px] text-dim">
             Es ist noch kein geteilter Preisstand veröffentlicht. Sobald du etwas änderst, eine
             Preisliste importierst oder „Auf Standard zurücksetzen“ klickst, wird der Stand für alle
             angelegt und ist überall sichtbar.
@@ -497,7 +621,7 @@ export default function Verwaltung() {
         )}
 
         {hasNewerDefault && (
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+          <div className="rounded-xl border border-line2 bg-surface px-4 py-3 text-[13px] text-dim">
             Der im Repo hinterlegte Standard hat Version {defaultVersion}, der aktuelle Stand basiert
             auf {config.meta.version}. „Auf Standard zurücksetzen“ veröffentlicht den neuen Standard
             für alle — vorher bei Bedarf die aktuelle Config als JSON exportieren.
@@ -506,10 +630,10 @@ export default function Verwaltung() {
 
         {message && (
           <div
-            className={`whitespace-pre-wrap rounded-2xl border px-5 py-4 text-sm ${
+            className={`whitespace-pre-wrap rounded-xl border px-4 py-3 text-[13px] ${
               message.type === 'error'
-                ? 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300'
-                : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                ? 'border-bad-bd bg-bad-soft text-bad'
+                : 'border-good-bd bg-good-soft text-good'
             }`}
           >
             {message.text}
@@ -517,12 +641,12 @@ export default function Verwaltung() {
         )}
 
         {pendingImport && (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 dark:border-amber-700 dark:bg-amber-950/40">
-            <p className="mb-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
+          <div className="rounded-xl border border-warn-bd bg-warn-soft px-4 py-3 text-warn">
+            <p className="mb-1.5 text-[13px] font-semibold">
               Import „{pendingImport.sourceName}“ prüfen und übernehmen
             </p>
             {pendingImport.kind === 'papierpreise' ? (
-              <p className="text-sm text-amber-900/80 dark:text-amber-200/80">
+              <p className="text-[12.5px]">
                 {pendingImport.summary.geaendert.length} Preise geändert
                 {pendingImport.summary.geaendert.length > 0 &&
                   ` (${pendingImport.summary.geaendert.join(', ')})`}
@@ -532,7 +656,7 @@ export default function Verwaltung() {
                 .
               </p>
             ) : (
-              <p className="text-sm text-amber-900/80 dark:text-amber-200/80">
+              <p className="text-[12.5px]">
                 Gesamt-Config Version {pendingImport.nextConfig.meta?.version} · Stand{' '}
                 {pendingImport.nextConfig.meta?.stand} ersetzt die aktuelle Konfiguration.
               </p>
@@ -541,201 +665,252 @@ export default function Verwaltung() {
               <button
                 type="button"
                 onClick={applyPendingImport}
-                className="inline-flex h-9 items-center rounded-xl bg-[#8e014d] px-4 text-xs font-semibold text-white transition hover:bg-[#70013d]"
+                className="inline-flex h-9 items-center rounded-[10px] bg-brand px-4 text-xs font-semibold text-white transition-colors hover:bg-brand-dark"
               >
                 Übernehmen
               </button>
               <button
                 type="button"
                 onClick={() => setPendingImport(null)}
-                className="inline-flex h-9 items-center rounded-xl border border-slate-300 px-4 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                className="inline-flex h-9 items-center rounded-[10px] border border-line2 bg-surface px-4 text-xs font-semibold text-dim transition-colors hover:text-ink"
               >
                 Verwerfen
               </button>
             </div>
           </div>
         )}
+      </div>
 
-        {/* Papierpreise */}
-        <section className={panelClassName()}>
-          <SectionHeader
-            icon={Database}
-            title="Papierpreise"
-            subtitle="Pflege ausschließlich pro 1000 Bogen — der Bogenpreis wird berechnet"
+      {/* Bereiche */}
+      <div className="mt-[18px] flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint">
+          Bereich
+        </span>
+        {SCOPES.map((entry) => (
+          <Chip
+            key={entry.key}
+            label={entry.label}
+            active={entry.key === scope.key}
+            disabled={entry.planned}
+            onClick={() => selectScope(entry)}
+          />
+        ))}
+      </div>
+      {scope.hint && <div className="mt-2 text-[12.5px] text-dim">{scope.hint}</div>}
+
+      {/* Tabs */}
+      <div className="mt-3.5 flex gap-6 border-b border-line">
+        {scope.tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setTabKey(tab.key)}
+            className={`pb-3 pt-2.5 text-[13.5px] font-semibold transition-colors ${
+              tab.key === activeTab
+                ? 'text-ink shadow-[inset_0_-2px_0_var(--brand)]'
+                : 'text-dim hover:text-ink'
+            }`}
           >
-            <ToolbarButton icon={Download} label="CSV" onClick={handleExportCsv} />
-            <ToolbarButton icon={FileSpreadsheet} label="XLSX" onClick={handleExportXlsx} />
-            <ToolbarButton
-              icon={Upload}
-              label="CSV/XLSX importieren"
-              onClick={() => paperFileRef.current?.click()}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Papierpreise */}
+      {activeTab === 'papier' && (
+        <div className="mt-[18px]">
+          <p className="mb-3.5 text-[12.5px] text-dim">
+            Pflege ausschließlich pro 1000 Bogen — der Bogenpreis wird berechnet.
+          </p>
+          <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Papier suchen …"
+              className="tok-field h-[38px] w-[230px] rounded-[10px] border border-line2 bg-input px-3 text-[13.5px] text-ink"
             />
-          </SectionHeader>
-
-          <div className="overflow-x-auto px-6 py-4 sm:px-8">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-gray-500">
-                  <th className="px-2 py-2">Name</th>
-                  <th className="px-2 py-2">Familie</th>
-                  <th className="px-2 py-2 text-right">g/m²</th>
-                  <th className="px-2 py-2 text-right">Dicke (µm)</th>
-                  <th className="px-2 py-2 text-right">Preis / 1000 Bogen €</th>
-                  <th className="px-2 py-2 text-right">Preis / Bogen €</th>
-                </tr>
-              </thead>
-              <tbody>
-                {config.papiere.map((paper, index) => (
-                  <tr
-                    key={paper.id}
-                    className="border-t border-slate-100 dark:border-gray-800"
-                  >
-                    <td className="px-2 py-1.5 font-medium text-slate-800 dark:text-gray-200">
-                      {paper.name}
-                      {paper.isPlaceholder && (
-                        <span
-                          className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
-                          title="Vorläufiger Wert — Preis/Name mit Guido klären"
-                        >
-                          <AlertTriangle className="h-3 w-3" />
-                          Platzhalter
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-slate-500 dark:text-gray-400">{paper.familie}</td>
-                    <td className="px-2 py-1.5 text-right text-slate-500 dark:text-gray-400">{paper.gsm}</td>
-                    <td className="px-2 py-1.5 text-right text-slate-500 dark:text-gray-400">{paper.dickeUm}</td>
-                    <td className="px-2 py-1.5 text-right">
-                      <NumberField
-                        value={paper.preisPro1000}
-                        step={0.5}
-                        min={0.001}
-                        className="w-28 text-right"
-                        onCommit={(value) =>
-                          updateConfig((next) => {
-                            next.papiere[index].preisPro1000 = value;
-                          })
-                        }
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-slate-600 dark:text-gray-300">
-                      {fmtBogenpreis(paper.preisPro1000)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Grundpreise & Faktoren */}
-        <section className={panelClassName()}>
-          <SectionHeader
-            icon={Settings2}
-            title="Grundpreise & Faktoren"
-            subtitle="Wirken sofort auf die Kalkulation; Standardwerte stehen in der Repo-Config"
-          />
-          <div className="grid gap-x-8 gap-y-4 px-6 py-6 sm:px-8 md:grid-cols-2 xl:grid-cols-3">
-            {Object.keys(config.settings).map((key) => {
-              const meta = SETTINGS_META[key] ?? {};
-              return (
-                <label key={key} className="block space-y-1">
-                  <span className="flex items-baseline justify-between text-sm font-medium text-slate-700 dark:text-gray-300">
-                    {meta.label ?? key}
-                    <span className="text-xs text-slate-400 dark:text-gray-500">{meta.einheit ?? ''}</span>
-                  </span>
-                  <NumberField
-                    value={config.settings[key]}
-                    step={meta.step ?? 0.01}
-                    min={meta.min ?? 0}
-                    className="w-full"
-                    onCommit={(value) =>
-                      updateConfig((next) => {
-                        next.settings[key] = value;
-                      })
-                    }
-                  />
-                  <span className="block text-xs text-slate-400 dark:text-gray-500">{meta.hinweis ?? ''}</span>
-                </label>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* WV-Tabellen */}
-        <section className={panelClassName()}>
-          <SectionHeader
-            icon={Table2}
-            title="Verarbeitungspreis-Tabellen"
-            subtitle="Zeile = Bogenteile, Spalte = Auflagenstaffel; zwischen Staffeln wird linear interpoliert"
-          />
-          <div className="px-6 py-4 sm:px-8">
-            <div className="mb-4 flex flex-wrap gap-2">
-              {wvTableKeys.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setWvTableKey(key)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-                    key === effectiveWvKey
-                      ? 'bg-[#8e014d] text-white'
-                      : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  {wvTableLabels[key] ?? key}
-                </button>
+            <div className="flex flex-wrap gap-1.5">
+              {families.map((family) => (
+                <Chip
+                  key={family}
+                  label={family === 'Alle' ? 'Alle Familien' : family}
+                  active={familyFilter === family}
+                  onClick={() => setFamilyFilter(family)}
+                />
               ))}
+            </div>
+            <div className="flex-1" />
+            <span className="text-[12.5px] text-faint">
+              {filteredPapers.length} von {config.papiere.length} Papieren · Pflege pro 1000 Bogen
+            </span>
+            <div className="flex gap-1.5">
+              <SecondaryButton icon={Download} label="CSV" onClick={handleExportCsv} />
+              <SecondaryButton icon={FileSpreadsheet} label="XLSX" onClick={handleExportXlsx} />
+              <SecondaryButton
+                icon={Upload}
+                label="CSV/XLSX importieren"
+                onClick={() => paperFileRef.current?.click()}
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <div className="min-w-[900px] overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+              <div
+                className="grid border-b border-line bg-surface2 px-5 py-[11px]"
+                style={{ gridTemplateColumns: paperGrid }}
+              >
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-faint">Name</span>
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-faint">Familie</span>
+                <span className="text-right text-[10.5px] font-bold tracking-[0.14em] text-faint">g/m²</span>
+                <span className="text-right text-[10.5px] font-bold tracking-[0.14em] text-faint">Dicke (µm)</span>
+                <span className="text-right text-[10.5px] font-bold uppercase tracking-[0.14em] text-faint">
+                  Preis / 1000 Bogen €
+                </span>
+                <span className="text-right text-[10.5px] font-bold uppercase tracking-[0.14em] text-faint">
+                  Preis / Bogen €
+                </span>
+              </div>
+              {filteredPapers.map(({ paper, index }) => (
+                <div
+                  key={paper.id}
+                  className="grid items-center border-b border-line px-5 py-1.5 transition-colors hover:bg-surface2"
+                  style={{ gridTemplateColumns: paperGrid }}
+                >
+                  <span className="text-[13.5px] text-ink">
+                    {paper.name}
+                    {paper.isPlaceholder && (
+                      <span
+                        className="ml-2 inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-warn"
+                        title="Vorläufiger Wert — Preis/Name mit Guido klären"
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        Platzhalter
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[11.5px] font-bold tracking-[0.06em] text-brand-fg">
+                    {paper.familie}
+                  </span>
+                  <span className="text-right text-[13px] tabular-nums text-dim">{paper.gsm}</span>
+                  <span className="text-right text-[13px] tabular-nums text-dim">{paper.dickeUm}</span>
+                  <span className="text-right">
+                    <NumberField
+                      value={paper.preisPro1000}
+                      step={0.5}
+                      min={0.001}
+                      className="h-8 w-[100px] text-right"
+                      onCommit={(value) =>
+                        updateConfig((next) => {
+                          next.papiere[index].preisPro1000 = value;
+                        })
+                      }
+                    />
+                  </span>
+                  <span className="text-right text-[13px] tabular-nums text-dim">
+                    {fmtBogenpreis(paper.preisPro1000)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grundpreise & Faktoren */}
+      {fieldGroups.length > 0 && activeTab !== 'papier' && activeTab !== 'wv' && (
+        <div className="mt-[18px]">
+          <p className="mb-3.5 text-[12.5px] text-dim">
+            Wirken sofort auf die Kalkulation; Standardwerte stehen in der Repo-Config.
+          </p>
+          <div className="grid items-start gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+            {fieldGroups.map((group) => (
+              <FieldCard key={group.title} title={group.title} fields={group.fields} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Verarbeitungspreis-Tabellen */}
+      {activeTab === 'wv' && (
+        <div className="mt-[18px]">
+          <div className="mb-3.5 flex flex-wrap gap-1.5">
+            {wvTableKeys.map((key) => (
+              <Chip
+                key={key}
+                label={wvTableLabels[key] ?? key}
+                active={key === effectiveWvKey}
+                onClick={() => setWvTableKey(key)}
+              />
+            ))}
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+            <div className="border-b border-line p-[16px_20px_13px]">
+              <div className="text-sm font-semibold text-ink">
+                {wvTableLabels[effectiveWvKey] ?? effectiveWvKey}
+              </div>
+              <div className="mt-[3px] text-[12.5px] text-dim">
+                Zeile = Bogenteile · Spalte = Auflagenstaffel · zwischen Staffeln linear interpoliert
+              </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-gray-500">
-                    <th className="px-2 py-2 text-left">BT \ Auflage</th>
-                    {wvCols.map((col) => (
-                      <th key={col} className="px-1 py-2 text-right">
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {wvRows.map((row) => (
-                    <tr key={row} className="border-t border-slate-100 dark:border-gray-800">
-                      <td className="px-2 py-1 font-semibold text-slate-700 dark:text-gray-300">{row}</td>
-                      {wvCols.map((col) => {
-                        const value = wvTable[row][col];
-                        return (
-                          <td key={col} className="px-1 py-1 text-right">
-                            {value !== undefined ? (
-                              <NumberField
-                                value={value}
-                                step={0.1}
-                                min={0.001}
-                                className="w-[4.5rem] px-1 text-right"
-                                onCommit={(nextValue) =>
-                                  updateConfig((next) => {
-                                    next.wvTabellen[effectiveWvKey][row][col] = nextValue;
-                                  })
-                                }
-                              />
-                            ) : (
-                              <span className="pr-2 text-slate-300 dark:text-gray-700">—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div
+                className="grid gap-1.5 border-b border-line bg-surface2 px-5 py-2"
+                style={{ gridTemplateColumns: wvGrid }}
+              >
+                <span className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-faint">
+                  BT \ Auflage
+                </span>
+                {wvCols.map((col) => (
+                  <span
+                    key={col}
+                    className="text-right text-[11.5px] font-bold tabular-nums text-faint"
+                  >
+                    {col}
+                  </span>
+                ))}
+              </div>
+              {wvRows.map((row) => (
+                <div
+                  key={row}
+                  className="grid items-center gap-1.5 border-b border-line px-5 py-[5px]"
+                  style={{ gridTemplateColumns: wvGrid }}
+                >
+                  <span className="text-[13px] font-semibold tabular-nums text-ink">{row}</span>
+                  {wvCols.map((col) => {
+                    const value = wvTable[row][col];
+                    return value !== undefined ? (
+                      <NumberField
+                        key={col}
+                        value={value}
+                        step={0.5}
+                        min={0.001}
+                        className="h-[30px] w-full rounded-[7px] border-line px-[7px] text-right text-[12.5px]"
+                        onCommit={(nextValue) =>
+                          updateConfig((next) => {
+                            next.wvTabellen[effectiveWvKey][row][col] = nextValue;
+                          })
+                        }
+                      />
+                    ) : (
+                      <span key={col} className="text-right text-[12.5px] text-faint">
+                        —
+                      </span>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
-            <p className="mt-3 text-xs text-slate-400 dark:text-gray-500">
-              Strukturänderungen (neue Staffeln/Zeilen) über den JSON-Import der Gesamt-Config.
-            </p>
+
+            <div className="p-[12px_20px] text-[11.5px] text-faint">
+              Strukturänderungen (neue Staffeln oder Zeilen) über den JSON-Import der Gesamt-Config.
+            </div>
           </div>
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,12 @@
 # RST-Rechner — Kompletter Export der Berechnungslogik (Rückstichheftung)
 
-> **Version 2.1.0 · Stand 2026-07-06.** Ersetzt den Export vom 2026-07-05.
-> Umgesetzt: Update-Spec Rev. 2 vom 06.07.2026 (GC Horizon, DIN A6, berechnete Seitenlimits,
-> GC-Umschlag-Zuschlag, Cello-Banner-Faktor, zentrale versionierte Config).
+> **Version 2.2.0 · Stand 2026-07-30.** Ersetzt den Export vom 2026-07-06.
+> Umgesetzt: V3-Preisupdate lt. Mail Guido vom 30.07.2026 (`RST GC-AR-V3.xlsx`,
+> `Preise gc.xlsx`): neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle,
+> Banner-Natur jetzt N_80_BAN/N_120_BAN (N_100_BAN nicht lieferbar), R_300 nicht mehr
+> als A5-Hoch-Umschlag (Breitbahn). Außerdem seit 2.1.1: ILDA maximal 500 Exemplare.
+> Seitenlimits weiterhin per Dickenformel, Familienregel unverändert (Entscheidung
+> Armin 30.07. — die Matrizen der V3-Datei werden nicht übernommen).
 >
 > **Single Source of Truth:** `src/data/pricingConfig.default.json` — alle Zahlen dieses Dokuments
 > stammen maschinell aus dieser Datei. Engine: `src/utils/calculateRSTPrice.js` (enthält keine Preisliterale mehr).
@@ -16,7 +20,7 @@
 |---|---|---|---|---|---|
 | GC (Horizon) | Eigenproduktion | 3 WT | 2 WT | A6_Hoch, A5_Hoch, A5_Quer, A4_Hoch | 1–500 |
 | Partner Kopp | Fremdvergabe | 3 WT | 2 WT | A6_Hoch, A5_Hoch, A5_Quer, A4_Hoch | 10+ |
-| Partner ILDA | Fremdvergabe | 4 WT | 3 WT | A5_Hoch, A5_Quer, A4_Hoch, A4_Quer, 30x30 | — (lt. Tabelle) |
+| Partner ILDA | Fremdvergabe | 4 WT | 3 WT | A5_Hoch, A5_Quer, A4_Hoch, A4_Quer, 30x30 | ab 100 (Standard) / ab 10 (Banner), **max. 500** |
 
 **Express-Zuschlag:** +10 % auf die Gesamtsumme (alle Routen).
 Die frühere Route „Intern (Inline auf KM)" heißt jetzt **GC (Horizon)** mit neuer Preistabelle und Auflagen bis 500.
@@ -64,59 +68,63 @@ Gepflegt wird der **Preis pro 1000 Bogen**; der Bogenpreis wird daraus berechnet
 
 | ID | Name | Familie | g/m² | Dicke (µm) | Preis/1000 Bogen € | Hinweis |
 |---|---|---|---|---|---|---|
-| N_80 | 80g Natur | N | 80 | 107 | 24 |  |
-| N_90 | 90g Natur | N | 90 | 119 | 27 |  |
-| N_100 | 100g Natur | N | 100 | 131 | 36 |  |
-| N_120 | 120g Natur | N | 120 | 173 | 44 |  |
-| N_160 | 160g Natur | N | 160 | 202 | 70 |  |
-| N_200 | 200g Natur | N | 200 | 252 | 82 |  |
+| N_80 | 80g Natur | N | 80 | 107 | 30 |  |
+| N_90 | 90g Natur | N | 90 | 119 | 33,7 |  |
+| N_100 | 100g Natur | N | 100 | 131 | 37,8 |  |
+| N_120 | 120g Natur | N | 120 | 173 | 45,4 |  |
+| N_160 | 160g Natur | N | 160 | 202 | 65,1 |  |
+| N_200 | 200g Natur | N | 200 | 252 | 81,4 |  |
 | N_250 | 250g Natur | N | 250 | 315 | 102 |  |
 | N_300 | 300g Natur | N | 300 | 378 | 122 |  |
-| BD_115 | 115g Bilderdruck | BD | 115 | 96 | 33 |  |
-| BD_135 | 135g Bilderdruck | BD | 135 | 117 | 40 |  |
-| BD_150 | 150g Bilderdruck | BD | 150 | 132 | 48 |  |
-| BD_170 | 170g Bilderdruck | BD | 170 | 159 | 56 |  |
-| BD_200 | 200g Bilderdruck | BD | 200 | 182 | 64 |  |
-| BD_250 | 250g Bilderdruck | BD | 250 | 231 | 84 |  |
-| BD_300 | 300g Bilderdruck | BD | 300 | 290 | 102 |  |
-| BD_350 | 350g Bilderdruck | BD | 350 | 350 | 128 |  |
-| CC_100 | 100g ColorCopy | CC | 100 | 106 | 35 |  |
-| CC_120 | 120g ColorCopy | CC | 120 | 126 | 42 |  |
-| CC_160 | 160g ColorCopy | CC | 160 | 166 | 59 |  |
-| CC_200 | 200g ColorCopy | CC | 200 | 200 | 72 |  |
-| CC_250 | 250g ColorCopy | CC | 250 | 245 | 90 |  |
-| CC_300 | 300g ColorCopy | CC | 300 | 305 | 120 |  |
-| CC_350 | 350g ColorCopy | CC | 350 | 350 | 150 |  |
+| BD_115 | 115g Bilderdruck | BD | 115 | 96 | 37,7 |  |
+| BD_135 | 135g Bilderdruck | BD | 135 | 117 | 44,3 |  |
+| BD_150 | 150g Bilderdruck | BD | 150 | 132 | 49,2 |  |
+| BD_170 | 170g Bilderdruck | BD | 170 | 159 | 55,8 |  |
+| BD_200 | 200g Bilderdruck | BD | 200 | 182 | 65,6 |  |
+| BD_250 | 250g Bilderdruck | BD | 250 | 231 | 83 |  |
+| BD_300 | 300g Bilderdruck | BD | 300 | 290 | 99,6 |  |
+| BD_350 | 350g Bilderdruck | BD | 350 | 350 | 118 |  |
+| CC_100 | 100g ColorCopy | CC | 100 | 106 | 43 |  |
+| CC_120 | 120g ColorCopy | CC | 120 | 126 | 53,1 |  |
+| CC_160 | 160g ColorCopy | CC | 160 | 166 | 70,8 |  |
+| CC_200 | 200g ColorCopy | CC | 200 | 200 | 89,3 |  |
+| CC_250 | 250g ColorCopy | CC | 250 | 245 | 111,6 |  |
+| CC_300 | 300g ColorCopy | CC | 300 | 305 | 138,7 |  |
+| CC_350 | 350g ColorCopy | CC | 350 | 350 | 161,8 |  |
 | R_80 | 80g Recycling | R | 80 | 104 | 35 |  |
-| R_90 | 90g Recycling | R | 90 | 116 | 40 | **[PLATZHALTER]** |
-| R_100 | 100g Recycling | R | 100 | 127 | 45 |  |
-| R_300 | 300g Recycling | R | 300 | 380 | 135 |  |
-| CC_120_BAN | 120g ColorCopy BANNER | CC | 120 | 126 | 75 |  |
-| CC_160_BAN | 160g ColorCopy BANNER | CC | 160 | 166 | 100 |  |
-| CC_250_BAN | 250g ColorCopy BANNER | CC | 250 | 245 | 155 |  |
-| CC_300_BAN | 300g ColorCopy BANNER | CC | 300 | 305 | 185 |  |
+| R_90 | 90g Recycling | R | 90 | 116 | 41,2 |  |
+| R_100 | 100g Recycling | R | 100 | 127 | 45,8 |  |
+| R_300 | 300g Recycling | R | 300 | 380 | 145,4 |  |
+| CC_120_BAN | 120g ColorCopy BANNER | CC | 120 | 126 | 81 |  |
+| CC_160_BAN | 160g ColorCopy BANNER | CC | 160 | 166 | 107 |  |
+| CC_250_BAN | 250g ColorCopy BANNER | CC | 250 | 245 | 169 |  |
+| CC_300_BAN | 300g ColorCopy BANNER | CC | 300 | 305 | 210 |  |
 | BD_135_BAN | 135g Bilderdruck BANNER | BD | 135 | 117 | 70 |  |
 | BD_170_BAN | 170g Bilderdruck BANNER | BD | 170 | 159 | 85 |  |
 | BD_200_BAN | 200g Bilderdruck BANNER | BD | 200 | 182 | 100 |  |
 | BD_250_BAN | 250g Bilderdruck BANNER | BD | 250 | 231 | 125 |  |
 | BD_300_BAN | 300g Bilderdruck BANNER | BD | 300 | 290 | 150 |  |
-| N_100_BAN | 100g Natur BANNER | N | 100 | 131 | 90 | **[PLATZHALTER]** |
-| N_250_BAN | 250g Natur BANNER | N | 250 | 315 | 150 |  |
-| N_300_BAN | 300g Natur BANNER | N | 300 | 378 | 200 |  |
+| N_80_BAN | 80g Natur BANNER | N | 80 | 107 | 60 |  |
+| N_120_BAN | 120g Natur BANNER | N | 120 | 173 | 90 |  |
+| N_250_BAN | 250g Natur BANNER | N | 250 | 315 | 170 |  |
+| N_300_BAN | 300g Natur BANNER | N | 300 | 378 | 210 |  |
 
-**[PLATZHALTER]**: R_90 (Preis fehlt im PAPIER-Blatt) und N_100_BAN (Namens-/Preisklärung „80g vs. 100g Natur BANNER") — mit Guido zu klären; im UI markiert.
+Alle Preise: Stand **07/2026** (Guido, 30.07.2026). Keine Platzhalter mehr — R_90 ist final bepreist, N_100_BAN entfällt (nicht lieferbar) zugunsten von N_80_BAN und N_120_BAN.
 
 ### 4.1 Zulässige Papiere (formatabhängig)
 
 | Formatgruppe | Inhalt | Umschlag |
 |---|---|---|
 | A4_Hoch, A5_Quer, A6_Hoch | CC_100, CC_120, CC_160, N_80, N_90, N_100, N_120, BD_115, BD_135, BD_150, BD_170, R_80, R_100 | CC_160, CC_200, CC_250, CC_300, CC_350, N_160, N_200, N_250, N_300, BD_170, BD_200, BD_250, BD_300, BD_350, R_300 |
-| A5_Hoch | CC_100, CC_120, CC_160, N_80, N_90, N_120, BD_115, BD_135, BD_150, BD_170, R_90 | CC_160, CC_250, N_160, N_250, BD_170, BD_200, BD_250, BD_300, BD_350, R_300 |
-| A4_Quer, 30x30 | CC_120_BAN, CC_160_BAN, N_100_BAN, BD_135_BAN | CC_160_BAN, CC_250_BAN, CC_300_BAN, N_250_BAN, N_300_BAN, BD_170_BAN, BD_200_BAN, BD_250_BAN, BD_300_BAN |
+| A5_Hoch | CC_100, CC_120, CC_160, N_80, N_90, N_120, BD_115, BD_135, BD_150, BD_170, R_90 | CC_160, CC_250, N_160, N_250, BD_170, BD_200, BD_250, BD_300, BD_350 |
+| A4_Quer, 30x30 | CC_120_BAN, CC_160_BAN, N_80_BAN, N_120_BAN, BD_135_BAN | CC_160_BAN, CC_250_BAN, CC_300_BAN, N_250_BAN, N_300_BAN, BD_170_BAN, BD_200_BAN, BD_250_BAN, BD_300_BAN |
 
 - **N_160 ist als Inhaltspapier entfernt** (bleibt Umschlag).
 - **Familienregel (bestätigt):** Umschlag muss aus derselben Papierfamilie stammen wie der Inhalt — CC↔CC, N↔N, BD↔BD, R↔R. R-Inhalte nur mit R_300-Umschlag; R_300 nicht für N-Inhalte.
 - BD-170-Inhalt ist mit allen BD-Umschlägen (BD_170–BD_350) kombinierbar (Freigabe Armin/Guido).
+- **Neu (30.07.):** R_300 ist nur als Breitbahn lieferbar und damit für A5 Hoch nicht
+  einsetzbar → bei A5 Hoch gibt es keinen Recycling-Umschlag mehr; R_90-Inhalt ist dort
+  nur ohne Umschlag bestellbar.
 
 ## 5. Berechnungsformeln
 
@@ -194,21 +202,21 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 
 ## 6. Verarbeitungspreis-Tabellen (€ pro Auftrag)
 
-### 6.1 GC (Horizon) — NEU (Data_GC, Stand 29.03.2026), Auflagen 1–500
+### 6.1 GC (Horizon) — V3 (Data_GC, Stand 30.07.2026), Auflagen 1–500
 
 | Bogenteile \ Auflage | 1 | 2 | 3 | 4 | 5 | 10 | 20 | 50 | 100 | 200 | 300 | 400 | 500 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2 | 5 | 7 | 9 | 11 | 13 | 15 | 20 | 25 | 30 | 31,8 | 33,6 | 35,4 | 37,2 |
-| 3 | 5 | 7,5 | 10 | 12,5 | 15 | 17,5 | 23 | 29 | 35 | 37,7 | 40,4 | 43,1 | 45,8 |
-| 4 | 5 | 8 | 11 | 14 | 17 | 20 | 26 | 33 | 40 | 43,6 | 47,2 | 50,8 | 54,4 |
-| 5 | 5 | 8,4 | 11,8 | 15,2 | 18,6 | 22 | 27,5 | 37 | 45 | 49,5 | 54 | 58,5 | 63 |
-| 6 | 10 | 13,2 | 16,4 | 19,6 | 22,8 | 26 | 35 | 41,5 | 50 | 55,4 | 60,8 | 66,2 | 71,6 |
-| 7 | 10 | 14 | 18 | 22 | 26 | 30 | 40 | 50 | 60 | 66,3 | 72,6 | 78,9 | 85,2 |
-| 8 | 10 | 14,6 | 19,2 | 23,8 | 28,4 | 33 | 43,5 | 54 | 65 | 72,2 | 79,4 | 86,6 | 93,8 |
-| 9 | 15 | 18,9 | 22,8 | 26,7 | 30,6 | 34,5 | 46 | 58 | 70 | 78,1 | 86,2 | 94,3 | 102,4 |
-| 10 | 15 | 19,5 | 24 | 28,5 | 33 | 37,5 | 50 | 62 | 75 | 84 | 93 | 102 | 111 |
-| 11 | 20 | 24 | 28 | 32 | 36 | 40 | 53 | 66 | 80 | 89,9 | 99,8 | 109,7 | 119,6 |
-| 12 | 20 | 24,4 | 28,8 | 33,2 | 37,6 | 42 | 56 | 70 | 85 | 95,8 | 106,6 | 117,4 | 128,2 |
+| 2 | 5 | 7 | 9 | 11 | 13 | 15 | 20 | 25 | 31,5 | 34,5 | 37,5 | 40,5 | 43,5 |
+| 3 | 5 | 8 | 11 | 14 | 16,5 | 19 | 25 | 30 | 38 | 42 | 46 | 50 | 54 |
+| 4 | 5 | 9 | 13 | 16 | 20 | 23 | 29 | 35 | 44,5 | 49,5 | 54,5 | 59,5 | 64,5 |
+| 5 | 5 | 9 | 13 | 17 | 21 | 25 | 33 | 40 | 51 | 57 | 63 | 69 | 75 |
+| 6 | 10 | 14 | 17 | 21 | 25 | 28 | 37,5 | 50 | 57,5 | 64,5 | 71,5 | 78,5 | 85,5 |
+| 7 | 10 | 15 | 21 | 26 | 32 | 37 | 48 | 60 | 74 | 82 | 90 | 98 | 106 |
+| 8 | 10 | 16 | 22 | 28 | 34 | 40 | 52 | 65 | 80,5 | 89,5 | 98,5 | 107,5 | 116,5 |
+| 9 | 15 | 20 | 26 | 31 | 37 | 43 | 56 | 70 | 87 | 97 | 107 | 117 | 127 |
+| 10 | 15 | 21,5 | 28 | 34 | 40 | 47 | 60 | 75 | 93,5 | 104,5 | 115,5 | 126,5 | 137,5 |
+| 11 | 20 | 26 | 32 | 38 | 44 | 50 | 65 | 80 | 100 | 112 | 124 | 136 | 148 |
+| 12 | 20 | 27 | 33 | 39 | 45 | 53 | 70 | 85 | 106,5 | 119,5 | 132,5 | 145,5 | 158,5 |
 
 ### 6.2 Partner Kopp (unverändert)
 
@@ -330,8 +338,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 261.43,
-      "stueckPreis": 2.6143,
+      "gesamt": 279.08,
+      "stueckPreis": 2.7908,
       "nutzen": 1,
       "maxSeiten": 44,
       "nettoBogenInhalt": 600,
@@ -339,9 +347,9 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 6,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 38.4,
+      "kostenPapierGesamt": 48.55,
       "kostenKlickGesamt": 158.03,
-      "wvKosten": 50,
+      "wvKosten": 57.5,
       "umschlagZuschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
@@ -353,8 +361,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 332.43,
-      "stueckPreis": 3.3243,
+      "gesamt": 342.58,
+      "stueckPreis": 3.4258,
       "nutzen": 1,
       "maxSeiten": 76,
       "nettoBogenInhalt": 600,
@@ -362,7 +370,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 6,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 38.4,
+      "kostenPapierGesamt": 48.55,
       "kostenKlickGesamt": 158.03,
       "wvKosten": 121,
       "umschlagZuschlag": 0,
@@ -376,8 +384,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     },
     {
       "name": "Partner ILDA",
-      "gesamt": 328.83,
-      "stueckPreis": 3.2883,
+      "gesamt": 338.98,
+      "stueckPreis": 3.3898,
       "nutzen": 1,
       "maxSeiten": 76,
       "nettoBogenInhalt": 600,
@@ -385,7 +393,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 6,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 38.4,
+      "kostenPapierGesamt": 48.55,
       "kostenKlickGesamt": 158.03,
       "wvKosten": 117.4,
       "umschlagZuschlag": 0,
@@ -401,11 +409,11 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 }
 ```
 
-### A4 Hoch, 300 Ex., 32 Seiten, 4/4, CC 120 + Umschlag CC 300, Cello matt, Standard (GC jetzt bis 500 möglich, inkl. Umschlag-Zuschlag)
+### A4 Hoch, 300 Ex., 32 Seiten, 4/4, CC 120 + Umschlag CC 300, Cello matt, Standard (inkl. Umschlag-Zuschlag)
 
 ```json
 {
-  "label": "A4 Hoch, 300 Ex., 32 Seiten, 4/4, CC 120 + Umschlag CC 300, Cello matt, Standard (GC jetzt bis 500 möglich, inkl. Umschlag-Zuschlag)",
+  "label": "A4 Hoch, 300 Ex., 32 Seiten, 4/4, CC 120 + Umschlag CC 300, Cello matt, Standard (inkl. Umschlag-Zuschlag)",
   "inputs": {
     "formatKey": "A4_Hoch",
     "auflage": "300",
@@ -422,8 +430,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 1088.24,
-      "stueckPreis": 3.6275,
+      "gesamt": 1156.8,
+      "stueckPreis": 3.856,
       "nutzen": 1,
       "maxSeiten": 36,
       "nettoBogenInhalt": 2400,
@@ -431,9 +439,9 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 307,
       "makulaturInhalt": 5,
       "makulaturUmschlag": 7,
-      "kostenPapierGesamt": 204.01,
+      "kostenPapierGesamt": 251.77,
       "kostenKlickGesamt": 681.63,
-      "wvKosten": 86.2,
+      "wvKosten": 107,
       "umschlagZuschlag": 20,
       "celloKosten": 81.4,
       "celloStueckpreis": 0.2,
@@ -445,8 +453,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 1173.04,
-      "stueckPreis": 3.9101,
+      "gesamt": 1220.8,
+      "stueckPreis": 4.0693,
       "nutzen": 1,
       "maxSeiten": 68,
       "nettoBogenInhalt": 2400,
@@ -454,7 +462,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 307,
       "makulaturInhalt": 5,
       "makulaturUmschlag": 7,
-      "kostenPapierGesamt": 204.01,
+      "kostenPapierGesamt": 251.77,
       "kostenKlickGesamt": 681.63,
       "wvKosten": 191,
       "umschlagZuschlag": 0,
@@ -468,8 +476,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     },
     {
       "name": "Partner ILDA",
-      "gesamt": 1201.04,
-      "stueckPreis": 4.0035,
+      "gesamt": 1248.8,
+      "stueckPreis": 4.1627,
       "nutzen": 1,
       "maxSeiten": 68,
       "nettoBogenInhalt": 2400,
@@ -477,7 +485,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 307,
       "makulaturInhalt": 5,
       "makulaturUmschlag": 7,
-      "kostenPapierGesamt": 204.01,
+      "kostenPapierGesamt": 251.77,
       "kostenKlickGesamt": 681.63,
       "wvKosten": 219,
       "umschlagZuschlag": 0,
@@ -493,11 +501,11 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 }
 ```
 
-### A6 Hoch (NEU), 100 Ex., 24 Seiten, 4/4, CC 120, ohne Umschlag, Standard
+### A6 Hoch, 100 Ex., 24 Seiten, 4/4, CC 120, ohne Umschlag, Standard
 
 ```json
 {
-  "label": "A6 Hoch (NEU), 100 Ex., 24 Seiten, 4/4, CC 120, ohne Umschlag, Standard",
+  "label": "A6 Hoch, 100 Ex., 24 Seiten, 4/4, CC 120, ohne Umschlag, Standard",
   "inputs": {
     "formatKey": "A6_Hoch",
     "auflage": "100",
@@ -514,8 +522,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 121.47,
-      "stueckPreis": 1.2147,
+      "gesamt": 131.73,
+      "stueckPreis": 1.3173,
       "nutzen": 4,
       "maxSeiten": 44,
       "nettoBogenInhalt": 150,
@@ -523,9 +531,9 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 8,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 10.45,
+      "kostenPapierGesamt": 13.22,
       "kostenKlickGesamt": 46.02,
-      "wvKosten": 50,
+      "wvKosten": 57.5,
       "umschlagZuschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
@@ -537,8 +545,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 192.47,
-      "stueckPreis": 1.9247,
+      "gesamt": 195.23,
+      "stueckPreis": 1.9523,
       "nutzen": 4,
       "maxSeiten": 76,
       "nettoBogenInhalt": 150,
@@ -546,7 +554,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 8,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 10.45,
+      "kostenPapierGesamt": 13.22,
       "kostenKlickGesamt": 46.02,
       "wvKosten": 121,
       "umschlagZuschlag": 0,
@@ -566,11 +574,11 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 }
 ```
 
-### A5 Hoch, 50 Ex., 16 Seiten, 1/1, N 90, ohne Umschlag, Express (kein SRA4-Sonderfall mehr)
+### A5 Hoch, 50 Ex., 16 Seiten, 1/1, N 90, ohne Umschlag, Express
 
 ```json
 {
-  "label": "A5 Hoch, 50 Ex., 16 Seiten, 1/1, N 90, ohne Umschlag, Express (kein SRA4-Sonderfall mehr)",
+  "label": "A5 Hoch, 50 Ex., 16 Seiten, 1/1, N 90, ohne Umschlag, Express",
   "inputs": {
     "formatKey": "A5_Hoch",
     "auflage": "50",
@@ -587,8 +595,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 70.58,
-      "stueckPreis": 1.4116,
+      "gesamt": 74.07,
+      "stueckPreis": 1.4813,
       "nutzen": 2,
       "maxSeiten": 48,
       "nettoBogenInhalt": 100,
@@ -596,22 +604,22 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 9,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 4.7,
+      "kostenPapierGesamt": 5.87,
       "kostenKlickGesamt": 11.46,
-      "wvKosten": 33,
+      "wvKosten": 35,
       "umschlagZuschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
-      "expressSurcharge": 6.42,
+      "expressSurcharge": 6.73,
       "weightPerCopyG": 22.4,
       "weightTotalKg": 1.12,
       "produktionszeitWT": 2
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 142.08,
-      "stueckPreis": 2.8416,
+      "gesamt": 143.37,
+      "stueckPreis": 2.8673,
       "nutzen": 2,
       "maxSeiten": 84,
       "nettoBogenInhalt": 100,
@@ -619,14 +627,14 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 9,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 4.7,
+      "kostenPapierGesamt": 5.87,
       "kostenKlickGesamt": 11.46,
       "wvKosten": 98,
       "umschlagZuschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
-      "expressSurcharge": 12.92,
+      "expressSurcharge": 13.03,
       "weightPerCopyG": 22.4,
       "weightTotalKg": 1.12,
       "produktionszeitWT": 2
@@ -668,8 +676,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     },
     {
       "name": "Partner ILDA",
-      "gesamt": 730.76,
-      "stueckPreis": 4.8717,
+      "gesamt": 741.05,
+      "stueckPreis": 4.9403,
       "nutzen": 1,
       "maxSeiten": 68,
       "nettoBogenInhalt": 750,
@@ -677,7 +685,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 158,
       "makulaturInhalt": 6,
       "makulaturUmschlag": 8,
-      "kostenPapierGesamt": 123.6,
+      "kostenPapierGesamt": 133.89,
       "kostenKlickGesamt": 362.16,
       "wvKosten": 162.6,
       "umschlagZuschlag": 0,
@@ -714,8 +722,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 22.75,
-      "stueckPreis": 22.7526,
+      "gesamt": 22.92,
+      "stueckPreis": 22.9185,
       "nutzen": 1,
       "maxSeiten": 56,
       "nettoBogenInhalt": 5,
@@ -723,7 +731,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "bogenUmschlag": 0,
       "makulaturInhalt": 10,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 0.66,
+      "kostenPapierGesamt": 0.83,
       "kostenKlickGesamt": 2.09,
       "wvKosten": 5,
       "umschlagZuschlag": 0,
@@ -749,4 +757,4 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 
 ---
 
-*Generiert am 2026-07-06 direkt aus `pricingConfig.default.json` (Version 2.1.0) und der produktiven Engine.*
+*Generiert am 2026-07-30 direkt aus `pricingConfig.default.json` (Version 2.2.0) und der produktiven Engine.*

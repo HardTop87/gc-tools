@@ -61,9 +61,10 @@ describe('Seitenlimits aus Blattdicken (Spec 4.1)', () => {
 });
 
 describe('GC (Horizon)', () => {
-  it('interpoliert die neue Data_GC-Tabelle linear (BT6, 150 Ex. → 52,70 €)', () => {
+  it('interpoliert die Data_GC-Tabelle (V3) linear (BT6, 150 Ex. → 61,00 €)', () => {
+    // V3-Werte BT6: 100 Ex. = 57,50 | 200 Ex. = 64,50 → bei 150: (64,5−57,5)/100×50+57,5
     const calc = calculateRSTPrice(baseForm({ auflage: '150' }), config);
-    expect(routeResult(calc, 'gc_horizon').wvKosten).toBeCloseTo(52.7, 10);
+    expect(routeResult(calc, 'gc_horizon').wvKosten).toBeCloseTo(61.0, 10);
   });
 
   it('erlaubt Auflagen bis 500 und lehnt darüber ab', () => {
@@ -159,8 +160,8 @@ describe('A5_Hoch bei GC: kein SRA4-Sonderfall mehr', () => {
     // effektiver Klickpreis pro Klick = (0,04 + 0 Gewichtszuschlag) × dbDruck — ohne 0,7
     const effektiverKlick = gc.kostenKlickInhalt / (gc.bogenInhalt * 2);
     expect(effektiverKlick).toBeCloseTo(0.04 * gc.dbDruckInhalt, 10);
-    // Papier zum vollen SRA3-Bogenpreis (kein halber Preis mehr)
-    expect(gc.kostenPapierInhalt).toBeCloseTo(gc.bogenInhalt * 0.035 * gc.dbPapierInhalt, 10);
+    // Papier zum vollen SRA3-Bogenpreis (kein halber Preis mehr); CC_100 = 43 €/1000 (V3)
+    expect(gc.kostenPapierInhalt).toBeCloseTo(gc.bogenInhalt * 0.043 * gc.dbPapierInhalt, 10);
   });
 });
 
@@ -216,6 +217,45 @@ describe('Papierregeln', () => {
     );
     expect(routeResult(calc, 'kopp').error).toBeNull();
   });
+
+  it('V3: R_300 ist bei A5 Hoch kein Umschlag mehr (Breitbahn) → Recycling dort nur ohne Umschlag', () => {
+    const a5h = config.formate.find((f) => f.key === 'A5_Hoch');
+    expect(a5h.papiereUmschlag).not.toContain('R_300');
+    // R_90-Inhalt ohne Umschlag bleibt möglich
+    const ohne = calculateRSTPrice(
+      baseForm({ formatKey: 'A5_Hoch', pInhaltId: 'R_90', seiten: '16', auflage: '50', hasUmschlag: false }),
+      config,
+    );
+    expect(routeResult(ohne, 'gc_horizon').error).toBeNull();
+    // mit R_300-Umschlag lehnt die Engine ab (nicht in der A5H-Umschlagliste)
+    const mit = calculateRSTPrice(
+      baseForm({ formatKey: 'A5_Hoch', pInhaltId: 'R_90', seiten: '16', auflage: '50', hasUmschlag: true, pUmschlagId: 'R_300' }),
+      config,
+    );
+    for (const result of mit.results) {
+      expect(result.error).toContain('nicht zulässig');
+    }
+  });
+
+  it('V3: Banner-Natur neu — N_80_BAN/N_120_BAN statt N_100_BAN', () => {
+    expect(config.papiere.some((p) => p.id === 'N_100_BAN')).toBe(false);
+    const banner = config.formate.find((f) => f.key === 'A4_Quer');
+    expect(banner.papiereInhalt).toContain('N_80_BAN');
+    expect(banner.papiereInhalt).toContain('N_120_BAN');
+    const calc = calculateRSTPrice(
+      baseForm({ formatKey: 'A4_Quer', pInhaltId: 'N_120_BAN', seiten: '16', auflage: '100', hasUmschlag: false }),
+      config,
+    );
+    expect(routeResult(calc, 'ilda').error).toBeNull();
+  });
+
+  it('V3: Papierpreise 07/2026 sind aktiv, kein Platzhalter mehr', () => {
+    const preis = (id) => config.papiere.find((p) => p.id === id).preisPro1000;
+    expect(preis('CC_120')).toBe(53.1);
+    expect(preis('R_90')).toBe(41.2);
+    expect(config.papiere.find((p) => p.id === 'R_90').isPlaceholder).toBe(false);
+    expect(config.papiere.some((p) => p.isPlaceholder)).toBe(false);
+  });
 });
 
 describe('Express & Empfehlung', () => {
@@ -258,14 +298,23 @@ describe('Express & Empfehlung', () => {
     });
     expect(validatePricingConfig(custom).ok).toBe(true);
 
-    // Auflage 501: GC scheidet aus (max 500); Partner Test ist klar am günstigsten
+    // Auflage 501: GC und ILDA scheiden aus (beide max 500); Partner Test ist klar am günstigsten
     const calc = calculateRSTPrice(baseForm({ auflage: '501' }), custom);
     expect(routeResult(calc, 'gc_horizon').error).toContain('maximal 500');
+    expect(routeResult(calc, 'ilda').error).toContain('maximal 500');
     const test = routeResult(calc, 'test');
     const kopp = routeResult(calc, 'kopp');
-    const ilda = routeResult(calc, 'ilda');
-    expect(test.gesamt).toBeLessThan(Math.min(kopp.gesamt, ilda.gesamt) - 30);
+    expect(test.gesamt).toBeLessThan(kopp.gesamt - 30);
     expect(calc.recommendedName).toBe('Partner Test');
+  });
+
+  it('ILDA endet bei 500 Exemplaren (Guido, 08.07.2026) — darüber übernimmt Kopp', () => {
+    const bei500 = calculateRSTPrice(baseForm({ auflage: '500', seiten: '52', pInhaltId: 'CC_100' }), config);
+    expect(routeResult(bei500, 'ilda').error).toBeNull();
+
+    const bei501 = calculateRSTPrice(baseForm({ auflage: '501', seiten: '52', pInhaltId: 'CC_100' }), config);
+    expect(routeResult(bei501, 'ilda').error).toContain('maximal 500');
+    expect(bei501.recommendedName).toBe('Partner Kopp');
   });
 });
 

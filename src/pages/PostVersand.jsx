@@ -1,16 +1,22 @@
 import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import {
-    ArrowLeft, Download, UploadCloud, AlertTriangle,
-    Search, XCircle, FileText, Package, Truck, Zap,
+    Download, UploadCloud, AlertTriangle, RotateCcw,
+    Search, XCircle, Package, Truck, Zap,
     Database, CheckCircle, Clock, ListFilter,
     Unlink, CheckSquare, Info, ArrowUp, ChevronLeft, ChevronRight, Lock, Unlock
 } from 'lucide-react';
-import { ThemeToggle } from '../components/ThemeToggle';
+import { PageHeader, SecondaryButton } from '../components/PageHeader';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
 // --- KONFIGURATION ---
+const STEPS = [
+    { key: 'upload', label: 'Upload' },
+    { key: 'db-preview', label: 'Pre-Match' },
+    { key: 'preview', label: 'Vorschau' },
+    { key: 'final', label: 'CSV' },
+];
+
 const SENDER_ROW = "K.B.St.V. Rhaetia;Herold-Schriftleitung;Luisenstr.;27;80333;München;DEU;HOUSE";
 
 const INITIAL_WEIGHTS = { 
@@ -876,27 +882,14 @@ export default function PostVersandManager() {
         return results.preview.filter((r) => !r.excluded && !isNoShippingRecord(r)).length;
     }, [results]);
 
-    const backConfig = useMemo(() => {
-        switch (view) {
-            case 'db-preview':
-                return {
-                    label: 'ZURÜCK ZUM STEP UPLOAD',
-                    onClick: () => setView('upload'),
-                };
-            case 'preview':
-                return {
-                    label: 'ZURÜCK ZUM STEP CLEARING STATION',
-                    onClick: () => setView('db-preview'),
-                };
-            case 'final':
-                return {
-                    label: 'ZURÜCK ZUM STEP VORSCHAU',
-                    onClick: () => setView('preview'),
-                };
-            default:
-                return null;
-        }
-    }, [view]);
+    // Erreichbare Schritte der Tab-Leiste: erst freigeschaltet, wenn die
+    // jeweiligen Daten vorliegen.
+    const reachableViews = useMemo(() => {
+        const reachable = ['upload'];
+        if (preMatchResults) reachable.push('db-preview');
+        if (results) reachable.push('preview', 'final');
+        return reachable;
+    }, [preMatchResults, results]);
 
     const renderDbCard = (dbRow) => {
         const isPlzMatch = currentItemToMatch && formatPLZ(dbRow.PLZ || dbRow.plz, dbRow.LAND) === formatPLZ(currentItemToMatch.plz, currentItemToMatch.land);
@@ -998,52 +991,44 @@ export default function PostVersandManager() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-6 sm:px-6 lg:px-8 font-sans text-slate-900 dark:text-gray-100 text-xs">
-            <header className="max-w-7xl mx-auto mb-8 overflow-hidden rounded-[28px] border border-[#8e014d]/20 bg-[#8e014d] text-white shadow-[0_30px_80px_-30px_rgba(142,1,77,0.5)]">
-                <div className="px-6 py-6 sm:px-8 lg:px-10 lg:py-8">
-                    <div className="flex items-center justify-between mb-5">
-                        <div>
-                            {view === 'upload' ? (
-                                <Link
-                                    to="/"
-                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-                                >
-                                    <ArrowLeft size={16} /> Dashboard
-                                </Link>
-                            ) : (
-                                backConfig && (
-                                    <button
-                                        type="button"
-                                        onClick={backConfig.onClick}
-                                        className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-                                    >
-                                        <ArrowLeft size={16} /> {backConfig.label}
-                                    </button>
-                                )
-                            )}
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <ThemeToggle />
-                            {view !== 'upload' && (
-                                <button
-                                    onClick={() => { setView('upload'); setResults(null); setPreMatchResults(null); }}
-                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-                                >
-                                    Neustart
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/80 mb-3">
-                        <FileText size={12} />
-                        Internes Tool
-                    </div>
-                    <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Rhaetia Post-Manager</h1>
-                    <p className="mt-1 text-sm text-white/70">Versand-CSV für Rhaetia erstellen inkl. Porto-Berechnung.</p>
-                </div>
-            </header>
+        <div className="mx-auto max-w-[1560px] px-6 pb-16 pt-6 font-sans text-xs text-ink">
+            <PageHeader
+                title="Rhaetia Post-Manager"
+                context="Versand-CSV für Rhaetia erstellen inkl. Porto-Berechnung."
+            >
+                <SecondaryButton
+                    icon={RotateCcw}
+                    label="Reset"
+                    onClick={() => { setView('upload'); setResults(null); setPreMatchResults(null); }}
+                />
+            </PageHeader>
 
-            <main className="max-w-7xl mx-auto">
+            {/* Ablauf-Navigation: ersetzt die „Zurück“-Links aus dem alten Hero. */}
+            <div className="mt-3.5 flex gap-6 border-b border-line">
+                {STEPS.map((step) => {
+                    const isActive = view === step.key;
+                    const isReachable = step.key === 'upload' || reachableViews.includes(step.key);
+                    return (
+                        <button
+                            key={step.key}
+                            type="button"
+                            disabled={!isReachable}
+                            onClick={() => setView(step.key)}
+                            className={`pb-3 pt-2.5 text-[13.5px] font-semibold transition-colors ${
+                                isActive
+                                    ? 'text-ink shadow-[inset_0_-2px_0_var(--brand)]'
+                                    : isReachable
+                                        ? 'text-dim hover:text-ink'
+                                        : 'cursor-not-allowed text-faint opacity-50'
+                            }`}
+                        >
+                            {step.label}
+                        </button>
+                    );
+                })}
+            </div>
+
+            <main className="mt-[18px]">
                 {view === 'upload' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                         <div className="lg:col-span-2 space-y-8">

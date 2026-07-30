@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { TopBar } from './components/TopBar';
 import Dashboard from './pages/Dashboard';
 import RechnerRST from './pages/Rechner-RST';
 import Verwaltung from './pages/Verwaltung';
@@ -81,6 +82,14 @@ function Login({ onLogin }) {
   );
 }
 
+// Die TopBar trägt die gesamte Navigation — außer auf dem Login, das ohne
+// Navigation auskommt.
+function AppTopBar({ isAuthenticated }) {
+  const { pathname } = useLocation();
+  if (!isAuthenticated || pathname === '/login') return null;
+  return <TopBar />;
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -96,8 +105,9 @@ export default function App() {
 
   return (
     <ThemeProvider>
-    <div className="min-h-screen bg-gray-50/50 dark:bg-gray-950">
+    <div className="min-h-screen bg-bg">
       <BrowserRouter>
+        <AppTopBar isAuthenticated={isAuthenticated} />
         <Routes>
           <Route
             path="/login"

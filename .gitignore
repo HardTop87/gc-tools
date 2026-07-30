@@ -26,3 +26,15 @@ dist-ssr
 
 # Excel-Sperrdateien (entstehen beim Öffnen einer .xlsx)
 ~$*
+
+# Lokale Arbeitsdateien, die nicht ins Repo gehören:
+# Preis-/Mapping-Tabellen von Guido und Leadprint-Exporte (Binärdaten, teils groß).
+# Der verbindliche Stand liegt in src/data/pricingConfig.default.json bzw. im
+# geteilten Preisstand — die Tabellen sind nur Zulieferung.
+*.xlsx
+*.xls
+Leadprint_Export/
+
+# Design-Handoff-Bundle (Prototyp-HTML aus dem Design-Tool, kein Projektcode).
+# Der umgesetzte Stand ist der Code; die Referenz bleibt lokal.
+design_handoff_gc_tools_ui/

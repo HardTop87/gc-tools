@@ -51,11 +51,12 @@ die gibt er bewusst nur teilweise weiter. Umzusetzen ist **nur die Formelkurve**
 5. Gilt wie bisher für alle Routen gleich (Partnerpreise werden mit derselben
    Kostenstruktur kalkuliert); DB-Faktoren bleiben auf der Netto-Bogenzahl
 
-**Offene Frage an Guido (einzige):** Bei A5/A6 (Nutzen 2/4) — zählt für den
-Prozent-Lookup die Zahl der *Bogenteile* (sein Beispielbegriff) oder der *gedruckten
-SRA3-Bogen* (seine Tabellenüberschrift „Gesamtdruckbogen")? Bei A4 identisch. Empfehlung:
-**gedruckte Bogen** — Makulatur entsteht physisch am Druckbogen. Differenz ist klein
-(A5, 1.000 BT: 5,0 % vs. 5,66 %), aber sie soll bewusst entschieden sein.
+**Entschieden (Armin, 05.08.):** Basis sind die **gedruckten SRA3-Bogen** (Guidos
+Tabellenüberschrift „Gesamtdruckbogen"). Der Prozentsatz wird auf die gedruckten Bogen
+je Komponente angewandt; da Bogen proportional zu Exemplaren sind, skaliert die
+produzierte Exemplarzahl mit demselben Faktor — Guidos Beispiel (105 Umschläge aus
+100) bleibt exakt getroffen. Bei Guidos Rückkehr kurz mitbestätigen lassen (bei A4
+sind beide Lesarten identisch, sein Beispiel entscheidet es nicht allein).
 
 ### 1.3 Preisauswirkung (GC, A4 Hoch, CC 120, exakt durchgerechnet)
 
@@ -192,35 +193,45 @@ Aufschlag zur 8er-Basis geschrieben wird, entscheidet der Writer (Leadprint kann
   Eigene Zeile in der Vergleichstabelle (nur wenn > 0), damit der Aufschlag sichtbar
   bleibt statt still den Preis zu heben.
 
-### 4.2 Was die Kalibrierung ergeben hat (Basis für Guidos Tabelle)
+### 4.2 Kalibrierung über alle GC-Formate (Stand 05.08., zweiter Durchlauf)
 
-264 Kombinationen durchgerechnet (A4 Hoch, alle Inhaltspapiere mit 1,0–1,5 mm bei
-8–48 Seiten, Auflagen 100–500, ohne Umschlag). Kernbefunde:
+2.443 Kombinationen durchgerechnet: **alle vier GC-Formate** (A4 Hoch, A5 Hoch,
+A5 Quer, A6 Hoch), alle Inhaltspapiere, **ohne und mit Umschlag** (leichtestes Papier
+derselben Familie), Buchdicke 1,0–1,5 mm, Auflagen 50–500. Kernbefunde:
 
-1. **Der Abstand GC ↔ bester Partner ist in der Zielzone klein** (26–93 €) — ideale
-   Voraussetzung für einen weichen Übergang, kleine X reichen für spürbare Wirkung.
-2. Das X, ab dem die Empfehlung kippt (GC > Partner + 20 € Toleranz), streut je nach
-   Dicke/Auflage: dickste + größte Aufträge kippen ab X ≈ 0,75 €, mittlere brauchen 2–4 €.
-   Grob: **X = 1 →** nur die Extremfälle wandern (27 von 220), **X = 2 →** gut ein
-   Drittel, **X = 3 →** gut die Hälfte.
-3. **Es kippt ganz überwiegend zu Kopp**, wie von Guido gewünscht: bei X = 1 alle
-   27 gekippten Kombinationen, bei X = 2 sind es 75 von 83 (8 zu ILDA, +1 Werktag),
-   bei X = 3 dann 98 von 117. Die ILDA-Fälle stehen im Detailblatt — ob sie stören,
-   entscheidet Guido (sonst wäre `preferKoppDelta`, heute 30 €, der zweite Regler).
-4. **Robust gegen die Maku-Umstellung:** Papier- und Klickkosten sind bei
-   Standardformaten für GC und Partner identisch (gleicher Nutzen) — das neue Maku
-   verschiebt beide gleich, die *Differenz* und damit die Kalibrierung von X bleiben
-   gültig. Punkt 4 muss also nicht auf Punkt 2 warten, nur die Endkontrolle läuft nach
-   der Maku-Umstellung.
-5. **Zusammenhang Bug-Hunt D2:** Die 150–257-€-Sprünge im Shop sitzen an der
+1. **A4 Hoch, A5 Hoch und A5 Quer verhalten sich exakt gleich** (Streuung der
+   Kipp-Schwelle: 0,00 €). Grund: Papier- und Klickkosten sind je Format für GC und
+   Partner identisch (gleicher Nutzen) und kürzen sich aus der Differenz; übrig bleibt
+   die WV-Differenz, die nur an Bogenteilen × Auflage hängt. **Eine Kalibrierung gilt
+   für alle drei Formate.**
+2. **A6 ist der Sonderfall:** Dort ist der günstigste Partner ~80 € teurer (ILDA fehlt
+   bzw. ist teurer) — A6 kippt also später. Eigenes Blatt in der Tabelle.
+3. **Unter 100 Ex. existiert kein ILDA-Preis** (WV-Tabelle beginnt bei 100) — einziger
+   Partner dort ist Kopp.
+4. **Empfehlung: A0 = 50, X = 4,00 €.** Damit kippt die Kernzone (Dicke ≥ 1,15 mm,
+   Auflage ≥ 200) vollständig: A4/A5 100 %, A6 98 % (X = 3 → 97/94 %; X = 5 → 100/100 %).
+   A0 = 50 statt 100 ist entscheidend: Der Hebel `(Auflage − A0)` ist damit bei
+   100 Ex. schon 50 statt 0 — Aufträge *ab* 100 Ex. können überhaupt kippen, genau
+   Guidos Zielzone. Der Einstieg bleibt weich: 1,2 mm / 100 Ex. → +40 €,
+   1,2 mm / 200 Ex. → +120 € (kippt), 1,3 mm / 300 Ex. → +300 € (kippt deutlich).
+5. **Strukturelle Grenze der Formel:** Kombinationen mit Dicke knapp über 1,0 mm oder
+   Auflage nahe A0 haben einen winzigen Hebel und kippen bei keinem vernünftigen X
+   (Gesamtzone bei X = 4: 67 %). Das ist kein Fehler, sondern der weiche Übergang,
+   den Guido will — Grenzfälle bleiben bei GC.
+6. **Ein Teil kippt zu ILDA statt Kopp** (wo ILDA > 30 € unter Kopp liegt; +1 Werktag).
+   Bei X = 4 rund ein Sechstel der gekippten Aufträge. Guido entscheidet, ob das ok ist —
+   sonst wäre `preferKoppDelta` (heute 30 €) der zweite Regler.
+7. **Robust gegen die Maku-Umstellung:** Das neue Maku verschiebt GC und Partner gleich,
+   die Differenz und damit die X-Wahl bleiben gültig. Endkontrolle nach P2 genügt.
+8. **Zusammenhang Bug-Hunt D2:** Die 150–257-€-Sprünge im Shop sitzen an der
    48/52-Seiten-Kante (GC-WV endet bei 12 Bogenteilen). Dort ist die Dicke bereits
    > 1 mm — der Aufschlag verteuert GC vor der Kante kontinuierlich und **verkleinert
    genau diese Sprünge**. Punkt 4 ist Guidos D2-Abfederung.
 
 Die Tabelle für Guido liegt als **`Dickenaufschlag-Kalibrierung.xlsx`** neben diesem
-Dokument (lokal, nicht im Repo — xlsx ist ignoriert): Lesehilfe, Kippgrenzen-Matrix
-(nötiges X je Papier × Seiten × Auflage) und Detailblatt mit Aufschlag/Empfehlung für
-X = 1 / 1,5 / 2 / 3. Guido wählt X und A0.
+Dokument (lokal, nicht im Repo — xlsx ist ignoriert): Lesehilfe mit Empfehlung,
+Kippgrenzen-Matrizen „A4+A5" (96 Kombis) und „A6" (92), Detailblatt (2.443 Zeilen,
+filterbar) mit Aufschlag und Empfehlung bei A0 = 50 / X = 4.
 
 ---
 
@@ -235,15 +246,21 @@ X = 1 / 1,5 / 2 / 3. Guido wählt X und A0.
 3. **P4** — sobald Guido X und A0 gewählt hat; technisch von P2 unabhängig,
    Endkontrolle danach
 
-**Fragen an Guido (gesammelt in einer Mail):**
+**Entschieden am 05.08. (Armin):**
 
-1. Maku-Basis bei A5/A6: Bogenteile oder gedruckte SRA3-Bogen? (Empfehlung: gedruckte)
-2. Nebeneffekt bestätigen: Kleinstaufträge minimal billiger, ab ~50 Ex. 3–4 % teurer
-3. P4: X und A0 aus der Kalibrierungstabelle wählen; und: darf die Empfehlung bei
-   mittleren Auflagen zu ILDA gehen, oder soll sie gezielt zu Kopp?
-4. **B1 aus dem Bug-Hunt, weiter unbeantwortet:** Kopp oberhalb 1.000 Ex. —
-   Deckel oder Extrapolation? (Heute rechnet die App dort mit eingefrorener
-   Verarbeitung: 176 € bei 20.000 Ex.)
+- **Maku-Basis: gedruckte SRA3-Bogen** (siehe 1.2) — bei Guido kurz mitbestätigen.
+- **B1 / Kopp-Obergrenze: `maxAuflage: 1000` für Kopp** (Guidos Matrix: Kopp bis
+  1.000, ILDA bis 500; darüber ist keine Kalkulation möglich). Wandert als
+  Config-Änderung ins P2-Paket (Version 2.3.0) — die bestehende Fehlermeldung
+  „ist auf maximal 1000 Exemplare begrenzt" greift dann automatisch.
+
+**Fragen an Guido (gesammelt in einer Mail, wenn er zurück ist):**
+
+1. Nebeneffekt der Maku-Korrektur bestätigen: Kleinstaufträge minimal billiger,
+   ab ~50 Ex. 3–4 % teurer; Basis „gedruckte Bogen" mitbestätigen
+2. P4: Empfehlung **A0 = 50, X = 4,00 €** absegnen (oder anderen Wert aus der
+   Tabelle wählen); und: darf die Empfehlung zu ILDA gehen, wo ILDA deutlich
+   günstiger ist (+1 Werktag), oder sollen alle gekippten Aufträge zu Kopp?
 
 **Nach Abschluss aller Punkte:** Leadprint-Preisvorschau und Grenzstaffel-Verifikation
 neu, Referenz-Export neu, Version 2.3.0 veröffentlichen.

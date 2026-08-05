@@ -159,10 +159,10 @@ jeden Hinweis in der Oberfläche.
 **Auslöser im Alltag:** jede Kopp-Anfrage über 1.000 Ex. Das ist keine Exotik — Kopp ist
 gerade die Partnerroute für größere Auflagen.
 
-**Vorschlag:** entweder `maxAuflage: 1000` für Kopp setzen (dann greift die saubere
-Fehlermeldung), oder oberhalb der letzten Staffel linear aus den beiden letzten Staffeln
-extrapolieren. Entscheidung gehört zu Guido — der Preis dafür existiert real, wir kennen
-ihn nur nicht.
+**Entschieden (Armin, 05.08.2026):** `maxAuflage: 1000` für Kopp — laut Guidos Matrix
+geht Kopp nur bis 1.000 Ex., ILDA bis 500; darüber ist keine Kalkulation möglich.
+Umsetzung im Config-Paket von RST-Update V4 (Version 2.3.0, siehe
+`RST-Update-V4-Plan.md` Kap. 5); die bestehende Fehlermeldung greift dann automatisch.
 
 ### B2 — Hoch: Ungültiger geteilter Preisstand wird im Rechner nicht gemeldet
 

@@ -267,14 +267,154 @@ ohne dass sie wechseln. Das ist die eine Frage, die er entscheiden muss.
    > 1 mm — der Aufschlag verteuert GC vor der Kante kontinuierlich und **verkleinert
    genau diese Sprünge**. Punkt 4 ist Guidos D2-Abfederung.
 
-### 4.5 Die Tabelle für Guido
+### 4.5 Woher die Preissprünge wirklich kommen (Analyse 06.08.)
 
-**`Dickenaufschlag-Kalibrierung.xlsx`** (Repo-Root, lokal — xlsx ist ignoriert):
-Lesehilfe mit Empfehlung und den drei Entscheidungsfragen · **A0-Vergleich**
-(die Tabelle aus 4.3) · Kippgrenzen „A4+A5" (96 Kombis) und „A6" (92), jeweils mit
-Ampelfarben · Detail (2.443 Zeilen, filterbar) mit GC/Kopp/ILDA-Preisen, heutiger
-Empfehlung, nötigem X für A0 = 50/80/100 sowie Aufschlag und neuer Empfehlung bei
-A0 = 80 / X = 5.
+Guidos zweites Ziel — „unlogische Sprünge reduzieren" — habe ich bisher ungeprüft
+übernommen. Die Messung aller Sprünge über 25 % (A4/A5/A6, alle Papiere, 100/200/500 Ex.,
+8–120 Seiten) ordnet sie so zu:
+
+| Ursache | Anzahl |
+| --- | --- |
+| Staffelsprung **innerhalb** derselben Route (ein Bogenteil mehr) | **138** |
+| GC fällt an der Dickengrenze 1,5 mm raus | 20 |
+| GC fällt am Ende der WV-Tabelle raus (12 Bogenteile) | 18 |
+| Routenwechsel ILDA → Kopp | 3 |
+
+**77 % der großen Sprünge haben mit dem Produzentenwechsel nichts zu tun.** Der
+Routenwechsel GC → Partner erzeugt nur eine Lücke von **4–6 %** (19–98 €), weil die
+Empfehlungstoleranz von 20 € ohnehin dafür sorgt, dass gewechselt wird, solange die
+Preise nah beieinander liegen.
+
+**Ursache 1 — Arithmetik, unvermeidbar (dominant).** Zerlegung des Sprungs
+8 → 12 Seiten bei 500 Ex. (CC 100, GC): Gesamt +148 €, davon
+
+| Block | Anteil am Sprung |
+| --- | --- |
+| Druckkosten | **72 %** |
+| Papierkosten | 21 % |
+| Verarbeitung | 7 % |
+| Einrichtung | 0 % (fix) |
+
+Von 8 auf 12 Seiten sind es 50 % mehr Inhalt, also 50 % mehr Bogen, also 50 % mehr
+Druck und Papier. Der Preis steigt dabei sogar **unterproportional**:
+
+| Übergang | Bogenteile | Preis | Verhältnis |
+| --- | --- | --- | --- |
+| 8 → 12 S. | +50 % | +41 % | 0,83 |
+| 12 → 16 S. | +33 % | +29 % | 0,86 |
+| 20 → 24 S. | +20 % | +18 % | 0,90 |
+| 36 → 40 S. | +11 % | +10 % | 0,91 |
+
+Der Preis wächst also *langsamer* als die Arbeit — Einrichtekosten sind fix, die
+DB-Faktoren sinken mit der Menge. Die Sprünge wirken nur am unteren Ende groß, weil dort
+der kleinstmögliche Schritt (4 Seiten) relativ am größten ist. Das ist korrekt und
+durch keine Preisformel zu beheben.
+
+**Ursache 2 — echte Stufen in den Verarbeitungstabellen (nicht proportional).**
+Der Zuwachs je zusätzlichem Bogenteil ist in allen drei Tabellen unregelmäßig:
+
+| Tabelle | normaler Zuwachs (100 Ex.) | Stufen bei Bogenteil | Stufenhöhe |
+| --- | --- | --- | --- |
+| **GC (Horizon)** | 6,50 € | **7** | 16,50 € (2,5-fach) |
+| **Kopp** | ~15 € | **4, 7, 13, 19, 25** (alle 6) | ~33 € (2-fach) |
+| **ILDA** | **0 €** auf Plateaus von 4 BT | 3, 6, 10, 14, 18, 22 | 3,60–18 € (bei 500 Ex. bis 75 €) |
+
+- **GC** ist bis auf eine Stelle völlig gleichmäßig: bei 7 Bogenteilen (28 Seiten)
+  springt der Preis um das 2,5-fache eines normalen Schritts. Im Kundenpreis:
+  24 → 28 Seiten kostet +17,4 % statt der sonst üblichen ~12–16 % (100 Ex.:
+  259 → 304 €).
+- **Kopp** hat dasselbe Muster alle 6 Bogenteile.
+- **ILDA** ist eine Treppenfunktion: Drei Seitenschritte kosten in der Verarbeitung
+  **gar nichts**, der vierte springt.
+
+Das sieht nach Maschinenlogik aus (Anzahl der Anlagen/Stationen am Sammelhefter — bei
+GC und Kopp passt ein Muster von 6, bei ILDA von 4). Es sind Guidos bzw. die
+Partnertabellen selbst, nicht unsere Rechnung. **Frage an Guido:** Ist die Stufe bei
+7 Bogenteilen in der GC-Tabelle so gewollt (zweiter Durchlauf / zusätzliche Station)?
+Falls sie ein Tippfehler in der V3-Tabelle ist, verschwindet damit einer der
+auffälligsten Sprünge im Sortiment.
+
+**Konsequenz für Punkt 4:** Ein Preisaufschlag kann Ursache 1 nicht beheben (sie ist
+korrekt) und Ursache 2 nicht (sie steckt in den Tabellen). Gemessen: Sprünge über 25 %
+heute 505, mit Guidos Formel 560 — also eher mehr. Der Aufschlag ist ein
+**Steuerungsinstrument, kein Glättungsinstrument**. Das sollte in der Antwort an Guido
+klar stehen, sonst erwartet er eine Wirkung, die nicht eintritt.
+
+### 4.6 Alternativen zu Guidos Formel
+
+Drei grundsätzlich andere Ansätze durchgerechnet, jeweils über die gesamte Zone
+(1,0–1,5 mm, ab 100 Ex., alle GC-Formate):
+
+| Ansatz | Steuerung | Sprünge > 25 % | Verteuerung ohne Wirkung |
+| --- | --- | --- | --- |
+| heute (nichts) | 0 % | 505 | — |
+| **Guido:** (Dicke−1)×(Auflage−80)×5 | 61 % | 560 | Ø 37 € in 393 Fällen |
+| **Prozentualer Aufschlag** auf den GC-Preis | 11 % | 480 | Ø 28 € in vielen Fällen |
+| **Angleichung** an den Partnerpreis | 23 % | 494 | Ø 41 € in 776 Fällen |
+| **Auflagenabhängige Komfortgrenze** | 61 % → **100 %** möglich | 570 | **keine** |
+
+**Warum Guidos Formel strukturell nicht passt.** Der tatsächlich nötige Aufschlag
+(gemessen als „wie viel muss auf den GC-Preis, damit die Empfehlung kippt") verhält sich
+genau umgekehrt zur Formel:
+
+| Auflage | nötiger Aufschlag (Median) | Guidos Formel liefert |
+| --- | --- | --- |
+| 100 Ex. | 22 % des Preises | 0,3-faches des Nötigen |
+| 200 Ex. | 19 % | 1,4-faches |
+| 500 Ex. | 9 % | **5,1-faches** (bis 1.037 €) |
+
+Der Bedarf wächst degressiv (bei großen Auflagen dominieren die für alle Routen
+identischen Papier- und Klickkosten), Guidos Formel wächst linear mit der Auflage.
+Deshalb gibt es kein X, das die Zone sauber abdeckt: zu klein → bei 100 Ex. passiert
+nichts, zu groß → 500er-Aufträge werden vierstellig verteuert. Dazu streut der Bedarf
+stark nach Format (A4 Median 10 %, A6 Median 30 %, weil ILDA A6 nicht produziert).
+
+**Alternative A — auflagenabhängige Komfortgrenze (Empfehlung).**
+Statt eines Preisaufschlags wird die bereits existierende Dickengrenze
+`maxDickeGC` (heute konstant 1.500 µm) auflagenabhängig:
+
+```
+bis  99 Ex.:  1500 µm   (wie heute)
+ab  100 Ex.:  1000 µm   (Guidos Komfortzone)
+```
+
+Das ist Guidos Regel wörtlich, in der Sprache eines Konzepts, das die App schon hat.
+Ergebnis: **100 % Steuerung** (statt 61 %), keine Kalibrierung, keine Nachjustierung bei
+Preisänderungen, kein Format-Sonderfall — und **kein einziger Auftrag wird teurer, ohne
+zu wechseln** (bei Guidos Formel: 393 Fälle). Pflege: zwei Zahlen in der Verwaltung.
+Die bestehende Fehlermeldung und die Vergleichstabelle funktionieren unverändert.
+
+Einwand „harte Kante": Die Lücke am Übergang beträgt gemessen 4–6 %. Die
+Verarbeitungstabellen erzeugen an anderen Stellen Sprünge von 17 %+. Die Kante wäre
+also kleiner als das, was ohnehin überall passiert.
+
+**Alternative B — Angleichung an den Partnerpreis (falls der weiche Übergang gewünscht
+bleibt).** Über die letzten 0,25 mm vor der Grenze wächst der GC-Preis anteilig auf
+„günstigster Partner + Toleranz" zu. Vorteile gegenüber einer freien Formel: Sie folgt
+dem Bedarf per Konstruktion statt ihn zu schätzen, gilt ohne Sonderfall für A4 wie A6,
+bleibt bei Preisänderungen gültig, und der Kunde zahlt nie mehr als den Partnerpreis
+(darüber wird automatisch gewechselt). Sinnvoll **zusätzlich** zu Alternative A, nicht
+statt ihrer — allein erreicht sie nur 23 %.
+
+**Empfehlung fürs Gespräch mit Guido:** beide Wege zeigen. Seine Formel ist umsetzbar
+und mit A0 = 80 / X = 5 brauchbar kalibriert; die Komfortgrenze erreicht dasselbe Ziel
+vollständig, ohne Kalibrierung und ohne Nebenwirkungen. Dazu der Hinweis, dass die
+Sprünge, die ihn stören, aus den Verarbeitungstabellen kommen und von beiden Varianten
+unberührt bleiben.
+
+### 4.7 Die Tabelle für Guido
+
+**`Dickenaufschlag-Kalibrierung.xlsx`** (Repo-Root, lokal — xlsx ist ignoriert),
+sieben Blätter:
+
+1. **Lesehilfe** — Formel, Datenbasis, Empfehlung A0 = 80 / X = 5, Entscheidungsfragen
+2. **Alternative** — die Komfortgrenze aus 4.6, mit Gegenüberstellung beider Wege
+3. **Preissprünge** — die Analyse aus 4.5 in Guidos Sprache, inkl. der Rückfrage zur
+   Stufe bei 7 Bogenteilen
+4. **A0-Vergleich** — die Tabelle aus 4.3
+5./6. **Kippgrenzen A4+A5** (96 Kombis) und **A6** (92), mit Ampelfarben
+7. **Detail** — 2.443 Zeilen, filterbar: GC/Kopp/ILDA-Preise, heutige Empfehlung,
+   nötiges X für A0 = 50/80/100, Aufschlag und neue Empfehlung bei A0 = 80 / X = 5
 
 **Vollständig gegengeprüft (06.08.):** Alle 2.443 Detailzeilen, beide Kippgrenzen-Blätter,
 die fünf Zeilen des A0-Vergleichs und acht Textaussagen der Lesehilfe wurden unabhängig
@@ -307,11 +447,18 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
 
 1. Nebeneffekt der Maku-Korrektur bestätigen: Kleinstaufträge minimal billiger,
    ab ~50 Ex. 3–4 % teurer; Basis „gedruckte Bogen" mitbestätigen
-2. P4: Empfehlung **A0 = 80, X = 5,00 €** absegnen (oder andere Variante aus dem
-   Blatt „A0-Vergleich" wählen)
-3. P4: Sollen Aufträge mit genau 100 Ex. bereits zu Kopp gehen? (Dann A0 = 50 / X = 4)
+2. P4 — **Grundsatzfrage:** Preisaufschlag (seine Formel, A0 = 80 / X = 5) oder
+   auflagenabhängige Komfortgrenze (Alternative A, 4.6)? Beides erreicht sein Ziel,
+   die Grenze vollständig und ohne Kalibrierung.
+3. P4: Falls Aufschlag — sollen Aufträge mit genau 100 Ex. bereits zu Kopp gehen?
+   (Dann A0 = 50 / X = 4)
 4. P4: Darf die Empfehlung zu ILDA gehen, wo ILDA deutlich günstiger ist (+1 Werktag),
    oder sollen alle gewechselten Aufträge zu Kopp?
+5. **Stufe bei 7 Bogenteilen in der GC-Verarbeitungstabelle** (4.5): gewollt
+   (zweiter Durchlauf / zusätzliche Station) oder Fehler in der V3-Tabelle?
+6. Hinweis, keine Frage: Die Preissprünge, die ihn stören, kommen zu 77 % aus der
+   Seitenzahl selbst und aus den Verarbeitungstabellen — ein Aufschlag ändert daran
+   nichts.
 
 **Nach Abschluss aller Punkte:** Leadprint-Preisvorschau und Grenzstaffel-Verifikation
 neu, Referenz-Export neu, Version 2.3.0 veröffentlichen.

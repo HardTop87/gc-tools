@@ -21,8 +21,11 @@ function preis(config, inputs) {
 
 // Preiszeile für ein Inhaltspapier × Auflage (ohne Umschlag): Basispreis bei der
 // kleinsten Seitenzahl + additive Aufschläge je weiterer Seitenzahl-Stützstelle.
-// Die additive Verrechnung ist eine Annahme (Konzept Kap. 3.3/5.2) — vor dem
-// Rollout an einem Testartikel gegen den echten Shop-Preis verifizieren.
+// Die additive Verrechnung ist exakt, keine Näherung: jeder Aufschlag ist die
+// Differenz zweier vollständig gerechneter Preise — auch über einen Routenwechsel
+// hinweg (zellgenau gegen RST-Rechner-Export.md verifiziert).
+// Stützstellen ohne mögliche Route liefern bewusst `null`; im Shop müssen daraus
+// LEERE Zellen werden (Leadprint blendet Optionen ohne Preis aus), niemals 0.
 export function computeInhaltZeile({ config, formatKey, farbigkeit, pInhaltId, auflage, seitenListe = SEITEN_STUETZSTELLEN }) {
   const basisSeiten = seitenListe[0];
   const basis = preis(config, {

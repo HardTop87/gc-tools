@@ -280,10 +280,20 @@ Guidos zweites Ziel — „unlogische Sprünge reduzieren" — habe ich bisher u
 | GC fällt am Ende der WV-Tabelle raus (12 Bogenteile) | 18 |
 | Routenwechsel ILDA → Kopp | 3 |
 
-**77 % der großen Sprünge haben mit dem Produzentenwechsel nichts zu tun.** Der
-Routenwechsel GC → Partner erzeugt nur eine Lücke von **4–6 %** (19–98 €), weil die
-Empfehlungstoleranz von 20 € ohnehin dafür sorgt, dass gewechselt wird, solange die
-Preise nah beieinander liegen.
+**77 % der großen Sprünge haben mit dem Produzentenwechsel nichts zu tun.** Die
+Preislücke GC → günstigster Partner ist dabei stark formatabhängig (Median/Maximum
+über die Zone, nachgemessen 06.08.):
+
+| Format | Lücke Median | Maximum |
+| --- | --- | --- |
+| A4 Hoch | 7,1 % | 22 % |
+| A5 Hoch / A5 Quer | ~11,8 % | 34 % |
+| **A6 Hoch** | **24,0 %** | **49,5 %** |
+
+Bei A4/A5 ist die Kante moderat; bei A6 ist sie groß, weil dort nur Kopp als Partner
+existiert. Konsequent sind **36 der 38 Kanten-Sprünge über 25 % A6-Fälle** — bei A4/A5
+erzeugt der Routenwechsel fast nie einen großen Sprung. (Meine frühere Pauschalaussage
+„nur 4–6 %" stammte aus einer A4-Stichprobe und war als Verallgemeinerung falsch.)
 
 **Ursache 1 — Arithmetik, unvermeidbar (dominant).** Zerlegung des Sprungs
 8 → 12 Seiten bei 500 Ex. (CC 100, GC): Gesamt +148 €, davon
@@ -315,15 +325,15 @@ Der Zuwachs je zusätzlichem Bogenteil ist in allen drei Tabellen unregelmäßig
 
 | Tabelle | normaler Zuwachs (100 Ex.) | Stufen bei Bogenteil | Stufenhöhe |
 | --- | --- | --- | --- |
-| **GC (Horizon)** | 6,50 € | **7** | 16,50 € (2,5-fach) |
-| **Kopp** | ~15 € | **4, 7, 13, 19, 25** (alle 6) | ~33 € (2-fach) |
+| **GC (Horizon)** | 6,50 € | **7** (bei 50 Ex. auch 6) | 16,50 € (2,5-fach) |
+| **Kopp** | ~15 € | **7, 13, 19, 25** (alle 6 ab 7) | ~33 € (2-fach) |
 | **ILDA** | **0 €** auf Plateaus von 4 BT | 3, 6, 10, 14, 18, 22 | 3,60–18 € (bei 500 Ex. bis 75 €) |
 
-- **GC** ist bis auf eine Stelle völlig gleichmäßig: bei 7 Bogenteilen (28 Seiten)
-  springt der Preis um das 2,5-fache eines normalen Schritts. Im Kundenpreis:
-  24 → 28 Seiten kostet +17,4 % statt der sonst üblichen ~12–16 % (100 Ex.:
-  259 → 304 €).
-- **Kopp** hat dasselbe Muster alle 6 Bogenteile.
+- **GC** ist ab 100 Ex. bis auf eine Stelle völlig gleichmäßig: bei 7 Bogenteilen
+  (28 Seiten) springt der Preis um das 2,5-fache eines normalen Schritts (in der
+  50er-Staffel sind die Schritte auf 6 und 7 erhöht). Im Kundenpreis: 24 → 28 Seiten
+  kostet +17,4 % statt der sonst üblichen ~12–16 % (100 Ex.: 259 → 304 €).
+- **Kopp** hat dasselbe Muster alle 6 Bogenteile, beginnend bei 7.
 - **ILDA** ist eine Treppenfunktion: Drei Seitenschritte kosten in der Verarbeitung
   **gar nichts**, der vierte springt.
 
@@ -345,13 +355,16 @@ klar stehen, sonst erwartet er eine Wirkung, die nicht eintritt.
 Drei grundsätzlich andere Ansätze durchgerechnet, jeweils über die gesamte Zone
 (1,0–1,5 mm, ab 100 Ex., alle GC-Formate):
 
-| Ansatz | Steuerung | Sprünge > 25 % | Verteuerung ohne Wirkung |
+| Ansatz | Steuerung¹ | Sprünge > 25 %² | Verteuerung ohne Wirkung¹ |
 | --- | --- | --- | --- |
 | heute (nichts) | 0 % | 505 | — |
-| **Guido:** (Dicke−1)×(Auflage−80)×5 | 61 % | 560 | Ø 37 € in 393 Fällen |
+| **Guido:** (Dicke−1)×(Auflage−80)×5 | 63 % | 560 | Ø 34 € in 778 Fällen |
 | **Prozentualer Aufschlag** auf den GC-Preis | 11 % | 480 | Ø 28 € in vielen Fällen |
 | **Angleichung** an den Partnerpreis | 23 % | 494 | Ø 41 € in 776 Fällen |
-| **Auflagenabhängige Komfortgrenze** | 61 % → **100 %** möglich | 570 | **keine** |
+| **Auflagenabhängige Komfortgrenze** | **100 %** (direkt gemessen) | 610 | **keine** |
+
+¹ kanonische Zone (alle GC-Formate, ohne + mit Umschlag, ab 100 Ex.) ·
+² entlang der Seitenachse, ohne Umschlag — Vergleichsmaß, kein Zonenmaß
 
 **Warum Guidos Formel strukturell nicht passt.** Der tatsächlich nötige Aufschlag
 (gemessen als „wie viel muss auf den GC-Preis, damit die Empfehlung kippt") verhält sich
@@ -379,14 +392,21 @@ ab  100 Ex.:  1000 µm   (Guidos Komfortzone)
 ```
 
 Das ist Guidos Regel wörtlich, in der Sprache eines Konzepts, das die App schon hat.
-Ergebnis: **100 % Steuerung** (statt 61 %), keine Kalibrierung, keine Nachjustierung bei
-Preisänderungen, kein Format-Sonderfall — und **kein einziger Auftrag wird teurer, ohne
-zu wechseln** (bei Guidos Formel: 393 Fälle). Pflege: zwei Zahlen in der Verwaltung.
+Ergebnis: **100 % Steuerung** (statt 63 %; Kopp ist in der gesamten Zone verfügbar,
+2.094/2.094 nachgeprüft), keine Kalibrierung, keine Nachjustierung bei Preisänderungen,
+kein Format-Sonderfall — und **kein einziger Auftrag wird teurer, ohne zu wechseln**
+(bei Guidos Formel: 778 Fälle mit Ø 34 €). Pflege: zwei Zahlen in der Verwaltung.
 Die bestehende Fehlermeldung und die Vergleichstabelle funktionieren unverändert.
 
-Einwand „harte Kante": Die Lücke am Übergang beträgt gemessen 4–6 %. Die
-Verarbeitungstabellen erzeugen an anderen Stellen Sprünge von 17 %+. Die Kante wäre
-also kleiner als das, was ohnehin überall passiert.
+**Ehrlicher Preis der harten Grenze (Korrektur nach Gegenprüfung 06.08.):** Am Übergang
+zahlt der Kunde die volle Format-Lücke aus 4.5 — bei A4/A5 moderat (Median 7–12 %), bei
+**A6 kräftig (Median 24 %, bis ~50 %)**. Entlang der Seitenachse erzeugt die Grenze
+dadurch sogar *mehr* Sprünge über 25 % als heute (610 statt 505, fast alle A6). Guidos
+Formel ist am Übergang weicher: Der Preis steigt vorher an, beim Wechsel selbst passiert
+fast nichts (≤ ~20 € Toleranz). **Steuern kann die Grenze perfekt — glätten kann keine
+der Varianten**; am Übergang selbst ist die Formel die glattere. Wer beides will, nimmt
+die Grenze fürs Steuern und akzeptiert die A6-Kante, oder kombiniert sie mit
+Alternative B als Rampe davor.
 
 **Alternative B — Angleichung an den Partnerpreis (falls der weiche Übergang gewünscht
 bleibt).** Über die letzten 0,25 mm vor der Grenze wächst der GC-Preis anteilig auf
@@ -396,11 +416,12 @@ bleibt bei Preisänderungen gültig, und der Kunde zahlt nie mehr als den Partne
 (darüber wird automatisch gewechselt). Sinnvoll **zusätzlich** zu Alternative A, nicht
 statt ihrer — allein erreicht sie nur 23 %.
 
-**Empfehlung fürs Gespräch mit Guido:** beide Wege zeigen. Seine Formel ist umsetzbar
-und mit A0 = 80 / X = 5 brauchbar kalibriert; die Komfortgrenze erreicht dasselbe Ziel
-vollständig, ohne Kalibrierung und ohne Nebenwirkungen. Dazu der Hinweis, dass die
-Sprünge, die ihn stören, aus den Verarbeitungstabellen kommen und von beiden Varianten
-unberührt bleiben.
+**Empfehlung fürs Gespräch mit Guido:** beide Wege zeigen, mit ihrem jeweiligen Preis.
+Seine Formel: weicher Übergang, aber 63 % Steuerung, Kalibrierpflege und 778 Aufträge,
+die teurer werden, ohne zu wechseln. Die Komfortgrenze: 100 % Steuerung ohne Pflege,
+dafür eine spürbare Kante bei A6 (dort produziert nur Kopp). Dazu der Hinweis, dass die
+großen Sprünge, die ihn stören, überwiegend aus Seitenlogik und Verarbeitungstabellen
+kommen und von beiden Varianten unberührt bleiben.
 
 ### 4.7 Die Tabelle für Guido
 

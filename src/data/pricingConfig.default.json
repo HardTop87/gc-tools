@@ -1,8 +1,8 @@
 {
   "meta": {
-    "version": "2.2.0",
-    "stand": "2026-07-30",
-    "kommentar": "V3-Update lt. Mail Guido 30.07.2026 (RST GC-AR-V3.xlsx, Preise gc.xlsx): 30 neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle, R_90-Preis final (41,20), Banner-Natur neu (N_80_BAN/N_120_BAN statt N_100_BAN, nicht lieferbar), R_300 nicht mehr als A5-Hoch-Umschlag (Breitbahn). Seitenlimits weiterhin per Dickenformel, Familienregel unveraendert (Entscheidung Armin 30.07.). 2.1.1: ILDA maxAuflage 500."
+    "version": "2.3.0",
+    "stand": "2026-08-06",
+    "kommentar": "V3-Update lt. Mail Guido 30.07.2026 (RST GC-AR-V3.xlsx, Preise gc.xlsx): 30 neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle, R_90-Preis final (41,20), Banner-Natur neu (N_80_BAN/N_120_BAN statt N_100_BAN, nicht lieferbar), R_300 nicht mehr als A5-Hoch-Umschlag (Breitbahn). Seitenlimits weiterhin per Dickenformel, Familienregel unveraendert (Entscheidung Armin 30.07.). 2.1.1: ILDA maxAuflage 500. 2.3.0 (Mail Guido 05.08.2026): Makulatur ist ein Prozentsatz auf die gedruckten Bogen des Gesamtauftrags (Kurve aus Makulatur.xlsx), bisher als absolute Bogenzahl je Komponente gerechnet — Kleinstauflagen minimal guenstiger, ab ca. 50 Ex. 3-4 % teurer. Kopp maxAuflage 1000 laut Guidos Produktionsmatrix (Bug-Hunt B1)."
   },
   "settings": {
     "baseGrundpreis1c": 0.015,
@@ -702,7 +702,7 @@
         "A4_Hoch"
       ],
       "minAuflage": 10,
-      "maxAuflage": null,
+      "maxAuflage": 1000,
       "wvTabelleRef": "kopp",
       "umschlagZuschlag": false,
       "maxDickeRef": "maxDickePartner",

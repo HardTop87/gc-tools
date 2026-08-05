@@ -21,9 +21,12 @@ function preis(config, inputs) {
 
 // Preiszeile für ein Inhaltspapier × Auflage (ohne Umschlag): Basispreis bei der
 // kleinsten Seitenzahl + additive Aufschläge je weiterer Seitenzahl-Stützstelle.
-// Die additive Verrechnung ist exakt, keine Näherung: jeder Aufschlag ist die
-// Differenz zweier vollständig gerechneter Preise — auch über einen Routenwechsel
-// hinweg (zellgenau gegen RST-Rechner-Export.md verifiziert).
+// Jeder einzelne Aufschlag ist die Differenz zweier vollständig gerechneter Preise
+// und damit exakt — auch über einen Routenwechsel hinweg (zellgenau gegen
+// RST-Rechner-Export.md verifiziert). Beim *Kombinieren* mehrerer Optionen entsteht
+// seit dem Makulatur-Prozentmodell (Preisbasis 2.3.0) eine kleine Ungenauigkeit,
+// weil der Makulatursatz am Gesamtvolumen hängt: max. 1,38 € bzw. 0,26 %, gemessen
+// über alle 108.556 Kombinationen — und nie zu Lasten des Betriebs (siehe Test).
 // Stützstellen ohne mögliche Route liefern bewusst `null`; im Shop müssen daraus
 // LEERE Zellen werden (Leadprint blendet Optionen ohne Preis aus), niemals 0.
 export function computeInhaltZeile({ config, formatKey, farbigkeit, pInhaltId, auflage, seitenListe = SEITEN_STUETZSTELLEN }) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calcMakulaturProzent,
   calcMaxSeiten,
   calculateRSTPrice,
 } from './calculateRSTPrice';
@@ -113,21 +114,26 @@ describe('GC (Horizon)', () => {
     expect(routeResult(tooThick, 'gc_horizon').error).toContain('nicht in Preistabelle');
   });
 
-  it('trifft die Kleinmengen-Zielpreise (Auflage 1, 1c, günstiges Papier, ±3 €)', () => {
+  // Guidos Kleinmengen-Zielpreise (25/30/30/35 € bei Auflage 1) wurden bis Preisbasis
+  // 2.2.0 durch die alte Absolut-Makulatur gepolstert: 5 Netto-Bogen bekamen dort 9
+  // Makulaturbogen. Mit dem Prozentmodell (2.3.0) fällt dieses Polster weg, die Preise
+  // liegen jetzt 2,5–7 € darunter. Guidos eigener Satz dazu lautet „Kompensation über
+  // den Verarbeitungspreis" — d. h. die WV-Tabelle müsste in den Kleinststaffeln
+  // angehoben werden. Das ist seine Entscheidung; bis dahin hält dieser Test den
+  // Ist-Stand fest, damit die Lücke nicht unbemerkt weiter wandert.
+  it('hält den Kleinmengen-Ist-Stand fest (Auflage 1) — Zielpreise offen bei Guido', () => {
     const gcTotal = (form) => routeResult(calculateRSTPrice(form, config), 'gc_horizon').gesamt;
-    const expectNear = (value, target) => expect(Math.abs(value - target)).toBeLessThanOrEqual(3);
-
     const cheap = { pInhaltId: 'N_80', dInhaltKey: '1c', dUmschlagKey: '1c', auflage: '1' };
-    expectNear(gcTotal(baseForm({ ...cheap, seiten: '20' })), 25);
-    expectNear(
+
+    expect(gcTotal(baseForm({ ...cheap, seiten: '20' }))).toBeCloseTo(21.75, 2); // Ziel 25
+    expect(
       gcTotal(baseForm({ ...cheap, seiten: '20', hasUmschlag: true, pUmschlagId: 'N_160' })),
-      30,
-    );
-    expectNear(gcTotal(baseForm({ ...cheap, seiten: '24' })), 30);
-    expectNear(
+    ).toBeCloseTo(27.48, 2); // Ziel 30
+    expect(gcTotal(baseForm({ ...cheap, seiten: '24' }))).toBeCloseTo(27.11, 2); // Ziel 30
+    expect(
       gcTotal(baseForm({ ...cheap, seiten: '24', hasUmschlag: true, pUmschlagId: 'N_160' })),
-      35,
-    );
+    ).toBeCloseTo(27.83, 2); // Ziel 35 — größte Lücke, WV-Zeile BT 7 kostet bei Auflage 1
+    // genauso viel wie BT 6, der Umschlag schlägt daher fast nicht durch.
   });
 });
 
@@ -315,6 +321,114 @@ describe('Express & Empfehlung', () => {
     const bei501 = calculateRSTPrice(baseForm({ auflage: '501', seiten: '52', pInhaltId: 'CC_100' }), config);
     expect(routeResult(bei501, 'ilda').error).toContain('maximal 500');
     expect(bei501.recommendedName).toBe('Partner Kopp');
+  });
+});
+
+describe('Makulatur als Prozentmodell (Guido 05.08.2026, Preisbasis 2.3.0)', () => {
+  it('trifft die Stützpunkte von Guidos Kurve', () => {
+    expect(calcMakulaturProzent(1)).toBeCloseTo(10, 3);
+    expect(calcMakulaturProzent(100)).toBeCloseTo(8, 3);
+    expect(calcMakulaturProzent(1000)).toBeCloseTo(5, 3);
+    expect(calcMakulaturProzent(10000)).toBeCloseTo(4, 3);
+    // fällt monoton weiter; im realistischen Bereich ~3,5 %, Grenzwert 3 %
+    expect(calcMakulaturProzent(100000)).toBeCloseTo(3.74, 2);
+    expect(calcMakulaturProzent(1e9)).toBeGreaterThan(3);
+    expect(calcMakulaturProzent(1e9)).toBeLessThan(calcMakulaturProzent(100000));
+  });
+
+  it('reproduziert Guidos Rechenbeispiel exakt: 1.000 Bogen → 105 U / 945 I', () => {
+    // 100 Ex., 36 S. Inhalt + Umschlag, A4 (Nutzen 1) → 900 + 100 = 1.000 Bogen
+    const gc = routeResult(
+      calculateRSTPrice(
+        baseForm({ auflage: '100', seiten: '36', hasUmschlag: true, pUmschlagId: 'CC_250' }),
+        config,
+      ),
+      'gc_horizon',
+    );
+    expect(gc.nettoBogenInhalt + gc.nettoBogenUmschlag).toBe(1000);
+    expect(gc.makulaturProzent).toBeCloseTo(5, 3);
+    expect(gc.bogenUmschlag).toBe(105);
+    expect(gc.bogenInhalt).toBe(945);
+  });
+
+  it('bemisst den Prozentsatz am Gesamtauftrag, nicht je Komponente', () => {
+    // Beide Komponenten bekommen denselben Faktor
+    const gc = routeResult(
+      calculateRSTPrice(
+        baseForm({ auflage: '250', seiten: '32', hasUmschlag: true, pUmschlagId: 'CC_250' }),
+        config,
+      ),
+      'gc_horizon',
+    );
+    const faktor = 1 + gc.makulaturProzent / 100;
+    expect(gc.bogenInhalt).toBe(Math.round(gc.nettoBogenInhalt * faktor));
+    expect(gc.bogenUmschlag).toBe(Math.round(gc.nettoBogenUmschlag * faktor));
+    // Prozentsatz gehört zum Gesamtvolumen (2.000 + 250 Bogen), nicht zu 2.000 allein
+    expect(gc.makulaturProzent).toBeCloseTo(
+      calcMakulaturProzent(gc.nettoBogenInhalt + gc.nettoBogenUmschlag),
+      10,
+    );
+  });
+
+  it('wächst mit der Auflage, der Prozentsatz fällt', () => {
+    const maku = (auflage) =>
+      routeResult(calculateRSTPrice(baseForm({ auflage }), config), 'gc_horizon');
+    const a50 = maku('50');
+    const a500 = maku('500');
+    expect(a50.makulaturInhalt).toBeLessThan(a500.makulaturInhalt);
+    expect(a50.makulaturProzent).toBeGreaterThan(a500.makulaturProzent);
+    // Größenordnung: früher waren es bei 3.000 Netto-Bogen 5 Bogen Makulatur
+    expect(a500.makulaturInhalt).toBe(130);
+  });
+
+  it('bemisst Aufträge unter 10 Broschüren wie 10 (Anlaufmakulatur)', () => {
+    const bei = (auflage) =>
+      routeResult(calculateRSTPrice(baseForm({ auflage }), config), 'gc_horizon');
+    const zehn = bei('10');
+    // 1 und 5 Ex. bekommen dieselben Makulaturbogen wie 10 Ex., aber ihre eigene Nettomenge
+    expect(bei('1').makulaturInhalt).toBe(zehn.makulaturInhalt);
+    expect(bei('5').makulaturInhalt).toBe(zehn.makulaturInhalt);
+    expect(bei('1').nettoBogenInhalt).toBe(6);
+    expect(bei('1').bogenInhalt).toBe(6 + zehn.makulaturInhalt);
+    // ab 10 greift die Regel nicht mehr
+    expect(bei('20').makulaturInhalt).toBeGreaterThan(zehn.makulaturInhalt);
+  });
+
+  it('druckt nie ohne Anlauf: mindestens ein Makulaturbogen je Komponente', () => {
+    // A6 bei GC (Nutzen 4), kleinste Auflage → sehr wenige Netto-Bogen
+    const gc = routeResult(
+      calculateRSTPrice(
+        baseForm({ formatKey: 'A6_Hoch', auflage: '1', seiten: '8', pInhaltId: 'CC_120' }),
+        config,
+      ),
+      'gc_horizon',
+    );
+    expect(gc.makulaturInhalt).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Partnerrouten rechnen mit demselben Modell', () => {
+    const calc = calculateRSTPrice(baseForm({ auflage: '300' }), config);
+    for (const key of ['gc_horizon', 'kopp', 'ilda']) {
+      const r = routeResult(calc, key);
+      expect(r.error).toBeNull();
+      expect(r.makulaturProzent).toBeCloseTo(calcMakulaturProzent(r.nettoBogenInhalt), 10);
+    }
+  });
+});
+
+describe('Routengrenzen', () => {
+  it('Kopp ist auf 1000 Exemplare begrenzt (Guidos Produktionsmatrix, Bug-Hunt B1)', () => {
+    const bei = (auflage) => routeResult(calculateRSTPrice(baseForm({ auflage }), config), 'kopp');
+    expect(bei('1000').error).toBeNull();
+    expect(bei('1001').error).toContain('maximal 1000');
+    // vorher lieferte die Engine hier den flachen Preis der 1000er-Staffel weiter
+    expect(bei('20000').error).toContain('maximal 1000');
+  });
+
+  it('über 1000 Exemplaren bleibt keine Route übrig', () => {
+    const calc = calculateRSTPrice(baseForm({ auflage: '2000' }), config);
+    expect(calc.validResults).toHaveLength(0);
+    expect(calc.recommendedName).toBeNull();
   });
 });
 

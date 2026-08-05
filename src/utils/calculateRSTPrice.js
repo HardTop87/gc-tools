@@ -6,6 +6,10 @@ export const DRUCK_OPTIONS = [
   { value: '4c', label: '4/4 Farbig' },
 ];
 
+// Aufträge unter dieser Broschürenzahl werden für die Makulatur-Bemessung wie
+// diese Zahl behandelt (Guido 05.08.2026).
+export const MIN_AUFLAGE_MAKU = 10;
+
 function paperById(config, id) {
   return config.papiere.find((p) => p.id === id) ?? null;
 }
@@ -144,14 +148,30 @@ function calcDeckungsbeitragPapier(anzahlBogen) {
   return 1.3 + 0.75 / Math.pow(n, 0.2);
 }
 
-function calcMakulatur(anzahlBogen) {
-  const n = Math.max(anzahlBogen, 1);
+// Makulatur ist ein *Prozentsatz* auf die gedruckten Bogen des Gesamtauftrags
+// (Guidos Kurve aus Makulatur.xlsx: 1 Bogen → 10 %, 100 → 8 %, 1.000 → 5 %,
+// 10.000 → 4 %, ∞ → 3,2 %). Inhalt und Umschlag zählen dafür zusammen und
+// bekommen denselben Faktor (Guidos Beispiel: 1.000 Bogen → 1,05 → 105 U / 945 I).
+// Konstanten bleiben hartkodiert wie die DB-Formeln — Kurve, kein Pflegewert.
+export function calcMakulaturProzent(gesamtBogen) {
+  const n = Math.max(gesamtBogen, 1);
   const shifted = n + 190.4668326232;
-  const makulatur =
+  return (
     3 +
     2.0092575059 / Math.pow(shifted, 0.08795607978) +
-    1097.938962524 / shifted;
-  return Math.ceil(makulatur);
+    1097.938962524 / shifted
+  );
+}
+
+// Aufgeschlagene Bogenzahl einer Komponente. Kaufmännisch gerundet, nicht
+// aufgerundet: die gefittete Kurve trifft ihre Stützpunkte nur auf ~1e-5 genau
+// (bei 1.000 Bogen 5,00003 % statt 5 %), und darauf einen ganzen Extrabogen zu
+// setzen wäre Fit-Rauschen statt Kalkulation — Guidos Beispiel ergibt so exakt
+// seine 105 Umschläge / 945 Inhaltsbogen. Gedruckt wird aber nie ohne Anlauf,
+// deshalb mindestens ein Makulaturbogen je Komponente.
+function applyMakulatur(nettoBogen, faktor) {
+  if (nettoBogen <= 0) return 0;
+  return Math.max(Math.round(nettoBogen * faktor), nettoBogen + 1);
 }
 
 function calcGewichtszuschlag(config, gsm) {
@@ -290,25 +310,33 @@ function calcSingleRoute(route, inputs, config, settings) {
   const bogenPreisUmschlag = hasUmschlag ? bogenpreis(coverPaper) : 0;
 
   const nettoBogenInhalt = Math.ceil((auflage * bogenteile) / nutzen);
-  const makulaturInhalt = calcMakulatur(nettoBogenInhalt);
+  const nettoBogenUmschlag = hasUmschlag ? Math.ceil(auflage / nutzen) : 0;
+
+  // Prozentsatz aus dem Gesamtvolumen des Auftrags. Aufträge unter MIN_AUFLAGE_MAKU
+  // Broschüren verhalten sich laut Guido wie MIN_AUFLAGE_MAKU: die Anlaufmakulatur
+  // fällt unabhängig von der Bestellmenge an, deshalb werden die Makulaturbogen auf
+  // der 10er-Basis bemessen und auf die tatsächliche Netto-Bogenzahl aufgeschlagen.
+  // Ab 10 Broschüren ist das identisch mit der direkten Rechnung.
+  const auflageMaku = Math.max(auflage, MIN_AUFLAGE_MAKU);
+  const gesamtBogenBasis =
+    Math.ceil((auflageMaku * bogenteile) / nutzen) +
+    (hasUmschlag ? Math.ceil(auflageMaku / nutzen) : 0);
+  const makulaturProzent = calcMakulaturProzent(gesamtBogenBasis);
+  const makulaturFaktor = 1 + makulaturProzent / 100;
+
+  const nettoBasisInhalt = Math.ceil((auflageMaku * bogenteile) / nutzen);
+  const nettoBasisUmschlag = hasUmschlag ? Math.ceil(auflageMaku / nutzen) : 0;
+  const makulaturInhalt = applyMakulatur(nettoBasisInhalt, makulaturFaktor) - nettoBasisInhalt;
+  const makulaturUmschlag = hasUmschlag
+    ? applyMakulatur(nettoBasisUmschlag, makulaturFaktor) - nettoBasisUmschlag
+    : 0;
   const bogenInhalt = nettoBogenInhalt + makulaturInhalt;
+  const bogenUmschlag = nettoBogenUmschlag + makulaturUmschlag;
 
   const dbDruckInhalt = calcDeckungsbeitragDruck(nettoBogenInhalt);
   const dbPapierInhalt = calcDeckungsbeitragPapier(nettoBogenInhalt);
-
-  let bogenUmschlag = 0;
-  let makulaturUmschlag = 0;
-  let nettoBogenUmschlag = 0;
-  let dbDruckUmschlag = 0;
-  let dbPapierUmschlag = 0;
-
-  if (hasUmschlag) {
-    nettoBogenUmschlag = Math.ceil(auflage / nutzen);
-    makulaturUmschlag = calcMakulatur(nettoBogenUmschlag);
-    bogenUmschlag = nettoBogenUmschlag + makulaturUmschlag;
-    dbDruckUmschlag = calcDeckungsbeitragDruck(nettoBogenUmschlag);
-    dbPapierUmschlag = calcDeckungsbeitragPapier(nettoBogenUmschlag);
-  }
+  const dbDruckUmschlag = hasUmschlag ? calcDeckungsbeitragDruck(nettoBogenUmschlag) : 0;
+  const dbPapierUmschlag = hasUmschlag ? calcDeckungsbeitragPapier(nettoBogenUmschlag) : 0;
 
   const gewichtszuschlagInhalt = calcGewichtszuschlag(config, contentPaper.gsm);
   const klickpreisInhalt = (currentKlickInhalt + gewichtszuschlagInhalt) * dbDruckInhalt;
@@ -408,6 +436,7 @@ function calcSingleRoute(route, inputs, config, settings) {
     gewichtszuschlagUmschlag,
     makulaturInhalt,
     makulaturUmschlag,
+    makulaturProzent,
     celloKosten: celloKostenGesamt,
     celloGrundkosten,
     celloBogenkosten,

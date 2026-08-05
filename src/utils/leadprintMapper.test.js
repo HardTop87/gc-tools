@@ -71,9 +71,17 @@ describe('Leadprint-Mapper: Preiszeilen', () => {
 });
 
 describe('Leadprint-Mapper: Umschlag-Artikel', () => {
-  it('Aufschläge sind additiv separabel — Seiten + Umschlag-Farbigkeit + Veredelung', () => {
-    // Zentrale Annahme des flachen Leadprint-Preismodells: Der Shop addiert die
-    // Options-Aufschläge; das muss dem echten Kombinationspreis entsprechen.
+  // Bis Preisbasis 2.2.0 war die Addition mehrerer Optionen exakt. Seit dem
+  // Makulatur-Prozentmodell (2.3.0) hängt der Aufschlagsatz am Gesamtvolumen des
+  // Auftrags, dadurch variiert die Umschlag-Bogenzahl leicht mit der Seitenzahl des
+  // Inhalts — die an der Basis-Seitenzahl gemessenen Aufschläge für Umschlag-Farbigkeit
+  // und Veredelung sind deshalb nicht mehr streng seitenzahl-konstant.
+  // Über alle 108.556 Kombinationen (A4/A5/A6 × beide Farbigkeiten × alle Papiere ×
+  // Auflagen × Stützstellen × Cello × Umschlag-Farbigkeit) gemessen: max. 1,38 €
+  // absolut, 0,26 % relativ — und in keinem einzigen Fall liegt der addierte
+  // Shop-Preis *unter* dem echten Preis. Die Abweichung geht also immer zugunsten
+  // des Betriebs; das ist die Richtung, die tragbar ist.
+  it('Aufschläge sind additiv separabel — Abweichung klein und nie zu Lasten des Betriebs', () => {
     const zeile = computeUmschlagZeile({
       config, formatKey: 'A4_Hoch', farbigkeit: '4c', pInhaltId: 'CC_120', pUmschlagId: 'CC_300', auflage: 300,
     });
@@ -88,7 +96,24 @@ describe('Leadprint-Mapper: Umschlag-Artikel', () => {
       + zeile.aufschlaegeSeiten[32]
       + zeile.aufschlagFarbigkeitUmschlag
       + zeile.aufschlaegeVeredelung.matt;
-    expect(addiert).toBeCloseTo(echtPreis, 8);
+    expect(addiert - echtPreis).toBeGreaterThanOrEqual(0);
+    expect(addiert - echtPreis).toBeLessThan(1.5);
+    expect(Math.abs(addiert - echtPreis) / echtPreis).toBeLessThan(0.003);
+  });
+
+  it('der reine Seiten-Aufschlag bleibt exakt (eine Option, volle Neuberechnung)', () => {
+    const zeile = computeUmschlagZeile({
+      config, formatKey: 'A4_Hoch', farbigkeit: '4c', pInhaltId: 'CC_120', pUmschlagId: 'CC_300', auflage: 300,
+    });
+    for (const seiten of [16, 32, 48]) {
+      const echt = calculateRSTPrice({
+        formatKey: 'A4_Hoch', auflage: 300, seiten, pInhaltId: 'CC_120', dInhaltKey: '4c',
+        hasUmschlag: true, pUmschlagId: 'CC_300', dUmschlagKey: '1c', celloUmschlag: 'ohne',
+        produktionszeit: 'standard',
+      }, config);
+      const echtPreis = echt.validResults.find((r) => r.name === echt.recommendedName).gesamt;
+      expect(zeile.basisPreis + zeile.aufschlaegeSeiten[seiten]).toBeCloseTo(echtPreis, 8);
+    }
   });
 
   it('Veredelung nur bei CC/BD-Umschlägen, bei Natur/Recycling leer', () => {

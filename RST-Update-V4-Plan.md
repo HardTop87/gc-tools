@@ -58,26 +58,67 @@ produzierte Exemplarzahl mit demselben Faktor — Guidos Beispiel (105 Umschläg
 100) bleibt exakt getroffen. Bei Guidos Rückkehr kurz mitbestätigen lassen (bei A4
 sind beide Lesarten identisch, sein Beispiel entscheidet es nicht allein).
 
-### 1.3 Preisauswirkung (GC, A4 Hoch, CC 120, exakt durchgerechnet)
+### 1.3 Preisauswirkung — umgesetzt und gemessen (06.08.)
 
-| Fall | heute | neu | Differenz | Maku Inhalt heute → neu |
+Werte aus der fertigen Engine (GC, A4 Hoch, CC 120, empfohlene Route):
+
+| Fall | vorher (2.2.0) | jetzt (2.3.0) | Differenz | Maku Inhalt vorher → jetzt |
 | --- | --- | --- | --- | --- |
-| 10 Ex. / 24 S. | 70,72 € | 69,51 € | **−1,21 €** | 9 → 6 |
-| 50 Ex. / 24 S. | 174,59 € | 179,23 € | +4,64 € | 7 → 20 |
-| 100 Ex. / 24 S. | 279,08 € | 288,62 € | +9,54 € (+3,4 %) | 6 → 34 |
-| 250 Ex. / 24 S. | 567,77 € | 589,03 € | +21,26 € | 5 → 71 |
+| 1 Ex. / 24 S. | 32,82 € | 30,38 € | **−2,44 € (−7,4 %)** | 10 → 5 |
+| 10 Ex. / 24 S. | 70,72 € | 69,11 € | −1,61 € | 9 → 5 |
+| 50 Ex. / 24 S. | 174,59 € | 178,87 € | +4,28 € | 7 → 19 |
+| 100 Ex. / 24 S. | 279,08 € | 288,28 € | +9,20 € (+3,3 %) | 6 → 33 |
 | 500 Ex. / 24 S. | 1.030,76 € | 1.069,46 € | +38,70 € (+3,8 %) | 5 → 130 |
-| Guidos Beispiel: 100 Ex. / 36 S. + U | 479,46 € | 491,10 € | +11,64 € | I: 6 → 46 · U: 9 → 6 |
+| 1.000 Ex. / 24 S. | 1.982,36 € | 2.054,55 € | +72,19 € (+3,6 %) | 5 → 240 |
+| Guidos Beispiel: 100 Ex. / 36 S. + U | 479,46 € | 490,21 € | +10,75 € | I: 6 → 45 · U: 9 → 5 |
 
-Kleinstaufträge werden etwas **billiger**, ab ~50 Ex. wird es **3–4 % teurer** — genau die
-Papier-/Klickkosten der real nötigen Mehrbogen. Das sollte Guido als Nebeneffekt
-bestätigen (seine Formel, seine Zahlen — aber er validiert gerade gegen die alten Preise).
+Guidos Beispiel trifft jetzt **exakt** seine 105 Umschläge / 945 Inhaltsbogen.
+
+**Wichtige Korrektur der ursprünglichen Einschätzung.** Geplant war „Kleinstaufträge etwas
+billiger, ab ~50 Ex. 3–4 % teurer". Über alle Formate, Papiere, Umschläge, Seitenzahlen und
+Auflagen gemessen (25.841 Kombinationen, alt gegen neu) sieht es so aus:
+
+| Auflagenband | Median | Spanne |
+| --- | --- | --- |
+| 1–9 Ex. | **−18,0 %** | −42,5 % … +0,3 % |
+| 10–49 Ex. | **−3,7 %** | −25,0 % … +2,8 % |
+| 50–99 Ex. | +0,2 % | −13,0 % … +3,7 % |
+| 100–500 Ex. | +2,5 % | −7,4 % … +3,8 % |
+| 501–1.000 Ex. | +3,1 % | +0,9 % … +3,7 % |
+
+Der Effekt nach oben ist wie erwartet (max +3,8 %). Der Effekt nach **unten** ist deutlich
+größer als gedacht: Die alte Formel gab jeder Komponente rund 10 Bogen absolut — bei einem
+A6-Auftrag mit 13 Netto-Bogen war das eine Verdoppelung. Genau dieser Puffer trug die
+Kleinmengenpreise. Er fällt jetzt weg, weil Guidos Kurve dort nur ~9,5 % vorsieht.
+
+Konkret: Guidos vier **Kleinmengen-Zielpreise** (A4, 1 Ex., 1/1, N 80 — 25 / 30 / 30 / 35 €)
+werden jetzt um 2,5–7 € unterschritten (21,75 / 27,48 / 27,11 / 27,83 €). Sein eigener Satz
+dazu lautet „Kompensation über den Verarbeitungspreis" — dafür müssten die Kleinststaffeln
+der GC-Verarbeitungstabelle angehoben werden. **Das ist seine Entscheidung und liegt ihm als
+Frage vor** (Kap. 5); die Engine bildet bis dahin seine Formel unverfälscht ab.
+
+**Keine strukturellen Nebenwirkungen:** In allen 25.841 Kombinationen ändert sich **kein
+einziges Mal** die empfohlene Route, und es entfällt kein Angebot. Die Sprünge an den
+Leadprint-Grenzstaffeln bleiben praktisch unverändert (99→100 und 500→501, Abweichung
+gegenüber vorher max. 0,33 €) — die Mengeninterpolation im Shop wird also nicht schlechter.
 
 ### 1.4 Umsetzung
 
 - `calcMakulatur` → `calcMakulaturProzent` (Konstanten unverändert, ohne `ceil`);
   Aufruf in `calcSingleRoute` auf Gesamtbogen-Basis umstellen. Konstanten bleiben
   hartkodiert wie die DB-Formeln — sie sind Kurve, nicht Pflegewert.
+- **Kaufmännisch runden statt aufrunden** (bei der Umsetzung entschieden): Die gefittete
+  Kurve trifft ihre Stützpunkte nur auf ~1e-5 genau — bei 1.000 Bogen liefert sie
+  5,00003 % statt 5 %. Mit `ceil` käme daraus ein ganzer Extrabogen, und Guidos
+  Rechenbeispiel würde um genau diesen einen Bogen verfehlt (946/106 statt 945/105).
+  Mit `round` trifft es exakt. Damit trotzdem nie ohne Anlauf gedruckt wird:
+  **mindestens ein Makulaturbogen je Komponente**.
+- **Kleinstauflagen-Regel** (bei der Umsetzung präzisiert): Guidos „die verhalten sich wie
+  10" wird als *Anlaufmakulatur* umgesetzt — die Makulaturbogen werden auf der 10er-Basis
+  bemessen und auf die tatsächliche Netto-Bogenzahl aufgeschlagen. Die zunächst geplante
+  Variante (nur die Basis des Prozentsatzes anheben) wäre wirkungslos gewesen: Sie hätte
+  einem 1-Ex.-Auftrag genau einen Makulaturbogen gegeben. Ab 10 Broschüren sind beide
+  Varianten identisch, Guidos Beispiel bleibt exakt getroffen.
 - Tests: Referenzwerte anpassen; neuer Test exakt auf Guidos Beispiel
   (1.000 BT → 1,05 → 105/945); Kleinstauftrags- und Nutzen-Fälle.
 - Danach neu erzeugen: `RST-Rechner-Export.md` (Guidos Kontrollgrundlage) und
@@ -96,9 +137,13 @@ bestätigen (seine Formel, seine Zahlen — aber er validiert gerade gegen die a
 - Neue, winzige Kombinationsabhängigkeit: Der Maku-Prozentsatz hängt jetzt am
   Gesamtvolumen, dadurch variiert die Umschlag-Bogenzahl leicht mit der Seitenzahl des
   Inhalts. Die einmal an der Basis-Seitenzahl berechneten Aufschläge für
-  Umschlag-Farbigkeit und Veredelung sind damit nicht mehr streng seitenzahl-konstant —
-  Abweichung in der Größenordnung **eines Umschlagbogens** (~0,1–0,3 €). Akzeptieren und
-  im Konzept vermerken.
+  Umschlag-Farbigkeit und Veredelung sind damit nicht mehr streng seitenzahl-konstant.
+  **Gemessen über alle 108.556 Kombinationen** (A4/A5/A6 × beide Farbigkeiten × alle
+  Papierpaare × Auflagen × Stützstellen × Cello × Umschlag-Farbigkeit): max. **1,38 €**
+  bzw. **0,26 %** — mehr als die geschätzten 0,1–0,3 €, aber entscheidend ist die
+  Richtung: In **keinem einzigen Fall** liegt der addierte Shop-Preis unter dem echten
+  Preis. Die Abweichung geht ausnahmslos zugunsten des Betriebs. Der reine
+  Seiten-Aufschlag (eine Option allein) bleibt weiterhin exakt. Als Test festgehalten.
 - Die alte Absolut-Maku sprang durch `ceil` zwischen Staffeln; die Prozentkurve ist
   glatter — Leadprints lineare Mengen-Interpolation zwischen Auflagenstaffeln wird eher
   **besser** getroffen.
@@ -449,8 +494,11 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
 
 **Umsetzungsreihenfolge:**
 
-1. **P2 Makulatur** — Korrektur zuerst, alle Referenzzahlen hängen daran
-   (Tests, Referenz-Export, Preisvorschau, Version 2.3.0 + Publish)
+1. **P2 Makulatur — ✅ umgesetzt am 06.08.** (Engine, Config 2.3.0 inkl. B1, Tests,
+   Referenz-Export, Preisvorschau). **Offen: veröffentlichen** — der Kopp-Deckel steckt
+   in der Config und wirkt erst, wenn in der Verwaltung „Auf Standard zurücksetzen"
+   geklickt und veröffentlicht wird; das neue Maku-Modell steckt im Code und wirkt
+   sofort mit dem Deploy. Bis dahin ist der geteilte Preisstand ein Mischzustand.
 2. **P1 + P3 zusammen** — beide klein, beide berühren Engine + Rechner + Mapper;
    B5 aus dem Bug-Hunt fließt in P3 ein
 3. **P4** — sobald Guido X und A0 gewählt hat; technisch von P2 unabhängig,
@@ -466,8 +514,14 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
 
 **Fragen an Guido (gesammelt in einer Mail, wenn er zurück ist):**
 
-1. Nebeneffekt der Maku-Korrektur bestätigen: Kleinstaufträge minimal billiger,
-   ab ~50 Ex. 3–4 % teurer; Basis „gedruckte Bogen" mitbestätigen
+1. Nebeneffekt der Maku-Korrektur bestätigen: ab 100 Ex. rund +2,5 bis +3,8 % — das
+   ist erwartet. **Wichtiger:** Kleinaufträge werden deutlich *günstiger* als gedacht
+   (1–9 Ex. im Median −18 %, bis −42 %; 10–49 Ex. Median −3,7 %, bis −25 %), weil die
+   alte Absolut-Makulatur dort der eigentliche Kleinmengenpuffer war (siehe 1.3).
+   Seine vier Kleinmengen-Zielpreise werden dadurch um 2,5–7 € unterschritten.
+   **Will er die Kleinststaffeln der GC-Verarbeitungstabelle anheben** („Kompensation
+   über den Verarbeitungspreis", sein eigener Satz)? Dazu: Basis „gedruckte Bogen"
+   mitbestätigen.
 2. P4 — **Grundsatzfrage:** Preisaufschlag (seine Formel, A0 = 80 / X = 5) oder
    auflagenabhängige Komfortgrenze (Alternative A, 4.6)? Beides erreicht sein Ziel,
    die Grenze vollständig und ohne Kalibrierung.
@@ -483,3 +537,20 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
 
 **Nach Abschluss aller Punkte:** Leadprint-Preisvorschau und Grenzstaffel-Verifikation
 neu, Referenz-Export neu, Version 2.3.0 veröffentlichen.
+
+---
+
+## 6. Bekannter Rundungseffekt (gemessen 06.08., keine Aktion vorgesehen)
+
+Der Makulatursatz hängt am Gesamtvolumen. Wächst die Auflage um ein Exemplar, ohne dass
+die Umschlag-Bogenzahl mitwächst (Formate mit mehreren Nutzen), kann der leicht gesunkene
+Prozentsatz dort einen Makulaturbogen einsparen — der Preis sinkt dann minimal, obwohl ein
+Exemplar mehr bestellt wurde. Über **2.336.207 geprüfte Auflagenübergänge** (alle Formate,
+Papiere, Umschläge, Seitenzahlen, alle drei Routen, 1–1.000 Ex.) passiert das **321 Mal =
+0,014 %**, der größte Rückgang beträgt **0,41 € (0,15 %)**, alle in Formaten mit Nutzen > 1.
+
+Bewusst nicht behoben: Das wäre Diskretisierungsrauschen, kein Preisfehler — es ist nicht
+ausnutzbar und für den Kunden unsichtbar. Ein Fix müsste die Makulatur gesamthaft bestimmen
+und auf die Komponenten verteilen, was die Rechnung verkompliziert, ohne die Ursache
+(unterschiedlich teures Inhalts- und Umschlagpapier) zu beseitigen. Hier festgehalten,
+damit der Effekt bei künftigen Prüfungen nicht als neuer Fund auftaucht.

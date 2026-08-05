@@ -210,7 +210,7 @@ export default function RechnerRST() {
       (r) => ({
         v: `${num(r.bogenInhalt + r.bogenUmschlag)} Stk`,
         n: r.bogenInhalt + r.bogenUmschlag,
-        sub: `Makulatur ${r.makulaturInhalt} (I)${r.bogenUmschlag ? ` · ${r.makulaturUmschlag} (U)` : ''}`,
+        sub: `Makulatur ${num(r.makulaturProzent, 1)} % · ${r.makulaturInhalt} (I)${r.bogenUmschlag ? ` · ${r.makulaturUmschlag} (U)` : ''}`,
       }),
       { diff: true },
     );

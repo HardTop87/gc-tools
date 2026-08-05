@@ -200,38 +200,87 @@ A5 Quer, A6 Hoch), alle Inhaltspapiere, **ohne und mit Umschlag** (leichtestes P
 derselben Familie), Buchdicke 1,0–1,5 mm, Auflagen 50–500. Kernbefunde:
 
 1. **A4 Hoch, A5 Hoch und A5 Quer verhalten sich exakt gleich** (Streuung der
-   Kipp-Schwelle: 0,00 €). Grund: Papier- und Klickkosten sind je Format für GC und
-   Partner identisch (gleicher Nutzen) und kürzen sich aus der Differenz; übrig bleibt
-   die WV-Differenz, die nur an Bogenteilen × Auflage hängt. **Eine Kalibrierung gilt
-   für alle drei Formate.**
-2. **A6 ist der Sonderfall:** Dort ist der günstigste Partner ~80 € teurer (ILDA fehlt
-   bzw. ist teurer) — A6 kippt also später. Eigenes Blatt in der Tabelle.
-3. **Unter 100 Ex. existiert kein ILDA-Preis** (WV-Tabelle beginnt bei 100) — einziger
-   Partner dort ist Kopp.
-4. **Empfehlung: A0 = 50, X = 4,00 €.** Damit kippt die Kernzone (Dicke ≥ 1,15 mm,
-   Auflage ≥ 200) vollständig: A4/A5 100 %, A6 98 % (X = 3 → 97/94 %; X = 5 → 100/100 %).
-   A0 = 50 statt 100 ist entscheidend: Der Hebel `(Auflage − A0)` ist damit bei
-   100 Ex. schon 50 statt 0 — Aufträge *ab* 100 Ex. können überhaupt kippen, genau
-   Guidos Zielzone. Der Einstieg bleibt weich: 1,2 mm / 100 Ex. → +40 €,
-   1,2 mm / 200 Ex. → +120 € (kippt), 1,3 mm / 300 Ex. → +300 € (kippt deutlich).
-5. **Strukturelle Grenze der Formel:** Kombinationen mit Dicke knapp über 1,0 mm oder
+   Kipp-Schwelle: 0,000000 € bei 644 formatübergreifend vorkommenden Kombinationen,
+   davon 483 in allen drei Formaten). Grund: Papier- und Klickkosten sind je Format für
+   GC und Partner identisch (gleicher Nutzen) und kürzen sich aus der Differenz; übrig
+   bleibt die WV-Differenz, die nur an Bogenteilen × Auflage hängt. **Eine Kalibrierung
+   gilt für alle drei Formate.**
+2. **A6 ist der Sonderfall — weil ILDA A6 gar nicht produziert** (`ilda.formate` enthält
+   A6_Hoch nicht; nachgeprüft: 552 von 552 A6-Zeilen ohne ILDA-Preis). Einziger Partner
+   ist dort Kopp, rund 80 € teurer → A6 kippt später. Eigenes Blatt.
+3. **Unter 100 Ex. liefert die ILDA-WV-Tabelle keine Werte** — einziger Partner dort ist
+   ebenfalls Kopp. Bei 50 Ex. kippt in **keiner** Variante etwas (GC liegt klar vorn),
+   ein Aufschlag mit A0 < 100 steuert dort also nichts.
+
+### 4.3 A0 ist kein Nebenparameter — Korrektur der ersten Empfehlung
+
+Der erste Durchlauf empfahl A0 = 50 / X = 4 mit dem Argument „mehr Hebel bei 100 Ex.".
+Das greift zu kurz: **A0 ist zugleich der Nullpunkt der Formel und die Auflage, ab der
+der Aufschlag überhaupt greift.** Beides muss derselbe Wert sein, sonst entsteht bei
+dieser Auflage ein Preissprung (bei A0 = 50 und Start erst ab 100 Ex.: 20–100 € Sprung
+je nach Dicke) — genau die „unlogischen Sprünge", die Guido reduzieren will.
+
+Damit ist A0 die Antwort auf eine fachliche Frage: **ab welcher Auflage soll der
+Aufschlag zu wirken beginnen?** Und weil X jeweils nachkalibriert wird, sind die
+Varianten direkt vergleichbar (X so gewählt, dass ab 200 Ex. alle ≥ 1,25 mm kippen):
+
+| A0 | X | 100 Ex. | 150 Ex. | ab 200 Ex. | zu ILDA | Aufschlag 1,2 mm/150 Ex. |
+| --- | --- | --- | --- | --- | --- | --- |
+| 50 | 4,00 € | **57 %** | 97 % | 100 % | 16 % | 80 € |
+| 75 | 4,75 € | 15 % | 94 % | 100 % | 12 % | 71 € |
+| **80** | **5,00 €** | 4 % | **93 %** | 100 % | **11 %** | 70 € |
+| 85 | 5,25 € | 0 % | 92 % | 100 % | 10 % | 68 € |
+| 100 | 6,00 € | 0 % | 81 % | 100 % | 10 % | 60 € |
+
+(Anteil der Broschüren ab 1,25 mm, die zum Partner wechseln.)
+
+Ab 200 Ex. sind **alle Varianten gleichwertig** — der Unterschied liegt allein im Band
+100–150 Ex. Höheres A0 bedeutet: sanfterer Einstieg, steilerer Verlauf oben, weniger
+ILDA-Fälle.
+
+**Empfehlung: A0 = 80, X = 5,00 €.**
+- Runde Werte, gut erklärbar.
+- Aufträge unter 80 Ex. bleiben völlig unberührt; zwischen 80 und 99 Ex. entsteht ein
+  kleiner Aufschlag (max. ~30 €), der die Empfehlung dort noch nicht verschiebt.
+- Bei 150 Ex. wirkt der Aufschlag schon (93 % statt 81 % bei A0 = 100).
+- Einstieg weich: 1,2 mm / 120 Ex. → 40 €, 1,2 mm / 200 Ex. → 120 €;
+  oben deutlich: 1,45 mm / 500 Ex. → 945 €.
+- Nur 11 % der wechselnden Aufträge gehen zu ILDA statt Kopp (bei A0 = 50: 16 %).
+
+**Wenn Guido will, dass schon genau 100 Ex. zu Kopp gehen**, ist A0 = 50 / X = 4 die
+richtige Wahl — mit dem Preis, dass auch Aufträge zwischen 50 und 99 Ex. teurer werden,
+ohne dass sie wechseln. Das ist die eine Frage, die er entscheiden muss.
+
+### 4.4 Weitere Befunde
+
+4. **Strukturelle Grenze der Formel:** Kombinationen mit Dicke knapp über 1,0 mm oder
    Auflage nahe A0 haben einen winzigen Hebel und kippen bei keinem vernünftigen X
-   (Gesamtzone bei X = 4: 67 %). Das ist kein Fehler, sondern der weiche Übergang,
-   den Guido will — Grenzfälle bleiben bei GC.
-6. **Ein Teil kippt zu ILDA statt Kopp** (wo ILDA > 30 € unter Kopp liegt; +1 Werktag).
-   Bei X = 4 rund ein Sechstel der gekippten Aufträge. Guido entscheidet, ob das ok ist —
-   sonst wäre `preferKoppDelta` (heute 30 €) der zweite Regler.
-7. **Robust gegen die Maku-Umstellung:** Das neue Maku verschiebt GC und Partner gleich,
+   (Gesamtzone bei der Empfehlung: 63 %). Das ist kein Fehler, sondern der weiche
+   Übergang, den Guido will — Grenzfälle bleiben bei GC.
+5. **Ein Teil kippt zu ILDA statt Kopp** (wo ILDA > 30 € unter Kopp liegt; +1 Werktag).
+   Guido entscheidet, ob das ok ist — sonst wäre `preferKoppDelta` (heute 30 €) der
+   zweite Regler.
+6. **Robust gegen die Maku-Umstellung:** Das neue Maku verschiebt GC und Partner gleich,
    die Differenz und damit die X-Wahl bleiben gültig. Endkontrolle nach P2 genügt.
-8. **Zusammenhang Bug-Hunt D2:** Die 150–257-€-Sprünge im Shop sitzen an der
+7. **Zusammenhang Bug-Hunt D2:** Die 150–257-€-Sprünge im Shop sitzen an der
    48/52-Seiten-Kante (GC-WV endet bei 12 Bogenteilen). Dort ist die Dicke bereits
    > 1 mm — der Aufschlag verteuert GC vor der Kante kontinuierlich und **verkleinert
    genau diese Sprünge**. Punkt 4 ist Guidos D2-Abfederung.
 
-Die Tabelle für Guido liegt als **`Dickenaufschlag-Kalibrierung.xlsx`** neben diesem
-Dokument (lokal, nicht im Repo — xlsx ist ignoriert): Lesehilfe mit Empfehlung,
-Kippgrenzen-Matrizen „A4+A5" (96 Kombis) und „A6" (92), Detailblatt (2.443 Zeilen,
-filterbar) mit Aufschlag und Empfehlung bei A0 = 50 / X = 4.
+### 4.5 Die Tabelle für Guido
+
+**`Dickenaufschlag-Kalibrierung.xlsx`** (Repo-Root, lokal — xlsx ist ignoriert):
+Lesehilfe mit Empfehlung und den drei Entscheidungsfragen · **A0-Vergleich**
+(die Tabelle aus 4.3) · Kippgrenzen „A4+A5" (96 Kombis) und „A6" (92), jeweils mit
+Ampelfarben · Detail (2.443 Zeilen, filterbar) mit GC/Kopp/ILDA-Preisen, heutiger
+Empfehlung, nötigem X für A0 = 50/80/100 sowie Aufschlag und neuer Empfehlung bei
+A0 = 80 / X = 5.
+
+**Vollständig gegengeprüft (06.08.):** Alle 2.443 Detailzeilen, beide Kippgrenzen-Blätter,
+die fünf Zeilen des A0-Vergleichs und acht Textaussagen der Lesehilfe wurden unabhängig
+aus der Engine neu berechnet und Zelle für Zelle verglichen — keine Abweichung. Die im
+Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
+`pickRecommendedRouteName` überein.
 
 ---
 
@@ -258,9 +307,11 @@ filterbar) mit Aufschlag und Empfehlung bei A0 = 50 / X = 4.
 
 1. Nebeneffekt der Maku-Korrektur bestätigen: Kleinstaufträge minimal billiger,
    ab ~50 Ex. 3–4 % teurer; Basis „gedruckte Bogen" mitbestätigen
-2. P4: Empfehlung **A0 = 50, X = 4,00 €** absegnen (oder anderen Wert aus der
-   Tabelle wählen); und: darf die Empfehlung zu ILDA gehen, wo ILDA deutlich
-   günstiger ist (+1 Werktag), oder sollen alle gekippten Aufträge zu Kopp?
+2. P4: Empfehlung **A0 = 80, X = 5,00 €** absegnen (oder andere Variante aus dem
+   Blatt „A0-Vergleich" wählen)
+3. P4: Sollen Aufträge mit genau 100 Ex. bereits zu Kopp gehen? (Dann A0 = 50 / X = 4)
+4. P4: Darf die Empfehlung zu ILDA gehen, wo ILDA deutlich günstiger ist (+1 Werktag),
+   oder sollen alle gewechselten Aufträge zu Kopp?
 
 **Nach Abschluss aller Punkte:** Leadprint-Preisvorschau und Grenzstaffel-Verifikation
 neu, Referenz-Export neu, Version 2.3.0 veröffentlichen.

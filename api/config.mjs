@@ -1,7 +1,11 @@
-import { get, put } from '@vercel/blob';
+import { BlobNotFoundError, get, head, put } from '@vercel/blob';
 
 // Ein einziger, stabiler Pfad → jede Speicherung überschreibt denselben Blob.
 const BLOB_PATH = 'pricing-config.json';
+
+// Wie lange die Blob-URL am CDN gecacht werden darf. Das SDK-Minimum ist 60 s;
+// der Default wäre EIN MONAT — tödlich für einen Blob, der überschrieben wird.
+const BLOB_CACHE_SECONDS = 60;
 
 // Zugriffsschutz: Der Client sendet das App-Passwort als Header. Verglichen wird
 // serverseitig gegen die (nicht ins Bundle gehörende) Laufzeit-Env. Ist die Env
@@ -13,8 +17,23 @@ function isAuthorized(req) {
   return provided === expected;
 }
 
+// Liest den geteilten Stand garantiert FRISCH. get(BLOB_PATH) allein genügt
+// nicht: Es lädt über die stabile Blob-URL, die am CDN gemäß cacheControlMaxAge
+// gecacht wird — nach einem Publish sah der Server so u. U. minutenlang die alte
+// Revision und lehnte jede Folgeänderung fälschlich als fremden Konflikt ab
+// (409-Schleife „jemand anderes hat gespeichert", obwohl niemand sonst da war).
+// Deshalb: head() fragt die Blob-API (autoritativ, kein CDN) nach der URL, und
+// ein eindeutiger Query-Parameter macht jeden Abruf zu einem eigenen Cache-Key.
 async function readSharedConfig() {
-  const result = await get(BLOB_PATH, { access: 'private' });
+  let blobUrl;
+  try {
+    ({ url: blobUrl } = await head(BLOB_PATH));
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return null;
+    throw error;
+  }
+  const freshUrl = `${blobUrl}${blobUrl.includes('?') ? '&' : '?'}fresh=${Date.now()}`;
+  const result = await get(freshUrl, { access: 'private' });
   if (!result || result.statusCode !== 200 || !result.stream) return null;
   const text = await new Response(result.stream).text();
   return JSON.parse(text);
@@ -83,6 +102,7 @@ export default async function handler(req, res) {
         addRandomSuffix: false,
         allowOverwrite: true,
         contentType: 'application/json',
+        cacheControlMaxAge: BLOB_CACHE_SECONDS,
       });
       return res.status(200).json({ ok: true, rev: nextRev });
     }

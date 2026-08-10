@@ -267,6 +267,40 @@ export async function fetchSharedConfig() {
   return { config: migrated, source: 'shared', errors: [] };
 }
 
+// Verlauf der behaltenen Revisionen (Kurzübersicht) für die Verwaltung.
+// Rückgabe: { ok, revisions: [{rev, version, stand, publishedAt}] } — neueste zuerst.
+export async function fetchSharedHistory() {
+  try {
+    const response = await fetch(`${SHARED_API}?history=1`, {
+      cache: 'no-store',
+      headers: authHeaders(),
+      signal: timeoutSignal(SHARED_TIMEOUT_MS),
+    });
+    if (!response.ok) return { ok: false, revisions: [] };
+    const body = await response.json();
+    return { ok: true, revisions: Array.isArray(body?.revisions) ? body.revisions : [] };
+  } catch {
+    return { ok: false, revisions: [] };
+  }
+}
+
+// Eine bestimmte Revision aus dem Verlauf laden (zum Wiederherstellen).
+// Migration + Validierung wie beim normalen Laden; null bei Fehlern.
+export async function fetchSharedRevision(rev) {
+  try {
+    const response = await fetch(`${SHARED_API}?rev=${encodeURIComponent(rev)}`, {
+      cache: 'no-store',
+      headers: authHeaders(),
+      signal: timeoutSignal(SHARED_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const migrated = migratePricingConfig(await response.json());
+    return validatePricingConfig(migrated).ok ? migrated : null;
+  } catch {
+    return null;
+  }
+}
+
 // Veröffentlicht einen Stand für alle. baseRev = Revision, auf der die Änderung
 // aufsetzt; der Server lehnt mit 409 ab, wenn zwischenzeitlich jemand anders
 // veröffentlicht hat. Rückgabe:

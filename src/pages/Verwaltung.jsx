@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, Download, FileSpreadsheet, RotateCcw, Upload } from 'lucide-react';
+import { AlertTriangle, Download, FileSpreadsheet, History, RotateCcw, Upload } from 'lucide-react';
 import { PageHeader, SecondaryButton } from '../components/PageHeader';
 import { downloadTextFile } from '../utils/download';
 import {
@@ -11,6 +11,8 @@ import {
   clearPendingPublish,
   configRev,
   fetchSharedConfig,
+  fetchSharedHistory,
+  fetchSharedRevision,
   getDefaultPricingConfig,
   getPendingPublish,
   loadPricingConfigResult,
@@ -225,6 +227,9 @@ export default function Verwaltung() {
   // B3: liegengebliebener Pending-Publish, dessen Basis nicht mehr aktuell ist —
   // der Nutzer entscheidet, statt dass fremde Veröffentlichungen still überschrieben werden.
   const [pendingConflict, setPendingConflict] = useState(null);
+  // Verlauf der veröffentlichten Revisionen: null = zugeklappt,
+  // 'laedt' = wird geladen, sonst die Liste vom Server.
+  const [historie, setHistorie] = useState(null);
   const [message, setMessage] = useState(null);
   const [sharedStatus, setSharedStatus] = useState({ state: 'loading' });
   const [publishState, setPublishState] = useState({ status: 'idle' });
@@ -422,8 +427,52 @@ export default function Verwaltung() {
     applyChange(next);
   }
 
+  async function toggleHistorie() {
+    if (historie !== null) {
+      setHistorie(null);
+      return;
+    }
+    setHistorie('laedt');
+    const result = await fetchSharedHistory();
+    if (!result.ok) {
+      setHistorie(null);
+      showMessage('error', 'Der Verlauf konnte nicht geladen werden.');
+      return;
+    }
+    setHistorie(result.revisions);
+  }
+
+  // Wiederherstellen = alte Revision als NEUE Revision veröffentlichen.
+  // Nichts wird überschrieben, der Verlauf bleibt linear — auch das
+  // Wiederherstellen selbst lässt sich also wieder rückgängig machen.
+  async function handleRestore(eintrag) {
+    if (
+      !window.confirm(
+        `Revision ${eintrag.rev} (${eintrag.version ?? '?'}, Stand ${eintrag.stand ?? '?'}) für ALLE ` +
+          'wiederherstellen? Sie wird als neue Revision veröffentlicht.',
+      )
+    ) {
+      return;
+    }
+    const alt = await fetchSharedRevision(eintrag.rev);
+    if (!alt) {
+      showMessage('error', `Revision ${eintrag.rev} konnte nicht geladen werden (gelöscht oder ungültig).`);
+      return;
+    }
+    setHistorie(null);
+    setPendingImport(null);
+    showMessage('ok', `Revision ${eintrag.rev} wird als neuer Stand veröffentlicht.`);
+    applyChange(alt);
+  }
+
   function handleReset() {
-    if (!window.confirm('Den geteilten Preisstand für ALLE auf den Repo-Standard zurücksetzen?')) {
+    if (
+      !window.confirm(
+        'Den geteilten Preisstand für ALLE auf den Repo-Standard zurücksetzen?\n\n' +
+          'Der bisherige Stand geht dabei nicht verloren — er bleibt im Verlauf und kann ' +
+          'jederzeit wiederhergestellt werden.',
+      )
+    ) {
       return;
     }
     const fresh = getDefaultPricingConfig();
@@ -681,6 +730,7 @@ export default function Verwaltung() {
           onClick={() => configFileRef.current?.click()}
         />
         <SecondaryButton icon={RotateCcw} label="Auf Standard zurücksetzen" onClick={handleReset} />
+        <SecondaryButton icon={History} label="Verlauf" onClick={toggleHistorie} />
       </PageHeader>
 
       <input ref={configFileRef} type="file" accept=".json" onChange={handleConfigFile} className="hidden" />
@@ -693,6 +743,51 @@ export default function Verwaltung() {
       />
 
       <div className="mt-4 space-y-3">
+        {historie !== null && (
+          <div className="rounded-xl border border-line2 bg-surface px-4 py-3">
+            <p className="mb-2 text-[13px] font-semibold text-ink">
+              Verlauf — zuletzt veröffentlichte Stände
+            </p>
+            {historie === 'laedt' ? (
+              <p className="text-[12.5px] text-dim">Wird geladen …</p>
+            ) : historie.length === 0 ? (
+              <p className="text-[12.5px] text-dim">Noch keine Revisionen vorhanden.</p>
+            ) : (
+              <div className="space-y-1">
+                {historie.map((eintrag, index) => (
+                  <div
+                    key={eintrag.rev}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-[12.5px] text-dim odd:bg-surface2"
+                  >
+                    <span className="w-14 font-semibold tabular-nums text-ink">Rev {eintrag.rev}</span>
+                    <span className="w-16">{eintrag.version ?? '—'}</span>
+                    <span className="w-24">Stand {eintrag.stand ?? '—'}</span>
+                    <span className="flex-1">
+                      {eintrag.publishedAt ? `veröffentlicht ${fmtZeitpunkt(eintrag.publishedAt)}` : ''}
+                    </span>
+                    {index === 0 ? (
+                      <span className="rounded-full bg-good-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-good">
+                        aktuell
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleRestore(eintrag)}
+                        className="rounded-[8px] border border-line2 bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-dim transition-colors hover:text-ink"
+                      >
+                        Wiederherstellen
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <p className="pt-1 text-[11.5px] text-faint">
+                  Wiederherstellen veröffentlicht die gewählte Revision als neuen Stand — nichts wird
+                  überschrieben, auch das Wiederherstellen selbst lässt sich rückgängig machen.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         {sharedStatus.state === 'none' && (
           <div className="rounded-xl border border-line2 bg-surface px-4 py-3 text-[13px] text-dim">
             Es ist noch kein geteilter Preisstand veröffentlicht. Sobald du etwas änderst, eine

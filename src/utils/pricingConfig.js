@@ -287,15 +287,17 @@ export async function saveSharedConfig(config, baseRev = configRev(config)) {
   }
 
   let rev = configRev(config) + 1;
+  let publishedAt = new Date().toISOString();
   try {
     const body = await response.json();
     if (Number.isFinite(body?.rev)) rev = body.rev;
+    if (typeof body?.publishedAt === 'string') publishedAt = body.publishedAt;
   } catch {
     // ohne Body: geschätzte Revision behalten
   }
-  const stored = { ...config, meta: { ...config.meta, rev } };
+  const stored = { ...config, meta: { ...config.meta, rev, publishedAt } };
   savePricingConfig(stored); // Offline-Cache aktualisieren
-  return { ok: true, rev };
+  return { ok: true, rev, publishedAt };
 }
 
 // Nicht veröffentlichte Änderung merken, damit sie bei einem Netzausfall nicht

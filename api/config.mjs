@@ -1,7 +1,24 @@
-import { get, put } from '@vercel/blob';
+import { BlobNotFoundError, del, get, head, list, put } from '@vercel/blob';
 
-// Ein einziger, stabiler Pfad → jede Speicherung überschreibt denselben Blob.
-const BLOB_PATH = 'pricing-config.json';
+// GESCHICHTE DIESES ENDPUNKTS (B10, 10.08.2026): Ursprünglich lag der Preisstand
+// in EINEM Blob (pricing-config.json), das bei jedem Publish überschrieben wurde.
+// Vercel Blob liefert überschriebene Inhalte aber minutenlang veraltet aus
+// (CDN-Cache + Propagation) — der Server verglich baseRev gegen eine alte
+// Revision und meldete in einer Endlosschleife „jemand anderes hat gespeichert",
+// obwohl niemand sonst da war.
+//
+// Deshalb jetzt: JEDE Revision ist eine EIGENE, nie überschriebene Datei
+// (pricing-config/rev-000000042.json). Unveränderliche Dateien können nicht
+// veraltet ausgeliefert werden, und das Anlegen mit allowOverwrite:false ist
+// ein atomarer Konfliktschutz: Wer dieselbe Revision als Zweiter schreibt,
+// scheitert am Storage selbst — kein Read-after-Write-Fenster mehr.
+const REV_PREFIX = 'pricing-config/rev-';
+const REV_PATTERN = /rev-(\d+)\.json$/;
+// Alter Einzel-Blob — wird nur noch gelesen, solange keine Revisionsdatei existiert.
+const LEGACY_PATH = 'pricing-config.json';
+// So viele Revisionsdateien bleiben als Historie stehen; ältere werden nach
+// einem erfolgreichen Publish aufgeräumt (best effort).
+const KEEP_REVISIONS = 10;
 
 // Zugriffsschutz: Der Client sendet das App-Passwort als Header. Verglichen wird
 // serverseitig gegen die (nicht ins Bundle gehörende) Laufzeit-Env. Ist die Env
@@ -13,11 +30,62 @@ function isAuthorized(req) {
   return provided === expected;
 }
 
-async function readSharedConfig() {
-  const result = await get(BLOB_PATH, { access: 'private' });
+function revPathname(rev) {
+  return `${REV_PREFIX}${String(rev).padStart(9, '0')}.json`;
+}
+
+async function readBlobJson(url) {
+  const result = await get(url, { access: 'private' });
   if (!result || result.statusCode !== 200 || !result.stream) return null;
   const text = await new Response(result.stream).text();
   return JSON.parse(text);
+}
+
+// Jüngste Revisionsdatei laut Blob-Index (API-Abfrage, kein CDN).
+async function findLatestRevision() {
+  const { blobs } = await list({ prefix: REV_PREFIX, limit: 1000 });
+  let latest = null;
+  for (const blob of blobs) {
+    const match = REV_PATTERN.exec(blob.pathname);
+    if (!match) continue;
+    const rev = parseInt(match[1], 10);
+    if (!latest || rev > latest.rev) latest = { rev, url: blob.url };
+  }
+  return latest;
+}
+
+async function readSharedConfig() {
+  const latest = await findLatestRevision();
+  if (latest) {
+    const config = await readBlobJson(latest.url);
+    if (config) return config;
+  }
+
+  // Migration: Bestand aus der Einzel-Blob-Zeit lesen. Cache-Buster, weil dieser
+  // Pfad überschrieben wurde und daher veraltet gecacht sein kann.
+  try {
+    const { url } = await head(LEGACY_PATH);
+    const freshUrl = `${url}${url.includes('?') ? '&' : '?'}fresh=${Date.now()}`;
+    return await readBlobJson(freshUrl);
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return null;
+    throw error;
+  }
+}
+
+// Alte Revisionsdateien löschen, die jüngsten KEEP_REVISIONS behalten.
+// Fehler hier sind egal — Aufräumen darf ein Publish nie scheitern lassen.
+async function cleanupOldRevisions() {
+  try {
+    const { blobs } = await list({ prefix: REV_PREFIX, limit: 1000 });
+    const revs = blobs
+      .map((blob) => ({ blob, rev: parseInt(REV_PATTERN.exec(blob.pathname)?.[1] ?? '0', 10) }))
+      .sort((a, b) => b.rev - a.rev);
+    const stale = revs.slice(KEEP_REVISIONS).map((entry) => entry.blob.pathname);
+    if (stale.length) await del(stale);
+  } catch (error) {
+    console.error('api/config cleanup:', error);
+  }
 }
 
 // Leichte serverseitige Plausibilitätsprüfung. Die Vollvalidierung
@@ -77,14 +145,26 @@ export default async function handler(req, res) {
       }
 
       const nextRev = currentRev + 1;
-      const nextConfig = { ...config, meta: { ...config.meta, rev: nextRev } };
-      await put(BLOB_PATH, JSON.stringify(nextConfig), {
-        access: 'private',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        contentType: 'application/json',
-      });
-      return res.status(200).json({ ok: true, rev: nextRev });
+      const nextConfig = {
+        ...config,
+        meta: { ...config.meta, rev: nextRev, publishedAt: new Date().toISOString() },
+      };
+
+      try {
+        await put(revPathname(nextRev), JSON.stringify(nextConfig), {
+          access: 'private',
+          addRandomSuffix: false,
+          allowOverwrite: false, // atomarer Konfliktschutz: Revision existiert = verloren
+          contentType: 'application/json',
+        });
+      } catch (error) {
+        // Jemand anderes hat dieselbe Revision zeitgleich angelegt.
+        console.error('api/config claim failed:', error);
+        return res.status(409).json({ error: 'Zwischenzeitlich geändert.', currentRev: nextRev });
+      }
+
+      await cleanupOldRevisions();
+      return res.status(200).json({ ok: true, rev: nextRev, publishedAt: nextConfig.meta.publishedAt });
     }
 
     res.setHeader('Allow', 'GET, POST');

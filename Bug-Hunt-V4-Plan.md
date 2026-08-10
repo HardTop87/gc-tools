@@ -506,3 +506,30 @@ sie sichtbar sein, am besten zusammen mit F1 in einer Hinweiszeile.
 8. **E2** — Stage-2-Treffer in der Oberfläche als heuristisch kennzeichnen.
 9. **B9** — nur, falls die Preisbasis als vertraulich eingestuft wird; dann echter
    serverseitiger Login statt Bundle-Passwort.
+
+
+---
+
+## 7. Nachtrag 10.08. — B10: 409-Schleife durch Blob-CDN-Cache (gefunden im Betrieb, gefixt)
+
+**Symptom (Armin, 10.08.):** Beim Veröffentlichen in der Verwaltung erscheint wiederholt
+„Zwischenzeitlich hat jemand anderes gespeichert", obwohl niemand sonst arbeitet; die
+eigene Änderung wird verworfen und der (alte) Stand neu geladen.
+
+**Ursache:** `readSharedConfig` in `api/config.mjs` las den Blob über `get(BLOB_PATH)` —
+das lädt über die **stabile CDN-URL** des Blobs. `put` schrieb ohne `cacheControlMaxAge`,
+der SDK-Default ist **ein Monat**. Nach einem erfolgreichen Publish (rev N+1) las der
+Server beim nächsten POST u. U. die gecachte alte Revision N, verglichen mit der baseRev
+N+1 des Clients → 409, obwohl kein echter Konflikt vorlag. Der Konflikt-Handler lud dann
+denselben veralteten Stand zurück ins UI — die Änderung wirkte „verloren". Eine
+Selbstverstärkung: je öfter man es erneut versucht, desto öfter der scheinbare Konflikt.
+
+**Fix (Commit auf `bug-hunt-v4`):**
+- `readSharedConfig` holt die Blob-URL jetzt autoritativ über `head()` (Blob-API, kein
+  CDN) und lädt den Inhalt mit einem eindeutigen `?fresh=<timestamp>`-Query-Parameter —
+  jeder Abruf ist ein eigener Cache-Key, der Server sieht immer die echte Revision.
+- `put` schreibt mit `cacheControlMaxAge: 60` (SDK-Minimum) statt des Monats-Defaults.
+
+**Einordnung zu B3:** B3 (liegengebliebener Pending-Publish überschreibt fremde Stände)
+bleibt ein eigenes, echtes Problem — B10 erklärt aber, warum Konflikte bisher viel
+häufiger *gemeldet* wurden, als tatsächlich stattfanden.

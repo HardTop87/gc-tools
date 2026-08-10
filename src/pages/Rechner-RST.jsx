@@ -166,7 +166,9 @@ export default function RechnerRST() {
   const cheapestPrice = calculation?.cheapestPrice ?? Infinity;
   const recommendedName = calculation?.recommendedName ?? null;
   const recommended = results.find((r) => !r.error && r.name === recommendedName) ?? null;
-  const firstResult = results[0];
+  // B6: Die Statuszeile spricht für die empfohlene, hilfsweise die erste
+  // gültige Route — nicht stur für results[0] (das wäre immer GC).
+  const statusRoute = recommended ?? results.find((r) => !r.error) ?? null;
   const bogenteileGesamt =
     (parseInt(form.seiten, 10) || 8) / 4 + (form.hasUmschlag ? 1 : 0);
   const auflageNum = parseInt(form.auflage, 10) || 1;
@@ -179,14 +181,12 @@ export default function RechnerRST() {
       : 'keine Route möglich'
   }`;
 
-  const techLine =
-    firstResult && !firstResult.error
-      ? `${firstResult.formatName} · ${firstResult.nutzen} Nutzen · ${num(firstResult.weightPerCopyG, 1)} g / Stück · ${num(
-          firstResult.bogenInhalt + firstResult.bogenUmschlag,
-        )} Bögen`
-      : `Kombination bei ${firstResult?.name ?? 'GC'} nicht möglich`;
-  const maxSeitenLabel =
-    firstResult && !firstResult.error ? firstResult.maxSeiten : '—';
+  const techLine = statusRoute
+    ? `${statusRoute.name}: ${statusRoute.formatName} · ${statusRoute.nutzen} Nutzen · ${num(statusRoute.weightPerCopyG, 1)} g / Stück · ${num(
+        statusRoute.bogenInhalt + statusRoute.bogenUmschlag,
+      )} Bögen`
+    : 'Kombination bei keiner Route möglich';
+  const maxSeitenLabel = statusRoute ? statusRoute.maxSeiten : '—';
 
   // Zeilen der Vergleichstabelle. `pick` liefert Anzeigewert, optionale
   // Zweitzeile und — für die Diff-Hervorhebung — den Zahlenwert.
@@ -548,7 +548,10 @@ export default function RechnerRST() {
             Papierfamilie {selectedContentPaper?.familie ?? '—'} — Umschlag muss derselben Familie
             entsprechen
           </span>
-          <span>max. {maxSeitenLabel} Seiten bei dieser Papierkombination</span>
+          <span>
+            max. {maxSeitenLabel} Seiten bei dieser Papierkombination
+            {statusRoute ? ` (${statusRoute.name})` : ''}
+          </span>
         </div>
       </div>
 

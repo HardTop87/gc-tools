@@ -135,6 +135,23 @@ export function validatePricingConfig(config) {
 // 'localStorage' (gültige gespeicherte Config), 'default' (nichts gespeichert)
 // oder 'invalid-stored' (gespeicherte Config ungültig → Default aktiv,
 // Original nach BACKUP_KEY gesichert, Fehlerliste in errors).
+// Schema-Migration beim Laden: Wenn eine neue App-Version neue Settings kennt
+// (z. B. 2.4.0: gcDickenAufschlag*), fehlen sie in älteren gespeicherten oder
+// geteilten Ständen. Ohne diese Ergänzung würde jeder ältere Stand als
+// „ungültig" abgelehnt — genau das blockierte am 10.08. das Zurücksetzen
+// (roter Kasten in der Verwaltung + 409-Folgefehler). Fehlende Settings werden
+// mit den Repo-Defaults aufgefüllt; alles andere bleibt unangetastet.
+export function migratePricingConfig(config) {
+  if (!config || typeof config !== 'object') return config;
+  const defaults = getDefaultPricingConfig().settings;
+  const settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+  const missing = Object.keys(defaults).filter((key) => !Number.isFinite(settings[key]));
+  if (!missing.length) return config;
+  const filled = { ...settings };
+  for (const key of missing) filled[key] = defaults[key];
+  return { ...config, settings: filled };
+}
+
 export function loadPricingConfigResult() {
   const fallback = getDefaultPricingConfig();
   let raw = null;
@@ -147,7 +164,7 @@ export function loadPricingConfigResult() {
 
   let errors;
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = migratePricingConfig(JSON.parse(raw));
     const validation = validatePricingConfig(parsed);
     if (validation.ok) return { config: parsed, source: 'localStorage', errors: [] };
     errors = validation.errors;
@@ -234,11 +251,17 @@ export async function fetchSharedConfig() {
     return { config: null, source: 'error', errors: [String(error?.message || error)] };
   }
 
-  const validation = validatePricingConfig(parsed);
-  if (!validation.ok) return { config: null, source: 'invalid', errors: validation.errors };
+  const migrated = migratePricingConfig(parsed);
+  const validation = validatePricingConfig(migrated);
+  if (!validation.ok) {
+    // Auch ein ungültiger Stand hat eine Revision — die braucht der Aufrufer,
+    // damit ein anschließendes Veröffentlichen nicht mit baseRev 0 im
+    // Schein-Konflikt (409) endet.
+    return { config: null, source: 'invalid', errors: validation.errors, rev: configRev(parsed) };
+  }
 
-  savePricingConfig(parsed); // Offline-Cache aktualisieren
-  return { config: parsed, source: 'shared', errors: [] };
+  savePricingConfig(migrated); // Offline-Cache aktualisieren
+  return { config: migrated, source: 'shared', errors: [] };
 }
 
 // Veröffentlicht einen Stand für alle. baseRev = Revision, auf der die Änderung

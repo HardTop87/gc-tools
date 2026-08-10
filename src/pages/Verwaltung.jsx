@@ -237,10 +237,14 @@ export default function Verwaltung() {
         loadedRevRef.current = 0;
         setSharedStatus({ state: 'none' });
       } else if (result.source === 'invalid') {
+        // Revision trotzdem übernehmen — sonst schickt „Auf Standard
+        // zurücksetzen" baseRev 0 und scheitert im Schein-Konflikt (409).
+        loadedRevRef.current = result.rev ?? 0;
         setSharedStatus({ state: 'invalid' });
         showMessage(
           'error',
-          `Der geteilte Preisstand ist ungültig und wird nicht verwendet:\n${result.errors.join('\n')}`,
+          `Der geteilte Preisstand ist ungültig und wird nicht verwendet:\n${result.errors.join('\n')}\n` +
+            'Mit „Auf Standard zurücksetzen" veröffentlichst du einen frischen gültigen Stand.',
         );
       } else {
         setSharedStatus({ state: 'offline' });
@@ -319,10 +323,15 @@ export default function Verwaltung() {
       // übernommen und muss erneut vorgenommen werden.
       clearPendingPublish();
       setPublishState({ status: 'idle' });
+      // Die Server-Revision aus der 409-Antwort ist die verlässlichste Basis —
+      // auch wenn der frisch geladene Stand fehlt oder ungültig ist.
+      if (Number.isFinite(result.currentRev)) loadedRevRef.current = result.currentRev;
       const fresh = await fetchSharedConfig();
       if (fresh.config) {
         loadedRevRef.current = configRev(fresh.config);
         setConfig(fresh.config);
+      } else if (fresh.source === 'invalid' && Number.isFinite(fresh.rev)) {
+        loadedRevRef.current = fresh.rev;
       }
       showMessage(
         'error',

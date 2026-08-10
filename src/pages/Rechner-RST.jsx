@@ -53,7 +53,9 @@ export default function RechnerRST() {
   // Startwert aus dem Offline-Cache bzw. Repo-Default, danach lädt ein Effect
   // den geteilten Stand nach. So rendert die Seite sofort und ohne Flackern.
   const [config, setConfig] = useState(() => loadPricingConfigResult().config);
-  const [configStale, setConfigStale] = useState(false);
+  // Warnzustand zum geteilten Preisstand: null (alles gut), 'offline'
+  // (nicht erreichbar) oder 'invalid' (geteilter Stand ungültig, B2).
+  const [configWarnung, setConfigWarnung] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
   const mountedRef = useRef(true);
@@ -110,9 +112,11 @@ export default function RechnerRST() {
       const result = await fetchSharedConfig();
       if (!mountedRef.current || seq !== refreshSeqRef.current) return;
       if (result.config) setConfig(result.config);
-      // Server erreichbar (shared/none/invalid) → keine Offline-Warnung;
-      // nur ein echter Netz-/Timeout-Fehler ('error') setzt configStale.
-      setConfigStale(result.source === 'error');
+      // 'error' = Netz-/Timeout-Fehler, 'invalid' = geteilter Stand ungültig —
+      // beide Fälle rechnen mit dem lokalen Cache/Default und müssen warnen (B2).
+      setConfigWarnung(
+        result.source === 'error' ? 'offline' : result.source === 'invalid' ? 'invalid' : null,
+      );
     };
     refresh();
     const onVisible = () => {
@@ -140,7 +144,9 @@ export default function RechnerRST() {
       const result = await fetchSharedConfig();
       if (!mountedRef.current) return;
       if (result.config) setConfig(result.config);
-      setConfigStale(result.source === 'error');
+      setConfigWarnung(
+        result.source === 'error' ? 'offline' : result.source === 'invalid' ? 'invalid' : null,
+      );
     } finally {
       if (mountedRef.current) setIsCalculating(false);
     }
@@ -333,12 +339,13 @@ export default function RechnerRST() {
         </div>
       </div>
 
-      {configStale && (
+      {configWarnung && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-warn-bd bg-warn-soft px-4 py-3 text-[13px] text-warn">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Der geteilte Preisstand ist gerade nicht erreichbar — es gilt der zuletzt geladene Stand
-            ({config.meta.stand}). Die Preise sind möglicherweise nicht aktuell.
+            {configWarnung === 'invalid'
+              ? `Der geteilte Preisstand ist ungültig und wird nicht verwendet — es gilt der lokale Stand (${config.meta.stand}). Bitte in der Verwaltung prüfen; die Preise sind möglicherweise nicht aktuell.`
+              : `Der geteilte Preisstand ist gerade nicht erreichbar — es gilt der zuletzt geladene Stand (${config.meta.stand}). Die Preise sind möglicherweise nicht aktuell.`}
           </span>
         </div>
       )}

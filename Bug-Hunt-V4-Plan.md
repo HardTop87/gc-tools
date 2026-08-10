@@ -550,3 +550,44 @@ Selbstverstärkung: je öfter man es erneut versucht, desto öfter der scheinbar
 **Einordnung zu B3:** B3 (liegengebliebener Pending-Publish überschreibt fremde Stände)
 bleibt ein eigenes, echtes Problem — B10 erklärt aber, warum Konflikte bisher viel
 häufiger *gemeldet* wurden, als tatsächlich stattfanden.
+
+
+---
+
+## 8. Session-Review 10.08. abends — Bug-Hunt über alle Tagesänderungen (8 Prüfwinkel, verifiziert, gefixt)
+
+Nach Abschluss von P2/P4/P1/P3, B10 und der Bug-Fix-Runde lief ein Review über den
+gesamten Tagesdiff. Bestätigte und behobene Funde (alle im selben Abend deployt):
+
+1. **api/config.mjs — put-Fehler pauschal als 409:** Jeder Schreibfehler (Netz, Token,
+   Blob-Ausfall) wurde als Konflikt gemeldet; der Client verwarf daraufhin die
+   ungespeicherte Änderung. Jetzt wird autoritativ unterschieden (existiert die
+   Revisionsdatei nach dem Fehler? → echter Konflikt; sonst 500 und die Änderung
+   bleibt erhalten).
+2. **api/config.mjs — stiller Legacy-Fallback:** Bei transient nicht lesbarer jüngster
+   Revisionsdatei lieferte GET den alten Einzel-Blob als aktuellen Stand aus. Jetzt:
+   Legacy nur, wenn gar keine Revisionsdatei existiert; sonst Fehler statt Uralt-Stand.
+3. **api/config.mjs — POST-Revision aus dem Dateinamen** statt aus dem Blob-Inhalt
+   (eliminiert das Szenario „Veröffentlichung landet als längst gelöschte
+   Revisionsnummer und ist still verloren"; spart zugleich einen Blob-Roundtrip).
+4. **Rechner — Tippen von „4…" aktivierte still den Umschlag** (P3-Auto-Aktivierung
+   feuerte pro Tastendruck; „48" tippen → Umschlag an, Preis zu hoch). Auto-Aktivierung
+   jetzt erst beim Verlassen des Felds.
+5. **Verwaltung — B3-Guard umgangen bei 'error'/'invalid':** Pending-Publish wurde bei
+   nicht ladbarem oder ungültigem geteilten Stand blind veröffentlicht (Datenverlust
+   bzw. stilles Überschreiben). Jetzt: offline → Änderung bleibt gemerkt; ungültig →
+   Nutzerentscheidung über die Konfliktbox.
+6. **migratePricingConfig — kaputte Werte** (String statt Zahl) wurden still durch
+   Defaults ersetzt; jetzt werden nur wirklich fehlende Schlüssel aufgefüllt, kaputte
+   Werte fallen weiter laut in der Validierung auf.
+7. **Rechner-Kopfzeile** nutzte weiter die stillen parseInt-Fallbacks („1 Ex."), die B4
+   verbannt hatte → bei ungültiger Eingabe jetzt neutraler Text.
+8. **Konsolidierungen:** Seitenzahl-Mindestregel als eine Quelle (`minSeiten` in der
+   Engine), gemeinsamer Download-Helfer (`src/utils/download.js`, vorher 3 Kopien),
+   Maku-Basis-Ausdrücke, `warnungFromSource`, Stage2-Zählung, PostVersand-Banner.
+9. **Neuer Test:** Leadprint-Additivitäts-Eckfall (Dickenaufschlag kippt Route via
+   Umschlag-Farbigkeit) sichert die Invariante „nie unter dem echten Preis".
+
+**Bewusst offen:** Kleinmengen-Zielpreise (Entscheidung Guido, siehe P5-Vorschlag);
+F1/F2-Hinweis spiegelt die Export-Pipeline statt Round-Trip (Drift-Risiko, Backlog);
+B9 unverändert zurückgestellt.

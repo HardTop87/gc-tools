@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { AlertTriangle, Download, FileSpreadsheet, RotateCcw, Upload } from 'lucide-react';
 import { PageHeader, SecondaryButton } from '../components/PageHeader';
+import { downloadTextFile } from '../utils/download';
 import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
@@ -113,15 +114,6 @@ function fmtZeitpunkt(iso) {
   return `${date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}, ${date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
 }
 
-function downloadBlob(filename, mime, content) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
 
 // Zahleneingabe mit lokalem Draft: committet erst bei Blur/Enter (nicht pro
 // Tastendruck) und nur Werte ≥ min — Zwischenzustände wie "0" auf dem Weg zu
@@ -280,16 +272,32 @@ export default function Verwaltung() {
 
       const pending = getPendingPublish();
       if (alive && pending) {
-        if (canAutoPublishPending(pending, result.config)) {
-          // Basis noch aktuell (oder nicht prüfbar — dann lehnt der Server eine
-          // veraltete baseRev ohnehin mit 409 ab und der Konflikt wird gemeldet).
+        if (result.source === 'error') {
+          // Geteilter Stand nicht erreichbar → Basis nicht prüfbar. NICHT blind
+          // veröffentlichen (loadedRev wäre 0 → Schein-409, Änderung verloren);
+          // die Änderung bleibt gemerkt und wird beim nächsten erfolgreichen
+          // Laden erneut geprüft.
+          setPublishState({ status: 'offline' });
+          showMessage(
+            'error',
+            'Eine noch nicht veröffentlichte Änderung liegt bereit, aber der geteilte Speicher ist ' +
+              'gerade nicht erreichbar. Sie bleibt lokal gemerkt und wird beim nächsten Öffnen geprüft.',
+          );
+        } else if (result.config && canAutoPublishPending(pending, result.config)) {
+          // Basis noch aktuell → gefahrlos erneut veröffentlichen.
+          setConfig(pending);
+          showMessage('ok', 'Eine noch nicht veröffentlichte Änderung wird erneut veröffentlicht.');
+          schedulePublish(pending, 0);
+        } else if (result.source === 'none') {
+          // Es gab nie einen geteilten Stand → nichts, das überschrieben werden könnte.
           setConfig(pending);
           showMessage('ok', 'Eine noch nicht veröffentlichte Änderung wird erneut veröffentlicht.');
           schedulePublish(pending, 0);
         } else {
-          // Zwischenzeitlich wurde ein anderer Stand veröffentlicht → nicht
-          // automatisch überschreiben, sondern den Nutzer entscheiden lassen.
-          setPendingConflict({ pending, sharedConfig: result.config });
+          // Zwischenzeitlich wurde ein anderer (oder ein ungültiger) Stand
+          // veröffentlicht → nicht automatisch überschreiben, sondern den
+          // Nutzer entscheiden lassen.
+          setPendingConflict({ pending, sharedConfig: result.config ?? null });
         }
       }
     })();
@@ -426,7 +434,7 @@ export default function Verwaltung() {
   }
 
   function handleExportJson() {
-    downloadBlob(
+    downloadTextFile(
       `pricingConfig-${config.meta.stand ?? todayIso()}.json`,
       'application/json',
       JSON.stringify(config, null, 2),
@@ -434,7 +442,7 @@ export default function Verwaltung() {
   }
 
   function handleExportCsv() {
-    downloadBlob(`papierpreise-${todayIso()}.csv`, 'text/csv;charset=utf-8', buildPaperPriceCsv(config));
+    downloadTextFile(`papierpreise-${todayIso()}.csv`, 'text/csv;charset=utf-8', buildPaperPriceCsv(config));
   }
 
   function handleExportXlsx() {
@@ -708,10 +716,12 @@ export default function Verwaltung() {
             </p>
             <p className="text-[12.5px]">
               Deine Änderung basiert auf Stand {pendingConflict.pending.meta?.stand} (Rev{' '}
-              {configRev(pendingConflict.pending)}) — inzwischen wurde aber ein neuerer Stand
-              veröffentlicht ({pendingConflict.sharedConfig.meta?.stand}, Rev{' '}
-              {configRev(pendingConflict.sharedConfig)}). „Meine Änderung veröffentlichen“ ersetzt
-              diesen neueren Stand vollständig; „Verwerfen“ behält ihn und verwirft deine Änderung.
+              {configRev(pendingConflict.pending)}) —{' '}
+              {pendingConflict.sharedConfig
+                ? `inzwischen wurde aber ein neuerer Stand veröffentlicht (${pendingConflict.sharedConfig.meta?.stand}, Rev ${configRev(pendingConflict.sharedConfig)}).`
+                : 'der aktuell veröffentlichte Stand konnte aber nicht als gültig geladen werden.'}{' '}
+              „Meine Änderung veröffentlichen“ ersetzt den veröffentlichten Stand vollständig;
+              „Verwerfen“ behält ihn und verwirft deine Änderung.
             </p>
             <div className="mt-3 flex gap-2">
               <button

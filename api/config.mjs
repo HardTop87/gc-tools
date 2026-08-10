@@ -41,28 +41,25 @@ async function readBlobJson(url) {
   return JSON.parse(text);
 }
 
-// Jüngste Revisionsdatei laut Blob-Index (API-Abfrage, kein CDN).
-async function findLatestRevision() {
+// Alle Revisionsdateien laut Blob-Index (API-Abfrage, kein CDN), jüngste zuerst.
+// Eine einzige Quelle für Lesen, Konfliktprüfung und Aufräumen.
+async function listRevisions() {
   const { blobs } = await list({ prefix: REV_PREFIX, limit: 1000 });
-  let latest = null;
-  for (const blob of blobs) {
-    const match = REV_PATTERN.exec(blob.pathname);
-    if (!match) continue;
-    const rev = parseInt(match[1], 10);
-    if (!latest || rev > latest.rev) latest = { rev, url: blob.url };
-  }
-  return latest;
+  return blobs
+    .map((blob) => {
+      const match = REV_PATTERN.exec(blob.pathname);
+      return match
+        ? { rev: parseInt(match[1], 10), pathname: blob.pathname, url: blob.url }
+        : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.rev - a.rev);
 }
 
-async function readSharedConfig() {
-  const latest = await findLatestRevision();
-  if (latest) {
-    const config = await readBlobJson(latest.url);
-    if (config) return config;
-  }
-
-  // Migration: Bestand aus der Einzel-Blob-Zeit lesen. Cache-Buster, weil dieser
-  // Pfad überschrieben wurde und daher veraltet gecacht sein kann.
+// Migration: Bestand aus der Einzel-Blob-Zeit. Cache-Buster, weil dieser Pfad
+// überschrieben wurde und daher veraltet gecacht sein kann. Nur relevant,
+// solange noch keine Revisionsdatei existiert.
+async function readLegacyConfig() {
   try {
     const { url } = await head(LEGACY_PATH);
     const freshUrl = `${url}${url.includes('?') ? '&' : '?'}fresh=${Date.now()}`;
@@ -73,15 +70,25 @@ async function readSharedConfig() {
   }
 }
 
+async function readSharedConfig(revisions) {
+  if (revisions.length) {
+    const config = await readBlobJson(revisions[0].url);
+    // WICHTIG: Existiert eine Revisionsdatei, ist sie die einzige Wahrheit.
+    // Bei einem Lesefehler wird NICHT auf den alten Legacy-Blob zurückgefallen —
+    // der würde still einen monatealten Preisstand als aktuell ausliefern.
+    if (!config) throw new Error(`Revisionsdatei ${revisions[0].pathname} nicht lesbar.`);
+    return config;
+  }
+  return readLegacyConfig();
+}
+
 // Alte Revisionsdateien löschen, die jüngsten KEEP_REVISIONS behalten.
-// Fehler hier sind egal — Aufräumen darf ein Publish nie scheitern lassen.
-async function cleanupOldRevisions() {
+// `revisions` ist der Stand VOR dem gerade geschriebenen nextRev (der bleibt
+// als jüngste ohnehin stehen). Fehler hier sind egal — Aufräumen darf ein
+// Publish nie scheitern lassen.
+async function cleanupOldRevisions(revisions) {
   try {
-    const { blobs } = await list({ prefix: REV_PREFIX, limit: 1000 });
-    const revs = blobs
-      .map((blob) => ({ blob, rev: parseInt(REV_PATTERN.exec(blob.pathname)?.[1] ?? '0', 10) }))
-      .sort((a, b) => b.rev - a.rev);
-    const stale = revs.slice(KEEP_REVISIONS).map((entry) => entry.blob.pathname);
+    const stale = revisions.slice(KEEP_REVISIONS - 1).map((entry) => entry.pathname);
     if (stale.length) await del(stale);
   } catch (error) {
     console.error('api/config cleanup:', error);
@@ -119,7 +126,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const config = await readSharedConfig();
+      const config = await readSharedConfig(await listRevisions());
       if (!config) {
         // Noch kein geteilter Preisstand veröffentlicht.
         return res.status(204).end();
@@ -137,10 +144,21 @@ export default async function handler(req, res) {
       }
 
       // Optimistic Concurrency: nur schreiben, wenn seit dem Laden niemand
-      // anderes veröffentlicht hat. Sonst 409 → Client lädt neu und warnt.
-      const current = await readSharedConfig();
-      const currentRev = Number.isFinite(current?.meta?.rev) ? current.meta.rev : 0;
-      if (current && baseRev !== currentRev) {
+      // anderes veröffentlicht hat. Die aktuelle Revision steckt im Dateinamen
+      // der jüngsten Revisionsdatei — der Inhalt muss dafür nicht gelesen werden.
+      const revisions = await listRevisions();
+      let currentRev = 0;
+      let hatStand = revisions.length > 0;
+      if (revisions.length) {
+        currentRev = revisions[0].rev;
+      } else {
+        const legacy = await readLegacyConfig();
+        if (legacy) {
+          hatStand = true;
+          currentRev = Number.isFinite(legacy?.meta?.rev) ? legacy.meta.rev : 0;
+        }
+      }
+      if (hatStand && baseRev !== currentRev) {
         return res.status(409).json({ error: 'Zwischenzeitlich geändert.', currentRev });
       }
 
@@ -158,12 +176,20 @@ export default async function handler(req, res) {
           contentType: 'application/json',
         });
       } catch (error) {
-        // Jemand anderes hat dieselbe Revision zeitgleich angelegt.
-        console.error('api/config claim failed:', error);
-        return res.status(409).json({ error: 'Zwischenzeitlich geändert.', currentRev: nextRev });
+        // put() kann aus zwei Gründen scheitern: die Revision existiert schon
+        // (echter Konflikt) ODER ein transienter Fehler (Netz, Token, Blob-API).
+        // Nur Ersteres ist ein 409 — sonst würde der Client seine ungespeicherte
+        // Änderung verwerfen und dem Nutzer einen Phantom-Kollegen melden.
+        // Autoritativ unterscheiden statt Fehlertexte parsen: nachsehen, ob die
+        // Revisionsdatei jetzt existiert.
+        const nachher = await listRevisions().catch(() => []);
+        if (nachher.some((entry) => entry.rev === nextRev)) {
+          return res.status(409).json({ error: 'Zwischenzeitlich geändert.', currentRev: nextRev });
+        }
+        throw error; // → 500, Client behält die Änderung und versucht es erneut
       }
 
-      await cleanupOldRevisions();
+      await cleanupOldRevisions(revisions);
       return res.status(200).json({ ok: true, rev: nextRev, publishedAt: nextConfig.meta.publishedAt });
     }
 

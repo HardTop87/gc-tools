@@ -46,6 +46,14 @@ function Field({ label, className = '', children }) {
   );
 }
 
+// Abbildung des fetchSharedConfig-Ergebnisses auf den Warnzustand des Banners —
+// eine Quelle für Mount-Refresh und Button (B2).
+function warnungFromSource(source) {
+  if (source === 'error') return 'offline';
+  if (source === 'invalid') return 'invalid';
+  return null;
+}
+
 function Divider() {
   return <div className="hidden w-px self-stretch bg-line xl:block" />;
 }
@@ -115,9 +123,7 @@ export default function RechnerRST() {
       if (result.config) setConfig(result.config);
       // 'error' = Netz-/Timeout-Fehler, 'invalid' = geteilter Stand ungültig —
       // beide Fälle rechnen mit dem lokalen Cache/Default und müssen warnen (B2).
-      setConfigWarnung(
-        result.source === 'error' ? 'offline' : result.source === 'invalid' ? 'invalid' : null,
-      );
+      setConfigWarnung(warnungFromSource(result.source));
     };
     refresh();
     const onVisible = () => {
@@ -154,9 +160,7 @@ export default function RechnerRST() {
       const result = await fetchSharedConfig();
       if (!mountedRef.current) return;
       if (result.config) setConfig(result.config);
-      setConfigWarnung(
-        result.source === 'error' ? 'offline' : result.source === 'invalid' ? 'invalid' : null,
-      );
+      setConfigWarnung(warnungFromSource(result.source));
     } finally {
       if (mountedRef.current) setIsCalculating(false);
     }
@@ -169,17 +173,21 @@ export default function RechnerRST() {
   // B6: Die Statuszeile spricht für die empfohlene, hilfsweise die erste
   // gültige Route — nicht stur für results[0] (das wäre immer GC).
   const statusRoute = recommended ?? results.find((r) => !r.error) ?? null;
-  const bogenteileGesamt =
-    (parseInt(form.seiten, 10) || 8) / 4 + (form.hasUmschlag ? 1 : 0);
-  const auflageNum = parseInt(form.auflage, 10) || 1;
+  // Nur bei gültigen Eingaben berechnet — sonst zeigte die Kopfzeile die
+  // stillen Engine-Defaults („1 Ex.", 8 Seiten), die B4 gerade verbannt hat.
+  const bogenteileGesamt = eingabeOk
+    ? parseInt(form.seiten, 10) / 4 + (form.hasUmschlag ? 1 : 0)
+    : null;
+  const auflageNum = eingabeOk ? parseInt(form.auflage, 10) : null;
 
-  const summaryLine = `${formatOptions.find((o) => o.value === form.formatKey)?.label ?? '—'} · ${auflageNum} Ex. · ${form.seiten} Seiten${
-    form.hasUmschlag ? ' + Umschlag' : ''
-  }${parseInt(form.seiten, 10) === 4 ? ' (nur mit Umschlag möglich)' : ''} · ${
-    Number.isFinite(cheapestPrice)
-      ? `günstigste Route: ${results.find((r) => !r.error && r.gesamt === cheapestPrice)?.name}`
-      : 'keine Route möglich'
-  }`;
+  const formatLabel = formatOptions.find((o) => o.value === form.formatKey)?.label ?? '—';
+  const summaryLine = eingabeOk
+    ? `${formatLabel} · ${auflageNum} Ex. · ${form.seiten} Seiten${form.hasUmschlag ? ' + Umschlag' : ''} · ${
+        Number.isFinite(cheapestPrice)
+          ? `günstigste Route: ${results.find((r) => !r.error && r.gesamt === cheapestPrice)?.name}`
+          : 'keine Route möglich'
+      }`
+    : `${formatLabel} · Eingaben unvollständig — siehe Hinweis`;
 
   const techLine = statusRoute
     ? `${statusRoute.name}: ${statusRoute.formatName} · ${statusRoute.nutzen} Nutzen · ${num(statusRoute.weightPerCopyG, 1)} g / Stück · ${num(
@@ -393,14 +401,14 @@ export default function RechnerRST() {
               min="4"
               step="4"
               value={form.seiten}
-              onChange={(event) => {
-                const value = event.target.value;
-                // 4 Seiten Inhalt gibt es nur mit Umschlag (P3) — automatisch aktivieren
-                setForm((prev) => ({
-                  ...prev,
-                  seiten: value,
-                  hasUmschlag: parseInt(value, 10) === 4 ? true : prev.hasUmschlag,
-                }));
+              onChange={(event) => updateForm('seiten', event.target.value)}
+              onBlur={() => {
+                // 4 Seiten Inhalt gibt es nur mit Umschlag (P3) — automatisch
+                // aktivieren, aber erst beim Verlassen des Felds: Beim Tippen von
+                // „40"/„48" ist der Zwischenzustand „4" sonst schon ein Umschlag.
+                if (parseInt(form.seiten, 10) === 4 && !form.hasUmschlag) {
+                  setForm((prev) => ({ ...prev, hasUmschlag: true }));
+                }
               }}
               className={`${FIELD_CONTROL} tabular-nums`}
             />

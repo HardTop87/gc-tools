@@ -1,3 +1,5 @@
+import { minSeiten } from './calculateRSTPrice';
+
 // B4: Pflichtfeld-Prüfung des RST-Rechners WÄHREND des Tippens.
 // Die Engine (calculateRSTPrice) fällt bei leeren/ungültigen Eingaben still auf
 // plausible Defaults zurück (Auflage 1, 8 Seiten) — für programmatische Aufrufer
@@ -29,7 +31,7 @@ export function pruefeRSTPflichtfelder({ auflage, seiten, hasUmschlag = false })
   if (s === null) {
     probleme.push('Bitte Seitenzahl eingeben.');
   } else {
-    const min = hasUmschlag ? 4 : 8;
+    const min = minSeiten(hasUmschlag);
     const naechste = Math.max(min, Math.ceil(s / 4) * 4);
     if (s % 4 !== 0) {
       probleme.push(`${s} Seiten sind kein Vielfaches von 4 — nächstmöglich: ${naechste}.`);

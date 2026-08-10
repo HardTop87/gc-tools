@@ -143,12 +143,15 @@ export function validatePricingConfig(config) {
 // mit den Repo-Defaults aufgefüllt; alles andere bleibt unangetastet.
 export function migratePricingConfig(config) {
   if (!config || typeof config !== 'object') return config;
-  const defaults = getDefaultPricingConfig().settings;
   const settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
-  const missing = Object.keys(defaults).filter((key) => !Number.isFinite(settings[key]));
+  // Nur wirklich FEHLENDE Schlüssel auffüllen. Vorhandene, aber kaputte Werte
+  // (z. B. der String "12" statt 12) bleiben stehen und fallen weiter laut in
+  // der Validierung auf — sie still durch Defaults zu ersetzen würde mit
+  // Zahlen rechnen, die niemand eingegeben hat.
+  const missing = Object.keys(defaultConfig.settings).filter((key) => !(key in settings));
   if (!missing.length) return config;
   const filled = { ...settings };
-  for (const key of missing) filled[key] = defaults[key];
+  for (const key of missing) filled[key] = defaultConfig.settings[key];
   return { ...config, settings: filled };
 }
 

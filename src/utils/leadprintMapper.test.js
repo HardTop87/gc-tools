@@ -101,6 +101,29 @@ describe('Leadprint-Mapper: Umschlag-Artikel', () => {
     expect(Math.abs(addiert - echtPreis) / echtPreis).toBeLessThan(0.003);
   });
 
+  it('der gemessene Eckfall (Dickenaufschlag kippt via Umschlag-Farbigkeit die Route) bleibt nie unter dem echten Preis', () => {
+    // Schlimmster Fall des 110.040er-Sweeps: A6, N_120 + N_300, 250 Ex., 16 S. —
+    // die 1c-Basis bleibt bei GC (mit Dickenaufschlag), die 4/4-Variante kippt
+    // zu Kopp. Die Options-Summe liegt hier ~20 € ÜBER dem echten Preis; die
+    // Invariante ist die Richtung: niemals darunter.
+    const zeile = computeUmschlagZeile({
+      config, formatKey: 'A6_Hoch', farbigkeit: '4c', pInhaltId: 'N_120', pUmschlagId: 'N_300', auflage: 250,
+    });
+    for (const seiten of [8, 16, 24]) {
+      const echt = calculateRSTPrice({
+        formatKey: 'A6_Hoch', auflage: 250, seiten, pInhaltId: 'N_120', dInhaltKey: '4c',
+        hasUmschlag: true, pUmschlagId: 'N_300', dUmschlagKey: '4c', celloUmschlag: 'ohne',
+        produktionszeit: 'standard',
+      }, config);
+      const echtPreis = echt.validResults.find((r) => r.name === echt.recommendedName).gesamt;
+      const addiert = zeile.basisPreis
+        + (seiten === zeile.basisSeiten ? 0 : zeile.aufschlaegeSeiten[seiten])
+        + zeile.aufschlagFarbigkeitUmschlag;
+      expect(addiert - echtPreis, `${seiten} Seiten`).toBeGreaterThanOrEqual(-0.005);
+      expect(addiert - echtPreis).toBeLessThan(25);
+    }
+  });
+
   it('der reine Seiten-Aufschlag bleibt exakt (eine Option, volle Neuberechnung)', () => {
     const zeile = computeUmschlagZeile({
       config, formatKey: 'A4_Hoch', farbigkeit: '4c', pInhaltId: 'CC_120', pUmschlagId: 'CC_300', auflage: 300,

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 
 import { fetchSharedConfig, loadPricingConfigResult } from '../utils/pricingConfig';
+import { pruefeRSTPflichtfelder } from '../utils/rstFormInput';
 import {
   DRUCK_OPTIONS,
   calculateRSTPrice,
@@ -133,8 +134,17 @@ export default function RechnerRST() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  // B4: Bei leerer/ungültiger Auflage oder Seitenzahl wird NICHT gerechnet —
+  // die Engine würde still mit Defaults (Auflage 1, 8 Seiten) einen plausiblen
+  // falschen Preis liefern. Stattdessen zeigt die UI einen klaren Hinweis.
+  const eingabeProbleme = pruefeRSTPflichtfelder(form);
+  const eingabeOk = eingabeProbleme.length === 0;
+
   // Gerechnet wird live bei jeder Eingabe aus dem aktuell geladenen Stand.
-  const calculation = useMemo(() => calculateRSTPrice(form, config), [form, config]);
+  const calculation = useMemo(
+    () => (eingabeOk ? calculateRSTPrice(form, config) : null),
+    [eingabeOk, form, config],
+  );
 
   // Fallback-Button: holt den geteilten Stand nach; die Neuberechnung ergibt
   // sich automatisch aus dem neuen config-State.
@@ -152,9 +162,9 @@ export default function RechnerRST() {
     }
   }
 
-  const results = calculation.results;
-  const cheapestPrice = calculation.cheapestPrice;
-  const recommendedName = calculation.recommendedName;
+  const results = calculation?.results ?? [];
+  const cheapestPrice = calculation?.cheapestPrice ?? Infinity;
+  const recommendedName = calculation?.recommendedName ?? null;
   const recommended = results.find((r) => !r.error && r.name === recommendedName) ?? null;
   const firstResult = results[0];
   const bogenteileGesamt =
@@ -533,7 +543,7 @@ export default function RechnerRST() {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-x-[22px] gap-y-1 border-t border-line pt-[11px] text-[12.5px] text-dim">
-          <span>{techLine}</span>
+          <span>{eingabeOk ? techLine : eingabeProbleme.join(' · ')}</span>
           <span>
             Papierfamilie {selectedContentPaper?.familie ?? '—'} — Umschlag muss derselben Familie
             entsprechen
@@ -542,7 +552,18 @@ export default function RechnerRST() {
         </div>
       </div>
 
-      {/* Vergleichstabelle */}
+      {/* Vergleichstabelle — bei unvollständigen Pflichtfeldern stattdessen
+          ein klarer Hinweis, damit nie ein plausibler falscher Preis steht (B4) */}
+      {!eingabeOk ? (
+        <div className="rounded-2xl border border-line bg-surface p-10 text-center shadow-card">
+          <p className="text-[15px] font-semibold text-ink">
+            {eingabeProbleme.join(' ')}
+          </p>
+          <p className="mt-1.5 text-[13px] text-dim">
+            Die Preisberechnung startet, sobald Auflage und Seitenzahl vollständig eingegeben sind.
+          </p>
+        </div>
+      ) : (
       <div className="overflow-x-auto">
         <div className="min-w-[1040px] overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
           <div className="grid border-b border-line" style={{ gridTemplateColumns: gridTemplate }}>
@@ -669,6 +690,7 @@ export default function RechnerRST() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

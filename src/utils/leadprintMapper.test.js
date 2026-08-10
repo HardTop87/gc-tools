@@ -71,9 +71,17 @@ describe('Leadprint-Mapper: Preiszeilen', () => {
 });
 
 describe('Leadprint-Mapper: Umschlag-Artikel', () => {
-  it('Aufschläge sind additiv separabel — Seiten + Umschlag-Farbigkeit + Veredelung', () => {
-    // Zentrale Annahme des flachen Leadprint-Preismodells: Der Shop addiert die
-    // Options-Aufschläge; das muss dem echten Kombinationspreis entsprechen.
+  // Bis Preisbasis 2.2.0 war die Addition mehrerer Optionen exakt. Zwei Näherungen
+  // seither: das Makulatur-Prozentmodell (2.3.0, Satz hängt am Gesamtvolumen →
+  // Cent- bis niedriger Euro-Bereich) und der Dickenaufschlag (2.4.0): die an der
+  // Basis-Seitenzahl gemessene Umschlag-Farbigkeit kann die Empfehlung kippen
+  // (GC mit Aufschlag ↔ Partner) → Eckfälle bis 20 € / 7,5 %, begrenzt durch die
+  // Empfehlungs-Toleranzen. Über alle 110.040 Kombinationen (A4/A5/A6 × beide
+  // Farbigkeiten × alle Papierpaare × Auflagen × Stützstellen × Cello ×
+  // Umschlag-Farbigkeit) gemessen: In keinem einzigen Fall liegt der addierte
+  // Shop-Preis *unter* dem echten Preis — die Abweichung geht immer zugunsten
+  // des Betriebs; das ist die Richtung, die tragbar ist.
+  it('Aufschläge sind additiv separabel — Abweichung klein und nie zu Lasten des Betriebs', () => {
     const zeile = computeUmschlagZeile({
       config, formatKey: 'A4_Hoch', farbigkeit: '4c', pInhaltId: 'CC_120', pUmschlagId: 'CC_300', auflage: 300,
     });
@@ -88,7 +96,24 @@ describe('Leadprint-Mapper: Umschlag-Artikel', () => {
       + zeile.aufschlaegeSeiten[32]
       + zeile.aufschlagFarbigkeitUmschlag
       + zeile.aufschlaegeVeredelung.matt;
-    expect(addiert).toBeCloseTo(echtPreis, 8);
+    expect(addiert - echtPreis).toBeGreaterThanOrEqual(0);
+    expect(addiert - echtPreis).toBeLessThan(1.5);
+    expect(Math.abs(addiert - echtPreis) / echtPreis).toBeLessThan(0.003);
+  });
+
+  it('der reine Seiten-Aufschlag bleibt exakt (eine Option, volle Neuberechnung)', () => {
+    const zeile = computeUmschlagZeile({
+      config, formatKey: 'A4_Hoch', farbigkeit: '4c', pInhaltId: 'CC_120', pUmschlagId: 'CC_300', auflage: 300,
+    });
+    for (const seiten of [16, 32, 48]) {
+      const echt = calculateRSTPrice({
+        formatKey: 'A4_Hoch', auflage: 300, seiten, pInhaltId: 'CC_120', dInhaltKey: '4c',
+        hasUmschlag: true, pUmschlagId: 'CC_300', dUmschlagKey: '1c', celloUmschlag: 'ohne',
+        produktionszeit: 'standard',
+      }, config);
+      const echtPreis = echt.validResults.find((r) => r.name === echt.recommendedName).gesamt;
+      expect(zeile.basisPreis + zeile.aufschlaegeSeiten[seiten]).toBeCloseTo(echtPreis, 8);
+    }
   });
 
   it('Veredelung nur bei CC/BD-Umschlägen, bei Natur/Recycling leer', () => {
@@ -105,22 +130,26 @@ describe('Leadprint-Mapper: Umschlag-Artikel', () => {
     expect(natur.aufschlaegeVeredelung).toEqual({});
   });
 
-  it('erzeugt nur familiengleiche Inhalt/Umschlag-Kombinationen (Familienregel)', () => {
+  it('erzeugt nur familiengleiche Kombinationen oder erklärte Ausnahmen (Familienregel)', () => {
     const zeilen = computeArtikelMitUmschlag({
       config, formatKey: 'A4_Hoch', farbigkeit: '4c', auflagen: [100],
     });
     const familie = (id) => config.papiere.find((p) => p.id === id).familie;
     for (const zeile of zeilen) {
-      expect(familie(zeile.pUmschlagId)).toBe(familie(zeile.pInhaltId));
+      const ausnahme = (config.umschlagAusnahmen?.[zeile.pInhaltId] ?? []).includes(zeile.pUmschlagId);
+      expect(familie(zeile.pUmschlagId) === familie(zeile.pInhaltId) || ausnahme).toBe(true);
     }
   });
 
-  it('V3: R_90 bei A5 Hoch erzeugt keine mit-Umschlag-Zeile (R_300 ist Breitbahn)', () => {
+  it('P1: R_90 bei A5 Hoch bekommt genau die Ausnahme-Umschläge CC_250/N_250', () => {
+    // Bis V3 gab es für R_90 gar keine mit-Umschlag-Zeile (R_300 ist Breitbahn);
+    // seit 2.4.0 gelten die umschlagAusnahmen aus der Config (Guido 05.08.2026).
     const zeilen = computeArtikelMitUmschlag({
       config, formatKey: 'A5_Hoch', farbigkeit: '4c', auflagen: [100],
     });
-    expect(zeilen.some((z) => z.pInhaltId === 'R_90')).toBe(false);
-    // ohne Umschlag bleibt R_90 bestellbar
+    const r90 = zeilen.filter((z) => z.pInhaltId === 'R_90');
+    expect(r90.map((z) => z.pUmschlagId).sort()).toEqual(['CC_250', 'N_250']);
+    // ohne Umschlag bleibt R_90 ebenfalls bestellbar
     const ohne = computeArtikelOhneUmschlag({
       config, formatKey: 'A5_Hoch', farbigkeit: '4c', auflagen: [100],
     });

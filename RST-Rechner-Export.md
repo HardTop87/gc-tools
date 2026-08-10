@@ -1,10 +1,24 @@
 # RST-Rechner — Kompletter Export der Berechnungslogik (Rückstichheftung)
 
-> **Version 2.2.0 · Stand 2026-07-30.** Ersetzt den Export vom 2026-07-06.
-> Umgesetzt: V3-Preisupdate lt. Mail Guido vom 30.07.2026 (`RST GC-AR-V3.xlsx`,
+> **Version 2.4.0 · Stand 2026-08-10.** Ersetzt den Export vom 2026-07-30.
+> **Neu in 2.4.0** (Guidos Rückmeldung vom 10.08.2026):
+> **GC-Dickenaufschlag** für den weichen Übergang zum Partner (Kap. 5.6):
+> Aufschlag = (Buchdicke mm − 1) × (Auflage − 80) × 5 €, nur GC. Außerdem
+> **Umschlag-Ausnahme** R_90 → CC_250/N_250 (Kap. 4) und **4 Seiten Inhalt mit
+> Umschlag** zugelassen (Kap. 5.1).
+>
+> **Aus 2.3.0** (Mail Guido vom 05.08.2026, `Makulatur.xlsx`): Die Makulatur ist ein
+> **Prozentsatz auf die gedruckten Bogen des Gesamtauftrags** — bisher wurde dieselbe
+> Formel als absolute Bogenzahl je Komponente gerechnet (Kap. 5.2). Wirkung: Auflagen
+> unter 10 Ex. werden minimal günstiger, ab ca. 50 Ex. 3–4 % teurer. Außerdem ist
+> **Partner Kopp auf 1.000 Exemplare begrenzt** (Guidos Produktionsmatrix); darüber
+> liefert der Rechner kein Angebot mehr, statt den Verarbeitungspreis der 1.000er-Staffel
+> flach fortzuschreiben.
+>
+> Aus 2.2.0 unverändert: V3-Preisupdate lt. Mail Guido vom 30.07.2026 (`RST GC-AR-V3.xlsx`,
 > `Preise gc.xlsx`): neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle,
 > Banner-Natur jetzt N_80_BAN/N_120_BAN (N_100_BAN nicht lieferbar), R_300 nicht mehr
-> als A5-Hoch-Umschlag (Breitbahn). Außerdem seit 2.1.1: ILDA maximal 500 Exemplare.
+> als A5-Hoch-Umschlag (Breitbahn). Seit 2.1.1: ILDA maximal 500 Exemplare.
 > Seitenlimits weiterhin per Dickenformel, Familienregel unverändert (Entscheidung
 > Armin 30.07. — die Matrizen der V3-Datei werden nicht übernommen).
 >
@@ -19,7 +33,7 @@
 | Route | Typ | Std. | Express | Formate | Auflage |
 |---|---|---|---|---|---|
 | GC (Horizon) | Eigenproduktion | 3 WT | 2 WT | A6_Hoch, A5_Hoch, A5_Quer, A4_Hoch | 1–500 |
-| Partner Kopp | Fremdvergabe | 3 WT | 2 WT | A6_Hoch, A5_Hoch, A5_Quer, A4_Hoch | 10+ |
+| Partner Kopp | Fremdvergabe | 3 WT | 2 WT | A6_Hoch, A5_Hoch, A5_Quer, A4_Hoch | 10–1.000 |
 | Partner ILDA | Fremdvergabe | 4 WT | 3 WT | A5_Hoch, A5_Quer, A4_Hoch, A4_Quer, 30x30 | ab 100 (Standard) / ab 10 (Banner), **max. 500** |
 
 **Express-Zuschlag:** +10 % auf die Gesamtsumme (alle Routen).
@@ -58,6 +72,9 @@ Die frühere Route „Intern (Inline auf KM)" heißt jetzt **GC (Horizon)** mit 
 | `gcUmschlagAbAuflage` | 11 | GC-Umschlag-Zuschlag greift ab dieser Auflage (NEU) |
 | `maxDickeGC` | 1500 | Max. Broschürendicke GC/Horizon in µm — Basis der Seitenlimits (NEU) |
 | `maxDickePartner` | 2500 | Max. Broschürendicke Kopp/ILDA in µm (NEU) |
+| `gcDickenAufschlagAbMm` | 1 | Dickenaufschlag: ab dieser Buchdicke in mm (NEU 2.4.0) |
+| `gcDickenAufschlagAbAuflage` | 80 | Dickenaufschlag: ab dieser Auflage — A0, zugleich Nullpunkt (NEU 2.4.0) |
+| `gcDickenAufschlagFaktor` | 5 | Dickenaufschlag: X in € pro mm und Exemplar (NEU 2.4.0) |
 
 *Entfernt: `dynFaktorKlickSRA4` (SRA4-Sonderfall existiert nicht mehr).*
 
@@ -123,25 +140,62 @@ Alle Preise: Stand **07/2026** (Guido, 30.07.2026). Keine Platzhalter mehr — R
 - **Familienregel (bestätigt):** Umschlag muss aus derselben Papierfamilie stammen wie der Inhalt — CC↔CC, N↔N, BD↔BD, R↔R. R-Inhalte nur mit R_300-Umschlag; R_300 nicht für N-Inhalte.
 - BD-170-Inhalt ist mit allen BD-Umschlägen (BD_170–BD_350) kombinierbar (Freigabe Armin/Guido).
 - **Neu (30.07.):** R_300 ist nur als Breitbahn lieferbar und damit für A5 Hoch nicht
-  einsetzbar → bei A5 Hoch gibt es keinen Recycling-Umschlag mehr; R_90-Inhalt ist dort
-  nur ohne Umschlag bestellbar.
+  einsetzbar → bei A5 Hoch gibt es keinen Recycling-Umschlag mehr.
+- **Neu (2.4.0, Guido 05.08.):** `umschlagAusnahmen: { R_90: [CC_250, N_250] }` —
+  R_90 (A5 Hoch) darf als einzige familienfremde Kombination einen CC-250- oder
+  N-250-Umschlag bekommen. Die Ausnahme ist ID-basiert und wirkt nirgendwo sonst;
+  CC-250-Umschlag erlaubt dabei regulär Cellophanierung (hängt an der Umschlag-Familie).
 
 ## 5. Berechnungsformeln
 
-### 5.1 Bogenteile & Bogenbedarf (unverändert)
+### 5.1 Bogenteile & Bogenbedarf
+
+**Neu in 2.4.0:** 4 Seiten Inhalt sind **mit Umschlag** zulässig (1 Bogenteil Inhalt +
+1 Umschlag = 2 Bogenteile gesamt, WV-Zeile 2 existiert überall); ohne Umschlag bleibt
+das Minimum 8. Ungültige Seitenzahlen (kein Vielfaches von 4, unter dem Minimum) werden
+mit einer klaren Meldung abgelehnt statt mit einem Preistabellen-Fehler.
 
 ```
 bogenteile        = seiten / 4
 bogenteileGesamt  = bogenteile + 1  (falls Umschlag)  → Lookup-Schlüssel WV-Tabellen
 nettoBogenInhalt  = ceil(auflage × bogenteile / nutzen)     nutzen = formatabhängig (Kap. 2)
 nettoBogenUmschlag= ceil(auflage / nutzen)
-bogen             = nettoBogen + makulatur(nettoBogen)
+bogen             = nettoBogen + makulaturBogen   (Kap. 5.2)
 ```
 
-### 5.2 Makulatur & Deckungsbeiträge (unverändert)
+### 5.2 Makulatur — Prozentmodell (NEU in 2.3.0)
+
+Guidos Formel aus `Makulatur.xlsx` liefert einen **Prozentsatz**, keine Bogenzahl. Er wird
+auf die **gedruckten Bogen des gesamten Auftrags** bezogen — Inhalt und Umschlag zusammen —
+und beide Komponenten bekommen denselben Faktor.
 
 ```
-makulatur(n) = ceil( 3 + 2,0092575059 / (n+190,4668326232)^0,08795607978 + 1097,938962524 / (n+190,4668326232) )
+gesamtBogen  = nettoBogenInhalt + nettoBogenUmschlag
+makuProzent  = 3 + 2,0092575059 / (gesamtBogen+190,4668326232)^0,08795607978
+                 + 1097,938962524 / (gesamtBogen+190,4668326232)
+faktor       = 1 + makuProzent / 100
+bogen        = round(nettoBogen × faktor)          mindestens nettoBogen + 1
+```
+
+Stützpunkte der Kurve: 1 Bogen → 10 % · 100 → 8 % · 1.000 → 5 % · 10.000 → 4 %.
+
+Guidos Rechenbeispiel trifft exakt: 100 Ex., 40 Seiten inkl. Umschlag, A4 → 1.000 Bogen →
+Faktor 1,05 → **105 Umschläge / 945 Inhaltsbogen**.
+
+Kaufmännisch gerundet statt aufgerundet: Die gefittete Kurve trifft ihre Stützpunkte nur
+auf ~1e-5 genau (bei 1.000 Bogen 5,00003 % statt 5 %); mit Aufrunden käme dort ein ganzer
+Extrabogen dazu, der reines Fit-Rauschen wäre. Gedruckt wird nie ohne Anlauf, deshalb
+mindestens ein Makulaturbogen je Komponente.
+
+**Aufträge unter 10 Broschüren** werden für die Makulatur wie 10 bemessen (Guido: „die
+verhalten sich wie 10, Kompensation über den Verarbeitungspreis"): Die Anlaufmakulatur
+fällt unabhängig von der Bestellmenge an, deshalb werden die Makulaturbogen auf der
+10er-Basis ermittelt und auf die tatsächliche Netto-Bogenzahl aufgeschlagen. Ab 10
+Broschüren ist das identisch mit der direkten Rechnung.
+
+### 5.2a Deckungsbeiträge (unverändert, auf der Netto-Bogenzahl)
+
+```
 dbDruck(n)   = 1,5 + 4    / n^0,15
 dbPapier(n)  = 1,3 + 0,75 / n^0,2
 ```
@@ -181,6 +235,19 @@ auflage ≥ 11:  5 € + 0,05 € × auflage
 
 Nur GC-Route (Horizon „ohne Rillung des Umschlags"); Kopp/ILDA inkl. Rillung → 0 €. Eigene Position `umschlagZuschlag` im Ergebnis, geht vor dem Express-Aufschlag in die Summe ein.
 
+### 5.5a Dickenaufschlag GC (NEU in 2.4.0 — Guidos „weicher Übergang")
+
+```
+buchdickeMm     = (bogenteile × dickeInhalt + [dickeUmschlag falls U]) / 1000
+dickenAufschlag = max(buchdickeMm − 1, 0) × max(auflage − 80, 0) × 5 €
+```
+
+Nur GC-Route. Unter 1 mm Buchdicke oder bis 80 Exemplare passiert nichts; darüber wächst
+der Aufschlag stufenlos, bis die Empfehlung zum Partner kippt (ab 200 Ex. wechseln alle
+Broschüren ab 1,25 mm, bei 150 Ex. ~96 %). Eigene Position `dickenAufschlag`, geht vor
+dem Express-Aufschlag in die Summe ein. Kalibrierung: `RST-Update-V4-Plan.md` Kap. 4 und
+`Dickenaufschlag-Kalibrierung.xlsx`.
+
 ### 5.6 Cellophanierung (Banner-Faktor NEU)
 
 Nur mit Umschlag, nur Familien CC/BD. Stückpreise pro Umschlagbogen: Glänzend 0,1 € | Matt / kratzfest 0,2 € | Softtouch 0,3 €
@@ -195,7 +262,7 @@ Tabellen-Lookup über bogenteileGesamt × Auflage mit linearer Interpolation zwi
 unter kleinster Staffel → nicht angeboten; über größter Staffel → Preis der größten Staffel.
 
 ```
-gesamt = kostenPapier + kostenKlick + wvKosten + celloKosten + umschlagZuschlag + setupKosten
+gesamt = kostenPapier + kostenKlick + wvKosten + celloKosten + umschlagZuschlag + dickenAufschlag + setupKosten
 gesamt ×= (1 + expressFaktor)   (falls Express)
 gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × offenB × offenH / 10^6
 ```
@@ -338,70 +405,76 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 279.08,
-      "stueckPreis": 2.7908,
+      "gesamt": 288.28,
+      "stueckPreis": 2.8828,
       "nutzen": 1,
       "maxSeiten": 44,
       "nettoBogenInhalt": 600,
-      "bogenInhalt": 606,
+      "bogenInhalt": 633,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 6,
+      "makulaturInhalt": 33,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 48.55,
-      "kostenKlickGesamt": 158.03,
+      "makulaturProzent": 5.51,
+      "kostenPapierGesamt": 50.71,
+      "kostenKlickGesamt": 165.07,
       "wvKosten": 57.5,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 89.8,
+      "weightPerCopyG": 89.81,
       "weightTotalKg": 8.98,
       "produktionszeitWT": 3
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 342.58,
-      "stueckPreis": 3.4258,
+      "gesamt": 351.78,
+      "stueckPreis": 3.5178,
       "nutzen": 1,
       "maxSeiten": 76,
       "nettoBogenInhalt": 600,
-      "bogenInhalt": 606,
+      "bogenInhalt": 633,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 6,
+      "makulaturInhalt": 33,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 48.55,
-      "kostenKlickGesamt": 158.03,
+      "makulaturProzent": 5.51,
+      "kostenPapierGesamt": 50.71,
+      "kostenKlickGesamt": 165.07,
       "wvKosten": 121,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 89.8,
+      "weightPerCopyG": 89.81,
       "weightTotalKg": 8.98,
       "produktionszeitWT": 3
     },
     {
       "name": "Partner ILDA",
-      "gesamt": 338.98,
-      "stueckPreis": 3.3898,
+      "gesamt": 348.18,
+      "stueckPreis": 3.4818,
       "nutzen": 1,
       "maxSeiten": 76,
       "nettoBogenInhalt": 600,
-      "bogenInhalt": 606,
+      "bogenInhalt": 633,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 6,
+      "makulaturInhalt": 33,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 48.55,
-      "kostenKlickGesamt": 158.03,
+      "makulaturProzent": 5.51,
+      "kostenPapierGesamt": 50.71,
+      "kostenKlickGesamt": 165.07,
       "wvKosten": 117.4,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 89.8,
+      "weightPerCopyG": 89.81,
       "weightTotalKg": 8.98,
       "produktionszeitWT": 4
     }
@@ -426,74 +499,80 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     "celloUmschlag": "matt",
     "produktionszeit": "standard"
   },
-  "recommendedName": "GC (Horizon)",
+  "recommendedName": "Partner Kopp",
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 1156.8,
-      "stueckPreis": 3.856,
+      "gesamt": 1537.16,
+      "stueckPreis": 5.1239,
       "nutzen": 1,
       "maxSeiten": 36,
       "nettoBogenInhalt": 2400,
-      "bogenInhalt": 2405,
-      "bogenUmschlag": 307,
-      "makulaturInhalt": 5,
-      "makulaturUmschlag": 7,
-      "kostenPapierGesamt": 251.77,
-      "kostenKlickGesamt": 681.63,
+      "bogenInhalt": 2505,
+      "bogenUmschlag": 313,
+      "makulaturInhalt": 105,
+      "makulaturUmschlag": 13,
+      "makulaturProzent": 4.38,
+      "kostenPapierGesamt": 260.8,
+      "kostenKlickGesamt": 707.46,
       "wvKosten": 107,
       "umschlagZuschlag": 20,
-      "celloKosten": 81.4,
+      "dickenAufschlag": 344.3,
+      "celloKosten": 82.6,
       "celloStueckpreis": 0.2,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 157.2,
+      "weightPerCopyG": 157.17,
       "weightTotalKg": 47.15,
       "produktionszeitWT": 3
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 1220.8,
-      "stueckPreis": 4.0693,
+      "gesamt": 1256.86,
+      "stueckPreis": 4.1895,
       "nutzen": 1,
       "maxSeiten": 68,
       "nettoBogenInhalt": 2400,
-      "bogenInhalt": 2405,
-      "bogenUmschlag": 307,
-      "makulaturInhalt": 5,
-      "makulaturUmschlag": 7,
-      "kostenPapierGesamt": 251.77,
-      "kostenKlickGesamt": 681.63,
+      "bogenInhalt": 2505,
+      "bogenUmschlag": 313,
+      "makulaturInhalt": 105,
+      "makulaturUmschlag": 13,
+      "makulaturProzent": 4.38,
+      "kostenPapierGesamt": 260.8,
+      "kostenKlickGesamt": 707.46,
       "wvKosten": 191,
       "umschlagZuschlag": 0,
-      "celloKosten": 81.4,
+      "dickenAufschlag": 0,
+      "celloKosten": 82.6,
       "celloStueckpreis": 0.2,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 157.2,
+      "weightPerCopyG": 157.17,
       "weightTotalKg": 47.15,
       "produktionszeitWT": 3
     },
     {
       "name": "Partner ILDA",
-      "gesamt": 1248.8,
-      "stueckPreis": 4.1627,
+      "gesamt": 1284.86,
+      "stueckPreis": 4.2829,
       "nutzen": 1,
       "maxSeiten": 68,
       "nettoBogenInhalt": 2400,
-      "bogenInhalt": 2405,
-      "bogenUmschlag": 307,
-      "makulaturInhalt": 5,
-      "makulaturUmschlag": 7,
-      "kostenPapierGesamt": 251.77,
-      "kostenKlickGesamt": 681.63,
+      "bogenInhalt": 2505,
+      "bogenUmschlag": 313,
+      "makulaturInhalt": 105,
+      "makulaturUmschlag": 13,
+      "makulaturProzent": 4.38,
+      "kostenPapierGesamt": 260.8,
+      "kostenKlickGesamt": 707.46,
       "wvKosten": 219,
       "umschlagZuschlag": 0,
-      "celloKosten": 81.4,
+      "dickenAufschlag": 0,
+      "celloKosten": 82.6,
       "celloStueckpreis": 0.2,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 157.2,
+      "weightPerCopyG": 157.17,
       "weightTotalKg": 47.15,
       "produktionszeitWT": 4
     }
@@ -522,47 +601,51 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 131.73,
-      "stueckPreis": 1.3173,
+      "gesamt": 132.86,
+      "stueckPreis": 1.3286,
       "nutzen": 4,
       "maxSeiten": 44,
       "nettoBogenInhalt": 150,
-      "bogenInhalt": 158,
+      "bogenInhalt": 161,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 8,
+      "makulaturInhalt": 11,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 13.22,
-      "kostenKlickGesamt": 46.02,
+      "makulaturProzent": 7.43,
+      "kostenPapierGesamt": 13.47,
+      "kostenKlickGesamt": 46.89,
       "wvKosten": 57.5,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 22.4,
+      "weightPerCopyG": 22.38,
       "weightTotalKg": 2.24,
       "produktionszeitWT": 3
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 195.23,
-      "stueckPreis": 1.9523,
+      "gesamt": 196.36,
+      "stueckPreis": 1.9636,
       "nutzen": 4,
       "maxSeiten": 76,
       "nettoBogenInhalt": 150,
-      "bogenInhalt": 158,
+      "bogenInhalt": 161,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 8,
+      "makulaturInhalt": 11,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 13.22,
-      "kostenKlickGesamt": 46.02,
+      "makulaturProzent": 7.43,
+      "kostenPapierGesamt": 13.47,
+      "kostenKlickGesamt": 46.89,
       "wvKosten": 121,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
       "expressSurcharge": 0,
-      "weightPerCopyG": 22.4,
+      "weightPerCopyG": 22.38,
       "weightTotalKg": 2.24,
       "produktionszeitWT": 3
     },
@@ -595,47 +678,51 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 74.07,
-      "stueckPreis": 1.4813,
+      "gesamt": 73.89,
+      "stueckPreis": 1.4778,
       "nutzen": 2,
       "maxSeiten": 48,
       "nettoBogenInhalt": 100,
-      "bogenInhalt": 109,
+      "bogenInhalt": 108,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 9,
+      "makulaturInhalt": 8,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 5.87,
-      "kostenKlickGesamt": 11.46,
+      "makulaturProzent": 8,
+      "kostenPapierGesamt": 5.82,
+      "kostenKlickGesamt": 11.36,
       "wvKosten": 35,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
-      "expressSurcharge": 6.73,
-      "weightPerCopyG": 22.4,
+      "expressSurcharge": 6.72,
+      "weightPerCopyG": 22.38,
       "weightTotalKg": 1.12,
       "produktionszeitWT": 2
     },
     {
       "name": "Partner Kopp",
-      "gesamt": 143.37,
-      "stueckPreis": 2.8673,
+      "gesamt": 143.19,
+      "stueckPreis": 2.8638,
       "nutzen": 2,
       "maxSeiten": 84,
       "nettoBogenInhalt": 100,
-      "bogenInhalt": 109,
+      "bogenInhalt": 108,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 9,
+      "makulaturInhalt": 8,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 5.87,
-      "kostenKlickGesamt": 11.46,
+      "makulaturProzent": 8,
+      "kostenPapierGesamt": 5.82,
+      "kostenKlickGesamt": 11.36,
       "wvKosten": 98,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
-      "expressSurcharge": 13.03,
-      "weightPerCopyG": 22.4,
+      "expressSurcharge": 13.02,
+      "weightPerCopyG": 22.38,
       "weightTotalKg": 1.12,
       "produktionszeitWT": 2
     },
@@ -676,19 +763,21 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
     },
     {
       "name": "Partner ILDA",
-      "gesamt": 741.05,
-      "stueckPreis": 4.9403,
+      "gesamt": 756.96,
+      "stueckPreis": 5.0464,
       "nutzen": 1,
       "maxSeiten": 68,
       "nettoBogenInhalt": 750,
-      "bogenInhalt": 756,
+      "bogenInhalt": 788,
       "bogenUmschlag": 158,
-      "makulaturInhalt": 6,
+      "makulaturInhalt": 38,
       "makulaturUmschlag": 8,
-      "kostenPapierGesamt": 133.89,
-      "kostenKlickGesamt": 362.16,
+      "makulaturProzent": 5.09,
+      "kostenPapierGesamt": 137.78,
+      "kostenKlickGesamt": 374.18,
       "wvKosten": 162.6,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 67.4,
       "celloStueckpreis": 0.3,
       "setupKosten": 15,
@@ -701,11 +790,11 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 }
 ```
 
-### Kleinmenge: A4 Hoch, 1 Ex., 20 Seiten, 1/1, N 80, ohne Umschlag, Standard (Zielpreis ~25 €)
+### Kleinmenge: A4 Hoch, 1 Ex., 20 Seiten, 1/1, N 80, ohne Umschlag, Standard (Guidos Zielpreis ~25 €)
 
 ```json
 {
-  "label": "Kleinmenge: A4 Hoch, 1 Ex., 20 Seiten, 1/1, N 80, ohne Umschlag, Standard (Zielpreis ~25 €)",
+  "label": "Kleinmenge: A4 Hoch, 1 Ex., 20 Seiten, 1/1, N 80, ohne Umschlag, Standard (Guidos Zielpreis ~25 €)",
   "inputs": {
     "formatKey": "A4_Hoch",
     "auflage": "1",
@@ -722,19 +811,21 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 22.92,
-      "stueckPreis": 22.9185,
+      "gesamt": 21.75,
+      "stueckPreis": 21.7511,
       "nutzen": 1,
       "maxSeiten": 56,
       "nettoBogenInhalt": 5,
-      "bogenInhalt": 15,
+      "bogenInhalt": 9,
       "bogenUmschlag": 0,
-      "makulaturInhalt": 10,
+      "makulaturInhalt": 4,
       "makulaturUmschlag": 0,
-      "kostenPapierGesamt": 0.83,
-      "kostenKlickGesamt": 2.09,
+      "makulaturProzent": 8.81,
+      "kostenPapierGesamt": 0.5,
+      "kostenKlickGesamt": 1.25,
       "wvKosten": 5,
       "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
       "celloKosten": 0,
       "celloStueckpreis": 0,
       "setupKosten": 15,
@@ -755,6 +846,308 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 }
 ```
 
+### Dickenaufschlag: A4 Hoch, 200 Ex., 32 Seiten, 4/4, CC 160, ohne Umschlag, Standard (1,328 mm → Empfehlung kippt zum Partner)
+
+```json
+{
+  "label": "Dickenaufschlag: A4 Hoch, 200 Ex., 32 Seiten, 4/4, CC 160, ohne Umschlag, Standard (1,328 mm → Empfehlung kippt zum Partner)",
+  "inputs": {
+    "formatKey": "A4_Hoch",
+    "auflage": "200",
+    "seiten": "32",
+    "pInhaltId": "CC_160",
+    "dInhaltKey": "4c",
+    "hasUmschlag": false,
+    "pUmschlagId": "",
+    "dUmschlagKey": "4c",
+    "celloUmschlag": "ohne",
+    "produktionszeit": "standard"
+  },
+  "recommendedName": "Partner Kopp",
+  "results": [
+    {
+      "name": "GC (Horizon)",
+      "gesamt": 910.41,
+      "stueckPreis": 4.552,
+      "nutzen": 1,
+      "maxSeiten": 36,
+      "nettoBogenInhalt": 1600,
+      "bogenInhalt": 1674,
+      "bogenUmschlag": 0,
+      "makulaturInhalt": 74,
+      "makulaturUmschlag": 0,
+      "makulaturProzent": 4.65,
+      "kostenPapierGesamt": 174.4,
+      "kostenKlickGesamt": 434.71,
+      "wvKosten": 89.5,
+      "umschlagZuschlag": 0,
+      "dickenAufschlag": 196.8,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 159.67,
+      "weightTotalKg": 31.93,
+      "produktionszeitWT": 3
+    },
+    {
+      "name": "Partner Kopp",
+      "gesamt": 793.11,
+      "stueckPreis": 3.9655,
+      "nutzen": 1,
+      "maxSeiten": 60,
+      "nettoBogenInhalt": 1600,
+      "bogenInhalt": 1674,
+      "bogenUmschlag": 0,
+      "makulaturInhalt": 74,
+      "makulaturUmschlag": 0,
+      "makulaturProzent": 4.65,
+      "kostenPapierGesamt": 174.4,
+      "kostenKlickGesamt": 434.71,
+      "wvKosten": 169,
+      "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 159.67,
+      "weightTotalKg": 31.93,
+      "produktionszeitWT": 3
+    },
+    {
+      "name": "Partner ILDA",
+      "gesamt": 773.91,
+      "stueckPreis": 3.8695,
+      "nutzen": 1,
+      "maxSeiten": 60,
+      "nettoBogenInhalt": 1600,
+      "bogenInhalt": 1674,
+      "bogenUmschlag": 0,
+      "makulaturInhalt": 74,
+      "makulaturUmschlag": 0,
+      "makulaturProzent": 4.65,
+      "kostenPapierGesamt": 174.4,
+      "kostenKlickGesamt": 434.71,
+      "wvKosten": 149.8,
+      "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 159.67,
+      "weightTotalKg": 31.93,
+      "produktionszeitWT": 4
+    }
+  ]
+}
+```
+
+### Umschlag-Ausnahme: A5 Hoch, 100 Ex., 24 Seiten, 4/4, R 90 + Umschlag CC 250, Standard
+
+```json
+{
+  "label": "Umschlag-Ausnahme: A5 Hoch, 100 Ex., 24 Seiten, 4/4, R 90 + Umschlag CC 250, Standard",
+  "inputs": {
+    "formatKey": "A5_Hoch",
+    "auflage": "100",
+    "seiten": "24",
+    "pInhaltId": "R_90",
+    "dInhaltKey": "4c",
+    "hasUmschlag": true,
+    "pUmschlagId": "CC_250",
+    "dUmschlagKey": "4c",
+    "celloUmschlag": "ohne",
+    "produktionszeit": "standard"
+  },
+  "recommendedName": "GC (Horizon)",
+  "results": [
+    {
+      "name": "GC (Horizon)",
+      "gesamt": 231.55,
+      "stueckPreis": 2.3155,
+      "nutzen": 2,
+      "maxSeiten": 40,
+      "nettoBogenInhalt": 300,
+      "bogenInhalt": 319,
+      "bogenUmschlag": 53,
+      "makulaturInhalt": 19,
+      "makulaturUmschlag": 3,
+      "makulaturProzent": 6.19,
+      "kostenPapierGesamt": 29.95,
+      "kostenKlickGesamt": 102.59,
+      "wvKosten": 74,
+      "umschlagZuschlag": 10,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 49.11,
+      "weightTotalKg": 4.91,
+      "produktionszeitWT": 3
+    },
+    {
+      "name": "Partner Kopp",
+      "gesamt": 296.55,
+      "stueckPreis": 2.9655,
+      "nutzen": 2,
+      "maxSeiten": 76,
+      "nettoBogenInhalt": 300,
+      "bogenInhalt": 319,
+      "bogenUmschlag": 53,
+      "makulaturInhalt": 19,
+      "makulaturUmschlag": 3,
+      "makulaturProzent": 6.19,
+      "kostenPapierGesamt": 29.95,
+      "kostenKlickGesamt": 102.59,
+      "wvKosten": 149,
+      "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 49.11,
+      "weightTotalKg": 4.91,
+      "produktionszeitWT": 3
+    },
+    {
+      "name": "Partner ILDA",
+      "gesamt": 290.95,
+      "stueckPreis": 2.9095,
+      "nutzen": 2,
+      "maxSeiten": 76,
+      "nettoBogenInhalt": 300,
+      "bogenInhalt": 319,
+      "bogenUmschlag": 53,
+      "makulaturInhalt": 19,
+      "makulaturUmschlag": 3,
+      "makulaturProzent": 6.19,
+      "kostenPapierGesamt": 29.95,
+      "kostenKlickGesamt": 102.59,
+      "wvKosten": 143.4,
+      "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 49.11,
+      "weightTotalKg": 4.91,
+      "produktionszeitWT": 4
+    }
+  ]
+}
+```
+
+### 4-Seiter: A4 Hoch, 100 Ex., 4 Seiten Inhalt + Umschlag CC 250, 4/4, CC 120, Standard
+
+```json
+{
+  "label": "4-Seiter: A4 Hoch, 100 Ex., 4 Seiten Inhalt + Umschlag CC 250, 4/4, CC 120, Standard",
+  "inputs": {
+    "formatKey": "A4_Hoch",
+    "auflage": "100",
+    "seiten": "4",
+    "pInhaltId": "CC_120",
+    "dInhaltKey": "4c",
+    "hasUmschlag": true,
+    "pUmschlagId": "CC_250",
+    "dUmschlagKey": "4c",
+    "celloUmschlag": "ohne",
+    "produktionszeit": "standard"
+  },
+  "recommendedName": "GC (Horizon)",
+  "results": [
+    {
+      "name": "GC (Horizon)",
+      "gesamt": 156.67,
+      "stueckPreis": 1.5667,
+      "nutzen": 1,
+      "maxSeiten": 36,
+      "nettoBogenInhalt": 100,
+      "bogenInhalt": 107,
+      "bogenUmschlag": 107,
+      "makulaturInhalt": 7,
+      "makulaturUmschlag": 7,
+      "makulaturProzent": 7,
+      "kostenPapierGesamt": 28.17,
+      "kostenKlickGesamt": 72,
+      "wvKosten": 31.5,
+      "umschlagZuschlag": 10,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 46.15,
+      "weightTotalKg": 4.62,
+      "produktionszeitWT": 3
+    },
+    {
+      "name": "Partner Kopp",
+      "gesamt": 184.17,
+      "stueckPreis": 1.8417,
+      "nutzen": 1,
+      "maxSeiten": 68,
+      "nettoBogenInhalt": 100,
+      "bogenInhalt": 107,
+      "bogenUmschlag": 107,
+      "makulaturInhalt": 7,
+      "makulaturUmschlag": 7,
+      "makulaturProzent": 7,
+      "kostenPapierGesamt": 28.17,
+      "kostenKlickGesamt": 72,
+      "wvKosten": 69,
+      "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 46.15,
+      "weightTotalKg": 4.62,
+      "produktionszeitWT": 3
+    },
+    {
+      "name": "Partner ILDA",
+      "gesamt": 236.97,
+      "stueckPreis": 2.3697,
+      "nutzen": 1,
+      "maxSeiten": 68,
+      "nettoBogenInhalt": 100,
+      "bogenInhalt": 107,
+      "bogenUmschlag": 107,
+      "makulaturInhalt": 7,
+      "makulaturUmschlag": 7,
+      "makulaturProzent": 7,
+      "kostenPapierGesamt": 28.17,
+      "kostenKlickGesamt": 72,
+      "wvKosten": 121.8,
+      "umschlagZuschlag": 0,
+      "dickenAufschlag": 0,
+      "celloKosten": 0,
+      "celloStueckpreis": 0,
+      "setupKosten": 15,
+      "expressSurcharge": 0,
+      "weightPerCopyG": 46.15,
+      "weightTotalKg": 4.62,
+      "produktionszeitWT": 4
+    }
+  ]
+}
+```
+
+> **Hinweis zur Kleinmenge:** Bis 2.2.0 lag dieser Fall bei 22,92 €, jetzt bei 21,75 €.
+> Die alte Absolut-Makulatur gab 5 Netto-Bogen ganze 9 Makulaturbogen — das war der
+> eigentliche Kleinmengenpuffer. Mit dem Prozentmodell fällt er weg; die vier
+> Kleinmengen-Zielpreise (25 / 30 / 30 / 35 €) werden jetzt um 2,5–7 € unterschritten.
+> Guidos eigener Satz dazu lautet „Kompensation über den Verarbeitungspreis" — dafür
+> müssten die Kleinststaffeln der GC-Verarbeitungstabelle angehoben werden. **Offene
+> Frage an Guido.**
+
 ---
 
-*Generiert am 2026-07-30 direkt aus `pricingConfig.default.json` (Version 2.2.0) und der produktiven Engine.*
+*Generiert am 2026-08-10 direkt aus `pricingConfig.default.json` (Version 2.4.0) und der produktiven Engine.*

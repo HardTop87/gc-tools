@@ -6,6 +6,10 @@ export const DRUCK_OPTIONS = [
   { value: '4c', label: '4/4 Farbig' },
 ];
 
+// Aufträge unter dieser Broschürenzahl werden für die Makulatur-Bemessung wie
+// diese Zahl behandelt (Guido 05.08.2026).
+export const MIN_AUFLAGE_MAKU = 10;
+
 function paperById(config, id) {
   return config.papiere.find((p) => p.id === id) ?? null;
 }
@@ -30,12 +34,19 @@ export function getContentPaperOptions(config, formatKey) {
 
 // Familienregel: Umschlag muss aus derselben Papierfamilie stammen wie der Inhalt
 // (CC↔CC, N↔N, BD↔BD, R↔R — bestätigt Armin/Guido 06.07.2026).
+// config.umschlagAusnahmen erlaubt gezielt zusätzliche Umschläge je Inhaltspapier
+// (Guido 05.08.2026: R_90 hat keinen R-Umschlag mehr → CC_250/N_250 zulässig).
+function istUmschlagZulaessig(config, contentPaper, coverPaper) {
+  if (coverPaper.familie === contentPaper.familie) return true;
+  return (config.umschlagAusnahmen?.[contentPaper.id] ?? []).includes(coverPaper.id);
+}
+
 export function getCoverPaperOptions(config, formatKey, contentPaperId) {
   const format = formatByKey(config, formatKey);
   const contentPaper = paperById(config, contentPaperId);
   if (!format || !contentPaper) return [];
   return getPapersByIds(config, format.papiereUmschlag).filter(
-    (paper) => paper.familie === contentPaper.familie,
+    (paper) => istUmschlagZulaessig(config, contentPaper, paper),
   );
 }
 
@@ -144,14 +155,30 @@ function calcDeckungsbeitragPapier(anzahlBogen) {
   return 1.3 + 0.75 / Math.pow(n, 0.2);
 }
 
-function calcMakulatur(anzahlBogen) {
-  const n = Math.max(anzahlBogen, 1);
+// Makulatur ist ein *Prozentsatz* auf die gedruckten Bogen des Gesamtauftrags
+// (Guidos Kurve aus Makulatur.xlsx: 1 Bogen → 10 %, 100 → 8 %, 1.000 → 5 %,
+// 10.000 → 4 %, ∞ → 3,2 %). Inhalt und Umschlag zählen dafür zusammen und
+// bekommen denselben Faktor (Guidos Beispiel: 1.000 Bogen → 1,05 → 105 U / 945 I).
+// Konstanten bleiben hartkodiert wie die DB-Formeln — Kurve, kein Pflegewert.
+export function calcMakulaturProzent(gesamtBogen) {
+  const n = Math.max(gesamtBogen, 1);
   const shifted = n + 190.4668326232;
-  const makulatur =
+  return (
     3 +
     2.0092575059 / Math.pow(shifted, 0.08795607978) +
-    1097.938962524 / shifted;
-  return Math.ceil(makulatur);
+    1097.938962524 / shifted
+  );
+}
+
+// Aufgeschlagene Bogenzahl einer Komponente. Kaufmännisch gerundet, nicht
+// aufgerundet: die gefittete Kurve trifft ihre Stützpunkte nur auf ~1e-5 genau
+// (bei 1.000 Bogen 5,00003 % statt 5 %), und darauf einen ganzen Extrabogen zu
+// setzen wäre Fit-Rauschen statt Kalkulation — Guidos Beispiel ergibt so exakt
+// seine 105 Umschläge / 945 Inhaltsbogen. Gedruckt wird aber nie ohne Anlauf,
+// deshalb mindestens ein Makulaturbogen je Komponente.
+function applyMakulatur(nettoBogen, faktor) {
+  if (nettoBogen <= 0) return 0;
+  return Math.max(Math.round(nettoBogen * faktor), nettoBogen + 1);
 }
 
 function calcGewichtszuschlag(config, gsm) {
@@ -238,7 +265,7 @@ function calcSingleRoute(route, inputs, config, settings) {
     if (!coverPaper || !format.papiereUmschlag.includes(coverPaper.id)) {
       return { key, name, typ, error: 'Umschlagpapier ist ungültig oder für dieses Format nicht zulässig.' };
     }
-    if (coverPaper.familie !== contentPaper.familie) {
+    if (!istUmschlagZulaessig(config, contentPaper, coverPaper)) {
       return {
         key,
         name,
@@ -246,6 +273,21 @@ function calcSingleRoute(route, inputs, config, settings) {
         error: 'Umschlag- und Inhaltspapier müssen aus derselben Papierfamilie stammen (CC/N/BD/R).',
       };
     }
+  }
+
+  // Seitenzahl-Validierung (Bug-Hunt B5): klare Meldung statt irreführendem
+  // Preistabellen-Fehler. 4 Seiten Inhalt sind seit P3 (Guido 05.08.2026) mit
+  // Umschlag zulässig — 1 Bogenteil Inhalt + 1 Umschlag = WV-Zeile 2.
+  const minSeiten = hasUmschlag ? 4 : 8;
+  if (seiten % 4 !== 0 || seiten < minSeiten) {
+    return {
+      key,
+      name,
+      typ,
+      error: hasUmschlag
+        ? 'Seitenzahl muss ein Vielfaches von 4 sein (mindestens 4 mit Umschlag).'
+        : 'Seitenzahl muss ein Vielfaches von 4 und mindestens 8 sein (4 Seiten Inhalt nur mit Umschlag).',
+    };
   }
 
   if (route.minAuflage && auflage < route.minAuflage) {
@@ -262,7 +304,7 @@ function calcSingleRoute(route, inputs, config, settings) {
     dickeInhalt: contentPaper.dickeUm,
     dickeUmschlag: hasUmschlag ? coverPaper.dickeUm : 0,
   });
-  if (maxSeiten < 8) {
+  if (maxSeiten < minSeiten) {
     return { key, name, typ, error: 'Papierkombination technisch nicht möglich (Broschüre zu dick).' };
   }
   if (seiten > maxSeiten) {
@@ -290,25 +332,33 @@ function calcSingleRoute(route, inputs, config, settings) {
   const bogenPreisUmschlag = hasUmschlag ? bogenpreis(coverPaper) : 0;
 
   const nettoBogenInhalt = Math.ceil((auflage * bogenteile) / nutzen);
-  const makulaturInhalt = calcMakulatur(nettoBogenInhalt);
+  const nettoBogenUmschlag = hasUmschlag ? Math.ceil(auflage / nutzen) : 0;
+
+  // Prozentsatz aus dem Gesamtvolumen des Auftrags. Aufträge unter MIN_AUFLAGE_MAKU
+  // Broschüren verhalten sich laut Guido wie MIN_AUFLAGE_MAKU: die Anlaufmakulatur
+  // fällt unabhängig von der Bestellmenge an, deshalb werden die Makulaturbogen auf
+  // der 10er-Basis bemessen und auf die tatsächliche Netto-Bogenzahl aufgeschlagen.
+  // Ab 10 Broschüren ist das identisch mit der direkten Rechnung.
+  const auflageMaku = Math.max(auflage, MIN_AUFLAGE_MAKU);
+  const gesamtBogenBasis =
+    Math.ceil((auflageMaku * bogenteile) / nutzen) +
+    (hasUmschlag ? Math.ceil(auflageMaku / nutzen) : 0);
+  const makulaturProzent = calcMakulaturProzent(gesamtBogenBasis);
+  const makulaturFaktor = 1 + makulaturProzent / 100;
+
+  const nettoBasisInhalt = Math.ceil((auflageMaku * bogenteile) / nutzen);
+  const nettoBasisUmschlag = hasUmschlag ? Math.ceil(auflageMaku / nutzen) : 0;
+  const makulaturInhalt = applyMakulatur(nettoBasisInhalt, makulaturFaktor) - nettoBasisInhalt;
+  const makulaturUmschlag = hasUmschlag
+    ? applyMakulatur(nettoBasisUmschlag, makulaturFaktor) - nettoBasisUmschlag
+    : 0;
   const bogenInhalt = nettoBogenInhalt + makulaturInhalt;
+  const bogenUmschlag = nettoBogenUmschlag + makulaturUmschlag;
 
   const dbDruckInhalt = calcDeckungsbeitragDruck(nettoBogenInhalt);
   const dbPapierInhalt = calcDeckungsbeitragPapier(nettoBogenInhalt);
-
-  let bogenUmschlag = 0;
-  let makulaturUmschlag = 0;
-  let nettoBogenUmschlag = 0;
-  let dbDruckUmschlag = 0;
-  let dbPapierUmschlag = 0;
-
-  if (hasUmschlag) {
-    nettoBogenUmschlag = Math.ceil(auflage / nutzen);
-    makulaturUmschlag = calcMakulatur(nettoBogenUmschlag);
-    bogenUmschlag = nettoBogenUmschlag + makulaturUmschlag;
-    dbDruckUmschlag = calcDeckungsbeitragDruck(nettoBogenUmschlag);
-    dbPapierUmschlag = calcDeckungsbeitragPapier(nettoBogenUmschlag);
-  }
+  const dbDruckUmschlag = hasUmschlag ? calcDeckungsbeitragDruck(nettoBogenUmschlag) : 0;
+  const dbPapierUmschlag = hasUmschlag ? calcDeckungsbeitragPapier(nettoBogenUmschlag) : 0;
 
   const gewichtszuschlagInhalt = calcGewichtszuschlag(config, contentPaper.gsm);
   const klickpreisInhalt = (currentKlickInhalt + gewichtszuschlagInhalt) * dbDruckInhalt;
@@ -354,6 +404,21 @@ function calcSingleRoute(route, inputs, config, settings) {
     umschlagZuschlag = settings.gcUmschlagGrundkosten + settings.gcUmschlagStueckpreis * auflage;
   }
 
+  // Dickenaufschlag GC (P4, Guido 10.08.2026): weicher Übergang zum Partner bei
+  // dicken Broschüren in höherer Auflage. Aufschlag = (Buchdicke mm − AbMm) ×
+  // (Auflage − AbAuflage) × Faktor, beide Klammern bei 0 gedeckelt — unter 1 mm
+  // bzw. bis 80 Ex. passiert nichts, darüber wächst er stufenlos, bis die
+  // Empfehlung zum Partner kippt. Kalibrierung: RST-Update-V4-Plan Kap. 4.
+  let dickenAufschlag = 0;
+  if (route.dickenAufschlag) {
+    const buchdickeMm =
+      (bogenteile * contentPaper.dickeUm + (hasUmschlag ? coverPaper.dickeUm : 0)) / 1000;
+    dickenAufschlag =
+      Math.max(buchdickeMm - settings.gcDickenAufschlagAbMm, 0) *
+      Math.max(auflage - settings.gcDickenAufschlagAbAuflage, 0) *
+      settings.gcDickenAufschlagFaktor;
+  }
+
   const gsmUmschlag = hasUmschlag ? coverPaper.gsm : 0;
   const sheetAreaM2 = (format.offenB * format.offenH) / 1_000_000;
   const weightPerCopyG =
@@ -370,7 +435,8 @@ function calcSingleRoute(route, inputs, config, settings) {
   }
 
   const gesamtBase =
-    kostenDruckUndPapier + wvKosten + celloKostenGesamt + umschlagZuschlag + settings.setupKosten;
+    kostenDruckUndPapier + wvKosten + celloKostenGesamt + umschlagZuschlag +
+    dickenAufschlag + settings.setupKosten;
   const isExpress = produktionszeit === 'express';
   const expressSurcharge = isExpress ? gesamtBase * settings.expressFaktor : 0;
   const gesamt = gesamtBase + expressSurcharge;
@@ -408,12 +474,14 @@ function calcSingleRoute(route, inputs, config, settings) {
     gewichtszuschlagUmschlag,
     makulaturInhalt,
     makulaturUmschlag,
+    makulaturProzent,
     celloKosten: celloKostenGesamt,
     celloGrundkosten,
     celloBogenkosten,
     celloStueckpreis,
     celloType: celloTypeEffektiv,
     umschlagZuschlag,
+    dickenAufschlag,
     setupKosten: settings.setupKosten,
     wvKosten,
     weightPerCopyG,

@@ -36,6 +36,9 @@ const SETTINGS_META = {
   gcUmschlagAbAuflage: { label: 'GC Umschlag-Zuschlag ab Auflage', einheit: 'Ex.', step: 1, min: 1, hinweis: 'darunter kein Zuschlag' },
   maxDickeGC: { label: 'Max. Broschürendicke GC', einheit: 'µm', step: 50, min: 1, hinweis: 'Basis der Seitenlimits (Horizon)' },
   maxDickePartner: { label: 'Max. Broschürendicke Partner', einheit: 'µm', step: 50, min: 1, hinweis: 'Basis der Seitenlimits (Kopp/ILDA)' },
+  gcDickenAufschlagAbMm: { label: 'GC Dickenaufschlag ab Buchdicke', einheit: 'mm', step: 0.05, hinweis: 'darunter kein Aufschlag' },
+  gcDickenAufschlagAbAuflage: { label: 'GC Dickenaufschlag ab Auflage', einheit: 'Ex.', step: 5, min: 1, hinweis: 'A0 — zugleich Nullpunkt der Formel' },
+  gcDickenAufschlagFaktor: { label: 'GC Dickenaufschlag: Faktor X', einheit: '€', step: 0.5, hinweis: 'pro mm über der Grenze und Exemplar über A0' },
 };
 
 const WV_VARIANT_LABELS = {
@@ -82,6 +85,7 @@ const SETTINGS_GROUPS = {
   ],
   faktoren: [
     { title: 'GC Umschlag-Zuschlag', keys: ['gcUmschlagGrundkosten', 'gcUmschlagStueckpreis', 'gcUmschlagAbAuflage'] },
+    { title: 'GC Dickenaufschlag (weicher Übergang zum Partner)', keys: ['gcDickenAufschlagAbMm', 'gcDickenAufschlagAbAuflage', 'gcDickenAufschlagFaktor'] },
     { title: 'Seitenlimits (Broschürendicke)', keys: ['maxDickeGC', 'maxDickePartner'] },
     { title: 'Empfehlung der Route', keys: ['preferInternDelta', 'preferKoppDelta'] },
   ],

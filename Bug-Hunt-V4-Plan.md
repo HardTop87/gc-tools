@@ -497,13 +497,30 @@ sie sichtbar sein, am besten zusammen mit F1 in einer Hinweiszeile.
 
 **Danach technisch abarbeiten:**
 
-4. **B3** — stiller Datenverlust zwischen zwei Personen; rein technisch lösbar.
-5. **B2** und **B4** — beide sorgen dafür, dass ein falscher Preis vertrauenswürdig
-   aussieht; zusammen kleiner Aufwand.
-6. **B5**, **B6**, **B7** — Verständlichkeit, gebündelt in einem Durchgang.
-7. **F1/F2** und **B8** — Rhaetia-Export: Hinweiszeile für ersetzte Zeichen, dazu die
-   Object-URLs freigeben. Ein Durchgang in derselben Datei.
-8. **E2** — Stage-2-Treffer in der Oberfläche als heuristisch kennzeichnen.
+4. **B3** — ✅ erledigt 2026-08-10: Ein liegengebliebener Pending-Publish wird nur noch
+   automatisch veröffentlicht, wenn seine Basis-Revision dem geladenen geteilten Stand
+   entspricht (`canAutoPublishPending`); sonst fragt die Verwaltung, ob die eigene
+   Änderung veröffentlicht oder verworfen werden soll.
+5. **B2** — ✅ erledigt 2026-08-10: Der Rechner warnt bei `source: 'invalid'` jetzt mit
+   eigenem Bannertext („geteilter Stand ungültig, es gilt der lokale Stand"), analog
+   zum Offline-Fall.
+   **B4** — ✅ erledigt 2026-08-10: Leere/ungültige Auflage oder Seitenzahl blockiert die
+   Live-Berechnung; statt der Vergleichstabelle erscheint ein Hinweis
+   („Bitte Auflage eingeben …", `rstFormInput.js`), die Engine bleibt für den
+   Leadprint-Mapper unverändert.
+6. **B5** — bereits mit P3 erledigt (klare Seitenzahl-Meldungen in der Engine).
+   **B6** — ✅ erledigt 2026-08-10: Die Statuszeile stützt sich auf die empfohlene bzw.
+   erste gültige Route und nennt deren Namen; nur ohne jede gültige Route erscheint
+   der Fehlerhinweis.
+   **B7** — ✅ erledigt 2026-08-10: Abgelehnte Zahleneingaben in der Verwaltung zeigen
+   einen roten Rand mit Begründung als Tooltip, statt still auf den alten Wert
+   zurückzufallen.
+7. **F1/F2** und **B8** — ✅ erledigt 2026-08-10: Vorschau und Download-Ansicht zeigen
+   eine Hinweisbox, wie viele Adressen der Export verändert (`?`-Ersetzung bzw.
+   CSV-Bereinigung); Downloads laufen über einen Helfer, der Object-URLs nach dem
+   Klick freigibt und mehrere Downloads staffelt.
+8. **E2** — ✅ erledigt 2026-08-10: Stage-2-Treffer tragen in der Matches-Tabelle ein
+   gelbes „Heuristik"-Badge samt Hinweiszeile mit Bitte um Gegenprüfung.
 9. **B9** — nur, falls die Preisbasis als vertraulich eingestuft wird; dann echter
    serverseitiger Login statt Bundle-Passwort.
 

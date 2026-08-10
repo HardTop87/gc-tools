@@ -162,7 +162,7 @@ export default function RechnerRST() {
     }
   }
 
-  const results = calculation?.results ?? [];
+  const results = useMemo(() => calculation?.results ?? [], [calculation]);
   const cheapestPrice = calculation?.cheapestPrice ?? Infinity;
   const recommendedName = calculation?.recommendedName ?? null;
   const recommended = results.find((r) => !r.error && r.name === recommendedName) ?? null;

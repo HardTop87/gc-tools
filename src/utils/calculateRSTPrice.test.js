@@ -11,6 +11,7 @@ import {
   buildPaperPriceCsv,
   configRev,
   getDefaultPricingConfig,
+  migratePricingConfig,
   parseFlexibleNumber,
   parsePaperPriceCsv,
   savePricingConfig,
@@ -550,6 +551,31 @@ describe('Routengrenzen', () => {
     const calc = calculateRSTPrice(baseForm({ auflage: '2000' }), config);
     expect(calc.validResults).toHaveLength(0);
     expect(calc.recommendedName).toBeNull();
+  });
+});
+
+describe('pricingConfig: Schema-Migration beim Laden', () => {
+  it('füllt Settings, die ältere Stände noch nicht kennen, aus dem Default auf', () => {
+    // Nachgestellt: geteilter 2.2.0-Stand ohne die 2.4.0-Dickenaufschlag-Settings.
+    // Ohne Migration wäre er „ungültig" und blockierte das Zurücksetzen (B10-Folge).
+    const alt = getDefaultPricingConfig();
+    delete alt.settings.gcDickenAufschlagAbMm;
+    delete alt.settings.gcDickenAufschlagAbAuflage;
+    delete alt.settings.gcDickenAufschlagFaktor;
+    expect(validatePricingConfig(alt).ok).toBe(false);
+
+    const migriert = migratePricingConfig(alt);
+    expect(validatePricingConfig(migriert).ok).toBe(true);
+    expect(migriert.settings.gcDickenAufschlagAbAuflage).toBe(80);
+    expect(migriert.settings.gcDickenAufschlagFaktor).toBe(5);
+    // vorhandene Werte bleiben unangetastet, das Original wird nicht mutiert
+    expect(migriert.settings.setupKosten).toBe(alt.settings.setupKosten);
+    expect(alt.settings.gcDickenAufschlagFaktor).toBeUndefined();
+  });
+
+  it('lässt vollständige Stände unverändert (gleiche Referenz)', () => {
+    const voll = getDefaultPricingConfig();
+    expect(migratePricingConfig(voll)).toBe(voll);
   });
 });
 

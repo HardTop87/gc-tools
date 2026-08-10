@@ -972,6 +972,16 @@ export default function PayPalExport() {
             <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
               {activeTab === TAB_KEYS.perfect && (
                 <div className="overflow-x-auto">
+                  {/* E2: Stage-2-Treffer beruhen nur auf Nachname + exaktem Betrag —
+                      als Heuristik kenntlich machen statt wie sichere Matches aussehen zu lassen. */}
+                  {reconciliation.matched.some((row) => row.matchType === 'stage2') && (
+                    <p className="border-b border-gray-100 dark:border-gray-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                      {reconciliation.matched.filter((row) => row.matchType === 'stage2').length}{' '}
+                      Zuordnung(en) beruhen auf der Heuristik „Nachname + exakter Betrag“ (unten
+                      markiert) — bei gleichem Nachnamen und Betrag im selben Zeitraum kann die
+                      Belegzuordnung vertauscht sein, bitte gegenprüfen.
+                    </p>
+                  )}
                   <table className="w-full min-w-[920px] divide-y divide-gray-100 dark:divide-gray-800 text-left text-sm">
                     <thead className="bg-gray-50 dark:bg-gray-800 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       <tr>
@@ -994,7 +1004,17 @@ export default function PayPalExport() {
                       )}
                       {reconciliation.matched.map((row) => (
                         <tr key={row.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-700/40">
-                          <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{row.orderNo || '-'}</td>
+                          <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">
+                            {row.orderNo || '-'}
+                            {row.matchType === 'stage2' && (
+                              <span
+                                title="Heuristische Zuordnung: PayPal-Name enthält den Nachnamen und der Betrag stimmt exakt — kein Abgleich über die Auftragsnummer."
+                                className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 align-middle text-[9px] font-black uppercase tracking-wider text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                              >
+                                Heuristik
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.customerName}</td>
                           <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatNumberGerman(row.paypalGross)} EUR</td>
                           <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatNumberGerman(row.paypalFee)} EUR</td>

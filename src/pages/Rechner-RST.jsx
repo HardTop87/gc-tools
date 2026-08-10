@@ -56,8 +56,38 @@ export default function RechnerRST() {
   const [configStale, setConfigStale] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
+  const [toast, setToast] = useState(null);
   const mountedRef = useRef(true);
   const refreshSeqRef = useRef(0);
+  const toastTimerRef = useRef(null);
+
+  // Kurzer Hinweis (2,5 s), z. B. wenn eine Eingabe automatisch korrigiert wurde
+  function showToast(text) {
+    setToast(text);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500);
+  }
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
+
+  // Seitenzahl beim Verlassen des Felds (bzw. Enter) auf die nächste echte
+  // Eingabemöglichkeit aufrunden: Vielfache von 4, Minimum 8 ohne / 4 mit
+  // Umschlag. Nicht bei jedem Tastendruck — sonst könnte man „36" nie tippen,
+  // weil schon die „3" korrigiert würde.
+  function normalizeSeiten() {
+    const n = parseInt(form.seiten, 10);
+    const min = form.hasUmschlag ? 4 : 8;
+    const corrected = Number.isFinite(n) ? Math.max(min, Math.ceil(n / 4) * 4) : min;
+    if (String(corrected) === form.seiten) return;
+    setForm((prev) => ({ ...prev, seiten: String(corrected) }));
+    showToast(
+      Number.isFinite(n)
+        ? `Seitenzahl auf ${corrected} korrigiert — möglich sind Vielfache von 4.`
+        : `Seitenzahl auf ${corrected} gesetzt.`,
+    );
+  }
 
   const settings = config.settings;
   const formatOptions = getFormatOptions(config);
@@ -385,6 +415,10 @@ export default function RechnerRST() {
                   hasUmschlag: parseInt(value, 10) === 4 ? true : prev.hasUmschlag,
                 }));
               }}
+              onBlur={normalizeSeiten}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') normalizeSeiten();
+              }}
               className={`${FIELD_CONTROL} tabular-nums`}
             />
           </Field>
@@ -662,6 +696,12 @@ export default function RechnerRST() {
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] font-medium text-ink shadow-card">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

@@ -125,17 +125,35 @@ function downloadBlob(filename, mime, content) {
 
 // Zahleneingabe mit lokalem Draft: committet erst bei Blur/Enter (nicht pro
 // Tastendruck) und nur Werte ≥ min — Zwischenzustände wie "0" auf dem Weg zu
-// "0,5" erreichen die Config nie. Ungültige Eingaben fallen auf den alten Wert zurück.
+// "0,5" erreichen die Config nie. Ungültige Eingaben fallen auf den alten Wert
+// zurück, werden dabei aber kurz markiert statt still verworfen (B7).
 function NumberField({ value, onCommit, step = 1, className = '', min }) {
   const [draft, setDraft] = useState(null);
+  // Grund der letzten Ablehnung (roter Rand + Tooltip); verschwindet von selbst.
+  const [rejected, setRejected] = useState(null);
+
+  useEffect(() => {
+    if (!rejected) return undefined;
+    const timer = setTimeout(() => setRejected(null), 5000);
+    return () => clearTimeout(timer);
+  }, [rejected]);
 
   function commit() {
     if (draft === null) return;
     const parsed = parseFloat(draft);
     setDraft(null);
-    if (Number.isFinite(parsed) && (min === undefined || parsed >= min) && parsed !== value) {
-      onCommit(parsed);
+    if (!Number.isFinite(parsed)) {
+      setRejected(`„${draft}“ ist keine Zahl — der alte Wert bleibt stehen.`);
+      return;
     }
+    if (min !== undefined && parsed < min) {
+      setRejected(
+        `Wert abgelehnt: Minimum ist ${min.toLocaleString('de-DE')} — der alte Wert bleibt stehen.`,
+      );
+      return;
+    }
+    setRejected(null);
+    if (parsed !== value) onCommit(parsed);
   }
 
   return (
@@ -144,12 +162,18 @@ function NumberField({ value, onCommit, step = 1, className = '', min }) {
       step={step}
       min={min}
       value={draft ?? value}
-      onChange={(event) => setDraft(event.target.value)}
+      title={rejected ?? undefined}
+      onChange={(event) => {
+        setRejected(null);
+        setDraft(event.target.value);
+      }}
       onBlur={commit}
       onKeyDown={(event) => {
         if (event.key === 'Enter') event.currentTarget.blur();
       }}
-      className={`tok-field rounded-[10px] border border-line2 bg-input px-2.5 text-sm text-ink tabular-nums ${className}`}
+      className={`tok-field rounded-[10px] border bg-input px-2.5 text-sm text-ink tabular-nums ${
+        rejected ? 'border-bad-bd ring-1 ring-bad-bd' : 'border-line2'
+      } ${className}`}
     />
   );
 }

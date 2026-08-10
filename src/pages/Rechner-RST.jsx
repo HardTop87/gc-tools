@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 
 import { fetchSharedConfig, loadPricingConfigResult } from '../utils/pricingConfig';
+import { pruefeRSTPflichtfelder } from '../utils/rstFormInput';
 import {
   DRUCK_OPTIONS,
   calculateRSTPrice,
@@ -53,7 +54,9 @@ export default function RechnerRST() {
   // Startwert aus dem Offline-Cache bzw. Repo-Default, danach lädt ein Effect
   // den geteilten Stand nach. So rendert die Seite sofort und ohne Flackern.
   const [config, setConfig] = useState(() => loadPricingConfigResult().config);
-  const [configStale, setConfigStale] = useState(false);
+  // Warnzustand zum geteilten Preisstand: null (alles gut), 'offline'
+  // (nicht erreichbar) oder 'invalid' (geteilter Stand ungültig, B2).
+  const [configWarnung, setConfigWarnung] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [form, setForm] = useState(() => getInitialRSTForm(config));
   const [toast, setToast] = useState(null);
@@ -140,9 +143,11 @@ export default function RechnerRST() {
       const result = await fetchSharedConfig();
       if (!mountedRef.current || seq !== refreshSeqRef.current) return;
       if (result.config) setConfig(result.config);
-      // Server erreichbar (shared/none/invalid) → keine Offline-Warnung;
-      // nur ein echter Netz-/Timeout-Fehler ('error') setzt configStale.
-      setConfigStale(result.source === 'error');
+      // 'error' = Netz-/Timeout-Fehler, 'invalid' = geteilter Stand ungültig —
+      // beide Fälle rechnen mit dem lokalen Cache/Default und müssen warnen (B2).
+      setConfigWarnung(
+        result.source === 'error' ? 'offline' : result.source === 'invalid' ? 'invalid' : null,
+      );
     };
     refresh();
     const onVisible = () => {
@@ -159,8 +164,17 @@ export default function RechnerRST() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  // B4: Bei leerer/ungültiger Auflage oder Seitenzahl wird NICHT gerechnet —
+  // die Engine würde still mit Defaults (Auflage 1, 8 Seiten) einen plausiblen
+  // falschen Preis liefern. Stattdessen zeigt die UI einen klaren Hinweis.
+  const eingabeProbleme = pruefeRSTPflichtfelder(form);
+  const eingabeOk = eingabeProbleme.length === 0;
+
   // Gerechnet wird live bei jeder Eingabe aus dem aktuell geladenen Stand.
-  const calculation = useMemo(() => calculateRSTPrice(form, config), [form, config]);
+  const calculation = useMemo(
+    () => (eingabeOk ? calculateRSTPrice(form, config) : null),
+    [eingabeOk, form, config],
+  );
 
   // Fallback-Button: holt den geteilten Stand nach; die Neuberechnung ergibt
   // sich automatisch aus dem neuen config-State.
@@ -170,17 +184,21 @@ export default function RechnerRST() {
       const result = await fetchSharedConfig();
       if (!mountedRef.current) return;
       if (result.config) setConfig(result.config);
-      setConfigStale(result.source === 'error');
+      setConfigWarnung(
+        result.source === 'error' ? 'offline' : result.source === 'invalid' ? 'invalid' : null,
+      );
     } finally {
       if (mountedRef.current) setIsCalculating(false);
     }
   }
 
-  const results = calculation.results;
-  const cheapestPrice = calculation.cheapestPrice;
-  const recommendedName = calculation.recommendedName;
+  const results = useMemo(() => calculation?.results ?? [], [calculation]);
+  const cheapestPrice = calculation?.cheapestPrice ?? Infinity;
+  const recommendedName = calculation?.recommendedName ?? null;
   const recommended = results.find((r) => !r.error && r.name === recommendedName) ?? null;
-  const firstResult = results[0];
+  // B6: Die Statuszeile spricht für die empfohlene, hilfsweise die erste
+  // gültige Route — nicht stur für results[0] (das wäre immer GC).
+  const statusRoute = recommended ?? results.find((r) => !r.error) ?? null;
   const bogenteileGesamt =
     (parseInt(form.seiten, 10) || 8) / 4 + (form.hasUmschlag ? 1 : 0);
   const auflageNum = parseInt(form.auflage, 10) || 1;
@@ -193,14 +211,12 @@ export default function RechnerRST() {
       : 'keine Route möglich'
   }`;
 
-  const techLine =
-    firstResult && !firstResult.error
-      ? `${firstResult.formatName} · ${firstResult.nutzen} Nutzen · ${num(firstResult.weightPerCopyG, 1)} g / Stück · ${num(
-          firstResult.bogenInhalt + firstResult.bogenUmschlag,
-        )} Bögen`
-      : `Kombination bei ${firstResult?.name ?? 'GC'} nicht möglich`;
-  const maxSeitenLabel =
-    firstResult && !firstResult.error ? firstResult.maxSeiten : '—';
+  const techLine = statusRoute
+    ? `${statusRoute.name}: ${statusRoute.formatName} · ${statusRoute.nutzen} Nutzen · ${num(statusRoute.weightPerCopyG, 1)} g / Stück · ${num(
+        statusRoute.bogenInhalt + statusRoute.bogenUmschlag,
+      )} Bögen`
+    : 'Kombination bei keiner Route möglich';
+  const maxSeitenLabel = statusRoute ? statusRoute.maxSeiten : '—';
 
   // Zeilen der Vergleichstabelle. `pick` liefert Anzeigewert, optionale
   // Zweitzeile und — für die Diff-Hervorhebung — den Zahlenwert.
@@ -363,12 +379,13 @@ export default function RechnerRST() {
         </div>
       </div>
 
-      {configStale && (
+      {configWarnung && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-warn-bd bg-warn-soft px-4 py-3 text-[13px] text-warn">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Der geteilte Preisstand ist gerade nicht erreichbar — es gilt der zuletzt geladene Stand
-            ({config.meta.stand}). Die Preise sind möglicherweise nicht aktuell.
+            {configWarnung === 'invalid'
+              ? `Der geteilte Preisstand ist ungültig und wird nicht verwendet — es gilt der lokale Stand (${config.meta.stand}). Bitte in der Verwaltung prüfen; die Preise sind möglicherweise nicht aktuell.`
+              : `Der geteilte Preisstand ist gerade nicht erreichbar — es gilt der zuletzt geladene Stand (${config.meta.stand}). Die Preise sind möglicherweise nicht aktuell.`}
           </span>
         </div>
       )}
@@ -560,16 +577,30 @@ export default function RechnerRST() {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-x-[22px] gap-y-1 border-t border-line pt-[11px] text-[12.5px] text-dim">
-          <span>{techLine}</span>
+          <span>{eingabeOk ? techLine : eingabeProbleme.join(' · ')}</span>
           <span>
             Papierfamilie {selectedContentPaper?.familie ?? '—'} — Umschlag muss derselben Familie
             entsprechen
           </span>
-          <span>max. {maxSeitenLabel} Seiten bei dieser Papierkombination</span>
+          <span>
+            max. {maxSeitenLabel} Seiten bei dieser Papierkombination
+            {statusRoute ? ` (${statusRoute.name})` : ''}
+          </span>
         </div>
       </div>
 
-      {/* Vergleichstabelle */}
+      {/* Vergleichstabelle — bei unvollständigen Pflichtfeldern stattdessen
+          ein klarer Hinweis, damit nie ein plausibler falscher Preis steht (B4) */}
+      {!eingabeOk ? (
+        <div className="rounded-2xl border border-line bg-surface p-10 text-center shadow-card">
+          <p className="text-[15px] font-semibold text-ink">
+            {eingabeProbleme.join(' ')}
+          </p>
+          <p className="mt-1.5 text-[13px] text-dim">
+            Die Preisberechnung startet, sobald Auflage und Seitenzahl vollständig eingegeben sind.
+          </p>
+        </div>
+      ) : (
       <div className="overflow-x-auto">
         <div className="min-w-[1040px] overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
           <div className="grid border-b border-line" style={{ gridTemplateColumns: gridTemplate }}>
@@ -696,6 +727,7 @@ export default function RechnerRST() {
           </div>
         </div>
       </div>
+      )}
 
       {toast && (
         <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] font-medium text-ink shadow-card">

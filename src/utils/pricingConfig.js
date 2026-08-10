@@ -321,6 +321,18 @@ export function getPendingPublish() {
   }
 }
 
+// B3: Ein liegengebliebener Pending-Publish darf nur dann automatisch erneut
+// veröffentlicht werden, wenn seine Basis-Revision noch dem geladenen geteilten
+// Stand entspricht — sonst würde er stillschweigend fremde Veröffentlichungen
+// überschreiben. Ohne geladenen geteilten Stand (noch nie veröffentlicht oder
+// offline) darf der Versuch laufen: der Server lehnt eine veraltete baseRev
+// ohnehin mit 409 ab, und der Konfliktfall wird dann sichtbar gemeldet.
+export function canAutoPublishPending(pending, sharedConfig) {
+  if (!pending) return false;
+  if (!sharedConfig) return true;
+  return configRev(pending) === configRev(sharedConfig);
+}
+
 export function clearPendingPublish() {
   try {
     localStorage.removeItem(PENDING_KEY);

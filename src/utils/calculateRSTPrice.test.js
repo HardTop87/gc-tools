@@ -9,6 +9,7 @@ import { computeArtikelMitUmschlag } from './leadprintMapper';
 import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
+  canAutoPublishPending,
   configRev,
   getDefaultPricingConfig,
   parseFlexibleNumber,
@@ -646,5 +647,30 @@ describe('pricingConfig: Validierung & Papierpreis-Import', () => {
     expect(next.papiere[0].preisPro1000).toBe(config.papiere[0].preisPro1000 + 1);
     // Original bleibt unangetastet
     expect(config.papiere[0].preisPro1000).not.toBe(next.papiere[0].preisPro1000);
+  });
+});
+
+describe('B3: Auto-Publish eines liegengebliebenen Pending-Standes', () => {
+  const mitRev = (rev) => ({ meta: rev === undefined ? {} : { rev } });
+
+  it('erlaubt den Auto-Publish nur bei unveränderter Basis-Revision', () => {
+    expect(canAutoPublishPending(mitRev(3), mitRev(3))).toBe(true);
+    // zwischenzeitlich hat jemand anderes veröffentlicht → Nutzer entscheidet
+    expect(canAutoPublishPending(mitRev(3), mitRev(5))).toBe(false);
+    // auch ein scheinbar "neuerer" Pending zählt als Abweichung
+    expect(canAutoPublishPending(mitRev(5), mitRev(3))).toBe(false);
+  });
+
+  it('ohne geladenen geteilten Stand darf der Versuch laufen (Server prüft baseRev)', () => {
+    expect(canAutoPublishPending(mitRev(3), null)).toBe(true);
+  });
+
+  it('ohne Pending gibt es nichts zu veröffentlichen', () => {
+    expect(canAutoPublishPending(null, mitRev(3))).toBe(false);
+  });
+
+  it('fehlende Revisionen zählen als 0 (Repo-Default)', () => {
+    expect(canAutoPublishPending(mitRev(undefined), mitRev(undefined))).toBe(true);
+    expect(canAutoPublishPending(mitRev(undefined), mitRev(2))).toBe(false);
   });
 });

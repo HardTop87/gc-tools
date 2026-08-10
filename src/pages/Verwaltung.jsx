@@ -6,6 +6,7 @@ import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
   buildPaperPriceRows,
+  canAutoPublishPending,
   clearPendingPublish,
   configRev,
   fetchSharedConfig,
@@ -205,6 +206,9 @@ export default function Verwaltung() {
   const [familyFilter, setFamilyFilter] = useState('Alle');
   const [wvTableKey, setWvTableKey] = useState('gc_horizon');
   const [pendingImport, setPendingImport] = useState(null);
+  // B3: liegengebliebener Pending-Publish, dessen Basis nicht mehr aktuell ist —
+  // der Nutzer entscheidet, statt dass fremde Veröffentlichungen still überschrieben werden.
+  const [pendingConflict, setPendingConflict] = useState(null);
   const [message, setMessage] = useState(null);
   const [sharedStatus, setSharedStatus] = useState({ state: 'loading' });
   const [publishState, setPublishState] = useState({ status: 'idle' });
@@ -248,9 +252,17 @@ export default function Verwaltung() {
 
       const pending = getPendingPublish();
       if (alive && pending) {
-        setConfig(pending);
-        showMessage('ok', 'Eine noch nicht veröffentlichte Änderung wird erneut veröffentlicht.');
-        schedulePublish(pending, 0);
+        if (canAutoPublishPending(pending, result.config)) {
+          // Basis noch aktuell (oder nicht prüfbar — dann lehnt der Server eine
+          // veraltete baseRev ohnehin mit 409 ab und der Konflikt wird gemeldet).
+          setConfig(pending);
+          showMessage('ok', 'Eine noch nicht veröffentlichte Änderung wird erneut veröffentlicht.');
+          schedulePublish(pending, 0);
+        } else {
+          // Zwischenzeitlich wurde ein anderer Stand veröffentlicht → nicht
+          // automatisch überschreiben, sondern den Nutzer entscheiden lassen.
+          setPendingConflict({ pending, sharedConfig: result.config });
+        }
       }
     })();
     return () => {
@@ -464,6 +476,22 @@ export default function Verwaltung() {
     }
   }
 
+  // B3: Entscheidung des Nutzers zum veralteten Pending-Publish umsetzen.
+  function publishPendingConflict() {
+    if (!pendingConflict) return;
+    setConfig(pendingConflict.pending);
+    setPendingConflict(null);
+    showMessage('ok', 'Deine liegengebliebene Änderung wird veröffentlicht und ersetzt den aktuellen geteilten Stand.');
+    schedulePublish(pendingConflict.pending, 0);
+  }
+
+  function discardPendingConflict() {
+    if (!pendingConflict) return;
+    clearPendingPublish();
+    setPendingConflict(null);
+    showMessage('ok', 'Die liegengebliebene Änderung wurde verworfen — es gilt der aktuelle geteilte Stand.');
+  }
+
   function applyPendingImport() {
     if (!pendingImport) return;
     const next = { ...pendingImport.nextConfig, meta: { ...pendingImport.nextConfig.meta, stand: todayIso() } };
@@ -637,6 +665,37 @@ export default function Verwaltung() {
             Der im Repo hinterlegte Standard hat Version {defaultVersion}, der aktuelle Stand basiert
             auf {config.meta.version}. „Auf Standard zurücksetzen“ veröffentlicht den neuen Standard
             für alle — vorher bei Bedarf die aktuelle Config als JSON exportieren.
+          </div>
+        )}
+
+        {pendingConflict && (
+          <div className="rounded-xl border border-warn-bd bg-warn-soft px-4 py-3 text-warn">
+            <p className="mb-1.5 text-[13px] font-semibold">
+              Nicht veröffentlichte Änderung aus einer früheren Sitzung gefunden
+            </p>
+            <p className="text-[12.5px]">
+              Deine Änderung basiert auf Stand {pendingConflict.pending.meta?.stand} (Rev{' '}
+              {configRev(pendingConflict.pending)}) — inzwischen wurde aber ein neuerer Stand
+              veröffentlicht ({pendingConflict.sharedConfig.meta?.stand}, Rev{' '}
+              {configRev(pendingConflict.sharedConfig)}). „Meine Änderung veröffentlichen“ ersetzt
+              diesen neueren Stand vollständig; „Verwerfen“ behält ihn und verwirft deine Änderung.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={publishPendingConflict}
+                className="inline-flex h-9 items-center rounded-[10px] bg-brand px-4 text-xs font-semibold text-white transition-colors hover:bg-brand-dark"
+              >
+                Meine Änderung veröffentlichen
+              </button>
+              <button
+                type="button"
+                onClick={discardPendingConflict}
+                className="inline-flex h-9 items-center rounded-[10px] border border-line2 bg-surface px-4 text-xs font-semibold text-dim transition-colors hover:text-ink"
+              >
+                Verwerfen — aktuellen Stand behalten
+              </button>
+            </div>
           </div>
         )}
 

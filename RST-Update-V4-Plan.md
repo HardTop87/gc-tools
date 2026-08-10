@@ -543,13 +543,28 @@ dahin ist der geteilte Preisstand ein Mischzustand (Code neu, Blob-Config alt).
      die ursprüngliche März-Version (Grundpreis 25, je Fach 5, ohne Klammer-Anteile
      in dieser Höhe); die Juli-Erhöhung kam, weil ihm die Differenz zu Kopp zu klein
      war. Die aktuelle WV-Tabelle der App (V3) = Juli-Version.
-   Ansatz für den Vorschlag an Guido: gleiche Formelstruktur, aber Turmsprung bei
-   GC auf `aufrunden(BT/10 − 2) × Turmpreis` (2 Türme à 10 Stationen → im
-   RST-Bereich bis BT 13 keine Stufe), Parameter so nachziehen, dass das heutige
-   Preisniveau im Mittel gehalten wird; Differenzen je Zelle zeigen. Solange er
-   eigene Datenpunkte sammelt, bleibt die Tabelle die Quelle — das Modell wird erst
-   Vorschlag, dann Ablösung. Betrifft direkt die 77 %-Sprünge aus 4.5 und den
-   24→28-S.-Sprung (löst ihn: −17,4 % Stufe entfällt).
+   **Vorschlag gebaut (10.08. abends): `GC-Verarbeitungspreise-Vorschlag.xlsx`**
+   (Repo-Root, gitignoriert, 5 Blätter: Lesehilfe · Formel & Parameter · Tabelle im
+   Vergleich · Wirkung · Kleinmengen optional). Kernpunkte, alle aus der Engine
+   gemessen (12.438 Kombinationen):
+   - Verifiziert: Die Staffeln 100–500 der heutigen Tabelle entsprechen Guidos
+     Juli-Formel auf den Cent (55/55 Zellen); die Staffeln 1–50 sind handgesetzte
+     Kleinmengenpreise und bleiben in beiden Varianten unangetastet.
+   - **Variante A (Empfehlung):** Turmsprung auf `aufrunden(BT/10 − 2)` → entfällt
+     im RST-Bereich komplett. Ab BT 7 und ≥ 100 Ex. exakt −10 €; Ø −5,07 € über
+     alle Kombinationen. 24→28-S.-Sprung bei 100 Ex.: +17,2 % → +13,7 %.
+   - **Variante B:** zusätzlich Fach 6,50 → 7,00 € → Ø −2,22 €, dünne Broschüren
+     max +2,50 €, dicke max −7,00 €.
+   - **Verträglichkeit mit P4 gemessen:** 134 Empfehlungen wechseln zurück zu GC
+     (Variante A), davon nur 26 in der Dickenzone ≥ 1,25 mm — alle im Band
+     100–150 Ex. (Guidos „operative Grenzfälle"; 150 Ex.: 91 statt 96 %
+     Wechselquote). **Ab 200 Ex. bleibt die Steuerung bei 100 % (410/410).**
+   - Kleinmengen-Blatt (optional, verzahnt mit der offenen Maku-Frage): drei
+     geänderte Zellen der Auflage-1-Spalte (BT 5: 5→8,50 · BT 6: 10→13 ·
+     BT 7: 10→17) stellen alle vier Zielpreise wieder her; BT 7 kostet damit bei
+     Auflage 1 erstmals mehr als BT 6.
+   Solange Guido eigene Datenpunkte sammelt, bleibt die Tabelle die Quelle — das
+   Modell ist Vorschlag, nicht Automatik. Offen: Guidos Wahl A/B + Freigabe.
 
 **Entschieden am 05.08. (Armin):**
 

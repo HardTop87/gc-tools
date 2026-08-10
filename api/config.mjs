@@ -17,8 +17,10 @@ const REV_PATTERN = /rev-(\d+)\.json$/;
 // Alter Einzel-Blob — wird nur noch gelesen, solange keine Revisionsdatei existiert.
 const LEGACY_PATH = 'pricing-config.json';
 // So viele Revisionsdateien bleiben als Historie stehen; ältere werden nach
-// einem erfolgreichen Publish aufgeräumt (best effort).
-const KEEP_REVISIONS = 10;
+// einem erfolgreichen Publish aufgeräumt (best effort). Die Historie ist über
+// GET ?history=1 sichtbar und über GET ?rev=N + erneutes Veröffentlichen
+// wiederherstellbar — deshalb großzügig bemessen.
+const KEEP_REVISIONS = 20;
 
 // Zugriffsschutz: Der Client sendet das App-Passwort als Header. Verglichen wird
 // serverseitig gegen die (nicht ins Bundle gehörende) Laufzeit-Env. Ist die Env
@@ -126,6 +128,41 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      // ?history=1 → Kurzübersicht der behaltenen Revisionen (für den Verlauf
+      // in der Verwaltung). Liest jede Revisionsdatei einmal — bewusst nur auf
+      // Abruf, nicht bei jedem normalen Laden.
+      if (req.query?.history) {
+        const revisions = await listRevisions();
+        const eintraege = await Promise.all(
+          revisions.map(async (entry) => {
+            try {
+              const config = await readBlobJson(entry.url);
+              return {
+                rev: entry.rev,
+                version: config?.meta?.version ?? null,
+                stand: config?.meta?.stand ?? null,
+                publishedAt: config?.meta?.publishedAt ?? null,
+              };
+            } catch {
+              return { rev: entry.rev, version: null, stand: null, publishedAt: null };
+            }
+          }),
+        );
+        return res.status(200).json({ revisions: eintraege });
+      }
+
+      // ?rev=N → genau diese Revision (zum Wiederherstellen über einen
+      // normalen POST als NEUE Revision — die Historie bleibt linear).
+      if (req.query?.rev) {
+        const rev = parseInt(req.query.rev, 10);
+        const revisions = await listRevisions();
+        const entry = revisions.find((candidate) => candidate.rev === rev);
+        if (!entry) return res.status(404).json({ error: 'Revision nicht (mehr) vorhanden.' });
+        const config = await readBlobJson(entry.url);
+        if (!config) return res.status(404).json({ error: 'Revision nicht lesbar.' });
+        return res.status(200).json(config);
+      }
+
       const config = await readSharedConfig(await listRevisions());
       if (!config) {
         // Noch kein geteilter Preisstand veröffentlicht.

@@ -68,6 +68,45 @@ const toCsvCell = (value) => {
         .trim();
 };
 
+// F1/F2: Der Rhaetia-Export verändert manche Adressen zwangsläufig — Zeichen
+// außerhalb von Windows-1252 (ł, ř, ş, ğ …) werden zu '?', Anführungszeichen
+// entfernt, Semikolon/Zeilenumbruch durch Leerzeichen ersetzt. Diese Prüfung
+// erkennt betroffene Datensätze, damit der Anwender es VOR dem Versand erfährt.
+const EXPORT_FIELDS = ['name', 'zusatz', 'strasse', 'nummer', 'plz', 'ort', 'landCode', 'type'];
+
+const hasUnsupportedWin1252 = (text) => {
+    for (const ch of String(text || '')) {
+        const cp = ch.codePointAt(0);
+        if (cp > 0xFF && WINDOWS_1252_SPECIAL[cp] === undefined) return true;
+    }
+    return false;
+};
+
+const getExportAenderungen = (record) => {
+    let ersetzt = false;   // '?' statt nicht darstellbarer Zeichen (F1)
+    let bereinigt = false; // von toCsvCell entfernte/ersetzte Zeichen (F2)
+    for (const field of EXPORT_FIELDS) {
+        const value = String(record?.[field] ?? '');
+        if (hasUnsupportedWin1252(value)) ersetzt = true;
+        if (/[";\r\n]/.test(value)) bereinigt = true;
+    }
+    return { ersetzt, bereinigt };
+};
+
+// B8: Download über eine kurzlebige Object-URL, die nach dem Klick wieder
+// freigegeben wird; mehrere Downloads werden gestaffelt statt gleichzeitig
+// gefeuert, damit der Browser sie nicht bündelt oder blockiert.
+const triggerDownload = (blob, filename, delayMs = 0) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    setTimeout(() => {
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, delayMs);
+};
+
 const formatPLZ = (plz, land) => {
     let p = String(plz || '').trim();
     const l = String(land || 'DEU').toUpperCase();
@@ -835,22 +874,20 @@ export default function PostVersandManager() {
     const downloadCSV = (label, records) => {
         // SORTIEREN: Mehrfachempfänger nach ganz oben
         const sorted = [...records].sort((a, b) => ((b.hQty||0)+(b.pQty||0)) - ((a.hQty||0)+(a.pQty||0)));
-        const limit = 99; 
-        
+        const limit = 99;
+        let downloadNr = 0; // staffelt alle Downloads dieses Aufrufs (B8)
+
         for (let i = 0; i < sorted.length; i += limit) {
             const batch = sorted.slice(i, i + limit);
             const partStr = sorted.length > limit ? `_Teil_${(i/limit)+1}` : '';
             const safeLabel = label.replace(/\s/g, '_').replace(/[()]/g, '');
 
             // 1. CSV GENERIEREN
-            const content = ["NAME;ZUSATZ;STRASSE;NUMMER;PLZ;STADT;LAND;ADRESS_TYP", SENDER_ROW, 
+            const content = ["NAME;ZUSATZ;STRASSE;NUMMER;PLZ;STADT;LAND;ADRESS_TYP", SENDER_ROW,
                 ...batch.map(r => `${toCsvCell(r.name)};${toCsvCell(r.zusatz)};${toCsvCell(r.strasse)};${toCsvCell(r.nummer)};${toCsvCell(formatPLZ(r.plz, r.landCode))};${toCsvCell(r.ort)};${toCsvCell(r.landCode)};${toCsvCell(r.type || 'HOUSE')}`)
             ].join('\r\n') + '\r\n';
             const blobCSV = new Blob([encodeWindows1252(content)], { type: 'text/csv;charset=windows-1252;' });
-            const aCSV = document.createElement('a'); 
-            aCSV.href = URL.createObjectURL(blobCSV); 
-            aCSV.download = `Rhaetia_${safeLabel}${partStr}.csv`; 
-            aCSV.click();
+            triggerDownload(blobCSV, `Rhaetia_${safeLabel}${partStr}.csv`, downloadNr++ * 400);
 
             // 2. BEGLEITLISTE GENERIEREN (nur wenn nötig)
             // Für die Begleitliste zählt nur die Reihenfolge der Empfänger im Batch.
@@ -867,11 +904,7 @@ export default function PostVersandManager() {
                     begleitLines.push(`S. ${page}, Pos. ${pos} | ${r.name} | ${r.plz} ${r.ort} | ${r.hQty}x Herold, ${r.pQty}x Prog | ${r.totalWeight}g`);
                 });
                 const blobTXT = new Blob([begleitLines.join('\r\n')], { type: 'text/plain;charset=utf-8;' });
-                const aTXT = document.createElement('a'); 
-                aTXT.href = URL.createObjectURL(blobTXT); 
-                aTXT.download = `Begleitliste_${safeLabel}${partStr}.txt`; 
-                // Kurze Pause, damit der Browser nicht blockiert
-                setTimeout(() => aTXT.click(), 500);
+                triggerDownload(blobTXT, `Begleitliste_${safeLabel}${partStr}.txt`, downloadNr++ * 400);
             }
         }
     };
@@ -880,6 +913,30 @@ export default function PostVersandManager() {
     const previewShipmentCount = useMemo(() => {
         if (!results) return 0;
         return results.preview.filter((r) => !r.excluded && !isNoShippingRecord(r)).length;
+    }, [results]);
+
+    // F1/F2: Hinweiszeilen, wie viele versandfähige Adressen der Export
+    // verändern würde (nicht darstellbare Zeichen bzw. CSV-Bereinigung).
+    const exportZeichenHinweis = useMemo(() => {
+        if (!results) return null;
+        let ersetzt = 0;
+        let bereinigt = 0;
+        results.preview.forEach((r) => {
+            if (r.excluded || isNoShippingRecord(r)) return;
+            const aenderung = getExportAenderungen(r);
+            if (aenderung.ersetzt) ersetzt += 1;
+            if (aenderung.bereinigt) bereinigt += 1;
+        });
+        if (!ersetzt && !bereinigt) return null;
+        const lines = [];
+        if (ersetzt) lines.push(ersetzt === 1
+            ? '1 Adresse enthält Zeichen, die Rhaetia (Windows-1252) nicht darstellen kann — sie werden im CSV durch "?" ersetzt.'
+            : `${ersetzt} Adressen enthalten Zeichen, die Rhaetia (Windows-1252) nicht darstellen kann — sie werden im CSV durch "?" ersetzt.`);
+        if (bereinigt) lines.push(bereinigt === 1
+            ? 'In 1 Adresse werden Anführungszeichen entfernt bzw. Semikolon/Zeilenumbruch durch ein Leerzeichen ersetzt.'
+            : `In ${bereinigt} Adressen werden Anführungszeichen entfernt bzw. Semikolon/Zeilenumbruch durch ein Leerzeichen ersetzt.`);
+        lines.push('Betroffene Etiketten vor dem Versand prüfen.');
+        return lines;
     }, [results]);
 
     // Erreichbare Schritte der Tab-Leiste: erst freigeschaltet, wenn die
@@ -1418,6 +1475,15 @@ export default function PostVersandManager() {
                                 <div className="text-center"><p className="text-3xl font-black text-slate-800 dark:text-gray-100">{previewShipmentCount}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Sendungen gesamt</p></div>
                             </div>
                         </div>
+                        {exportZeichenHinweis && (
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 rounded-2xl p-5 flex items-start gap-3">
+                                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                                <div className="text-sm font-semibold space-y-0.5">
+                                    <p className="font-black uppercase text-[10px] tracking-widest mb-1">Hinweis zum Rhaetia-Export</p>
+                                    {exportZeichenHinweis.map((line) => <p key={line}>{line}</p>)}
+                                </div>
+                            </div>
+                        )}
                         {results && (
                             <div className="bg-white dark:bg-gray-900 border-2 border-slate-200 dark:border-gray-700 rounded-[2.5rem] overflow-hidden shadow-xl mt-6">
                                 <table className="w-full text-left">
@@ -1457,6 +1523,15 @@ export default function PostVersandManager() {
                             <div className="relative z-10"><p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-80">Gesamtes Briefporto</p><h2 className="text-8xl font-black mt-2 tracking-tighter italic">{results.totalCost.toFixed(2)} €</h2><p className="text-[10px] font-bold uppercase tracking-widest mt-3 opacity-80">nur Briefport, keine Pakete</p></div>
                             <div className="bg-white/10 p-10 rounded-[2.5rem] backdrop-blur-xl border border-white/20 text-center relative z-10"><p className="text-5xl font-black">{Object.values(results.groups).reduce((acc, arr) => acc + arr.length, 0)}</p><p className="text-[10px] font-black uppercase opacity-80 tracking-widest mt-2">Sendungen Gesamt</p></div>
                         </div>
+                        {exportZeichenHinweis && (
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 rounded-2xl p-5 flex items-start gap-3">
+                                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                                <div className="text-sm font-semibold space-y-0.5">
+                                    <p className="font-black uppercase text-[10px] tracking-widest mb-1">Hinweis zum Rhaetia-Export</p>
+                                    {exportZeichenHinweis.map((line) => <p key={line}>{line}</p>)}
+                                </div>
+                            </div>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {Object.entries(results.groups).map(([label, records]) => (
                                 <div key={label} className="p-8 bg-white dark:bg-gray-900 rounded-[3rem] border-2 dark:border-gray-700 flex flex-col justify-between hover:border-[#8e014d] transition-all shadow-sm">

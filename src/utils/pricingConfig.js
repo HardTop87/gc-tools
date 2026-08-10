@@ -70,6 +70,19 @@ export function validatePricingConfig(config) {
     }
   }
 
+  // umschlagAusnahmen ist optional: Inhaltspapier-ID → zusätzlich erlaubte Umschlag-IDs
+  for (const [inhaltId, coverIds] of Object.entries(config.umschlagAusnahmen ?? {})) {
+    const where = `umschlagAusnahmen.${inhaltId}`;
+    if (!paperIds.has(inhaltId)) errors.push(`${where}: unbekanntes Inhaltspapier.`);
+    if (!Array.isArray(coverIds)) {
+      errors.push(`${where}: muss eine Liste von Umschlag-IDs sein.`);
+      continue;
+    }
+    for (const id of coverIds) {
+      if (!paperIds.has(id)) errors.push(`${where}: unbekanntes Umschlagpapier "${id}".`);
+    }
+  }
+
   const tableNames = Object.keys(config.wvTabellen ?? {});
   for (const name of tableNames) {
     const table = config.wvTabellen[name];

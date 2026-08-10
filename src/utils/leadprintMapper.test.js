@@ -71,15 +71,15 @@ describe('Leadprint-Mapper: Preiszeilen', () => {
 });
 
 describe('Leadprint-Mapper: Umschlag-Artikel', () => {
-  // Bis Preisbasis 2.2.0 war die Addition mehrerer Optionen exakt. Seit dem
-  // Makulatur-Prozentmodell (2.3.0) hängt der Aufschlagsatz am Gesamtvolumen des
-  // Auftrags, dadurch variiert die Umschlag-Bogenzahl leicht mit der Seitenzahl des
-  // Inhalts — die an der Basis-Seitenzahl gemessenen Aufschläge für Umschlag-Farbigkeit
-  // und Veredelung sind deshalb nicht mehr streng seitenzahl-konstant.
-  // Über alle 108.556 Kombinationen (A4/A5/A6 × beide Farbigkeiten × alle Papiere ×
-  // Auflagen × Stützstellen × Cello × Umschlag-Farbigkeit) gemessen: max. 1,38 €
-  // absolut, 0,26 % relativ — und in keinem einzigen Fall liegt der addierte
-  // Shop-Preis *unter* dem echten Preis. Die Abweichung geht also immer zugunsten
+  // Bis Preisbasis 2.2.0 war die Addition mehrerer Optionen exakt. Zwei Näherungen
+  // seither: das Makulatur-Prozentmodell (2.3.0, Satz hängt am Gesamtvolumen →
+  // Cent- bis niedriger Euro-Bereich) und der Dickenaufschlag (2.4.0): die an der
+  // Basis-Seitenzahl gemessene Umschlag-Farbigkeit kann die Empfehlung kippen
+  // (GC mit Aufschlag ↔ Partner) → Eckfälle bis 20 € / 7,5 %, begrenzt durch die
+  // Empfehlungs-Toleranzen. Über alle 110.040 Kombinationen (A4/A5/A6 × beide
+  // Farbigkeiten × alle Papierpaare × Auflagen × Stützstellen × Cello ×
+  // Umschlag-Farbigkeit) gemessen: In keinem einzigen Fall liegt der addierte
+  // Shop-Preis *unter* dem echten Preis — die Abweichung geht immer zugunsten
   // des Betriebs; das ist die Richtung, die tragbar ist.
   it('Aufschläge sind additiv separabel — Abweichung klein und nie zu Lasten des Betriebs', () => {
     const zeile = computeUmschlagZeile({
@@ -130,22 +130,26 @@ describe('Leadprint-Mapper: Umschlag-Artikel', () => {
     expect(natur.aufschlaegeVeredelung).toEqual({});
   });
 
-  it('erzeugt nur familiengleiche Inhalt/Umschlag-Kombinationen (Familienregel)', () => {
+  it('erzeugt nur familiengleiche Kombinationen oder erklärte Ausnahmen (Familienregel)', () => {
     const zeilen = computeArtikelMitUmschlag({
       config, formatKey: 'A4_Hoch', farbigkeit: '4c', auflagen: [100],
     });
     const familie = (id) => config.papiere.find((p) => p.id === id).familie;
     for (const zeile of zeilen) {
-      expect(familie(zeile.pUmschlagId)).toBe(familie(zeile.pInhaltId));
+      const ausnahme = (config.umschlagAusnahmen?.[zeile.pInhaltId] ?? []).includes(zeile.pUmschlagId);
+      expect(familie(zeile.pUmschlagId) === familie(zeile.pInhaltId) || ausnahme).toBe(true);
     }
   });
 
-  it('V3: R_90 bei A5 Hoch erzeugt keine mit-Umschlag-Zeile (R_300 ist Breitbahn)', () => {
+  it('P1: R_90 bei A5 Hoch bekommt genau die Ausnahme-Umschläge CC_250/N_250', () => {
+    // Bis V3 gab es für R_90 gar keine mit-Umschlag-Zeile (R_300 ist Breitbahn);
+    // seit 2.4.0 gelten die umschlagAusnahmen aus der Config (Guido 05.08.2026).
     const zeilen = computeArtikelMitUmschlag({
       config, formatKey: 'A5_Hoch', farbigkeit: '4c', auflagen: [100],
     });
-    expect(zeilen.some((z) => z.pInhaltId === 'R_90')).toBe(false);
-    // ohne Umschlag bleibt R_90 bestellbar
+    const r90 = zeilen.filter((z) => z.pInhaltId === 'R_90');
+    expect(r90.map((z) => z.pUmschlagId).sort()).toEqual(['CC_250', 'N_250']);
+    // ohne Umschlag bleibt R_90 ebenfalls bestellbar
     const ohne = computeArtikelOhneUmschlag({
       config, formatKey: 'A5_Hoch', farbigkeit: '4c', auflagen: [100],
     });

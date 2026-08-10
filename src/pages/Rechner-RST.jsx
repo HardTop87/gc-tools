@@ -157,7 +157,7 @@ export default function RechnerRST() {
 
   const summaryLine = `${formatOptions.find((o) => o.value === form.formatKey)?.label ?? '—'} · ${auflageNum} Ex. · ${form.seiten} Seiten${
     form.hasUmschlag ? ' + Umschlag' : ''
-  } · ${
+  }${parseInt(form.seiten, 10) === 4 ? ' (nur mit Umschlag möglich)' : ''} · ${
     Number.isFinite(cheapestPrice)
       ? `günstigste Route: ${results.find((r) => !r.error && r.gesamt === cheapestPrice)?.name}`
       : 'keine Route möglich'
@@ -177,6 +177,7 @@ export default function RechnerRST() {
   const matrix = useMemo(() => {
     const valid = results.filter((r) => !r.error);
     const anyZuschlag = valid.some((r) => r.umschlagZuschlag > 0);
+    const anyDickenAufschlag = valid.some((r) => r.dickenAufschlag > 0);
     const anyExpress = valid.some((r) => r.expressSurcharge > 0);
 
     const out = [];
@@ -253,6 +254,13 @@ export default function RechnerRST() {
       row(
         'Umschlag-Zuschlag (Rillung)',
         (r) => ({ v: eur(r.umschlagZuschlag), n: r.umschlagZuschlag }),
+        { diff: true },
+      );
+    }
+    if (anyDickenAufschlag) {
+      row(
+        'Dickenaufschlag (Buchdicke × Auflage)',
+        (r) => ({ v: eur(r.dickenAufschlag), n: r.dickenAufschlag }),
         { diff: true },
       );
     }
@@ -365,10 +373,18 @@ export default function RechnerRST() {
           <Field label="Seiten" className="w-[92px]">
             <input
               type="number"
-              min="8"
+              min="4"
               step="4"
               value={form.seiten}
-              onChange={(event) => updateForm('seiten', event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                // 4 Seiten Inhalt gibt es nur mit Umschlag (P3) — automatisch aktivieren
+                setForm((prev) => ({
+                  ...prev,
+                  seiten: value,
+                  hasUmschlag: parseInt(value, 10) === 4 ? true : prev.hasUmschlag,
+                }));
+              }}
               className={`${FIELD_CONTROL} tabular-nums`}
             />
           </Field>
@@ -416,7 +432,15 @@ export default function RechnerRST() {
             <input
               type="checkbox"
               checked={form.hasUmschlag}
-              onChange={(event) => updateForm('hasUmschlag', event.target.checked)}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                // Abwahl bei 4 Seiten: zurück auf das Minimum ohne Umschlag (P3)
+                setForm((prev) => ({
+                  ...prev,
+                  hasUmschlag: checked,
+                  seiten: !checked && parseInt(prev.seiten, 10) < 8 ? '8' : prev.seiten,
+                }));
+              }}
               className="h-[15px] w-[15px] accent-brand"
             />
             Mit Umschlag

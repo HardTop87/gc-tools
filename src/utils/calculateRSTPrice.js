@@ -34,12 +34,19 @@ export function getContentPaperOptions(config, formatKey) {
 
 // Familienregel: Umschlag muss aus derselben Papierfamilie stammen wie der Inhalt
 // (CC↔CC, N↔N, BD↔BD, R↔R — bestätigt Armin/Guido 06.07.2026).
+// config.umschlagAusnahmen erlaubt gezielt zusätzliche Umschläge je Inhaltspapier
+// (Guido 05.08.2026: R_90 hat keinen R-Umschlag mehr → CC_250/N_250 zulässig).
+function istUmschlagZulaessig(config, contentPaper, coverPaper) {
+  if (coverPaper.familie === contentPaper.familie) return true;
+  return (config.umschlagAusnahmen?.[contentPaper.id] ?? []).includes(coverPaper.id);
+}
+
 export function getCoverPaperOptions(config, formatKey, contentPaperId) {
   const format = formatByKey(config, formatKey);
   const contentPaper = paperById(config, contentPaperId);
   if (!format || !contentPaper) return [];
   return getPapersByIds(config, format.papiereUmschlag).filter(
-    (paper) => paper.familie === contentPaper.familie,
+    (paper) => istUmschlagZulaessig(config, contentPaper, paper),
   );
 }
 
@@ -258,7 +265,7 @@ function calcSingleRoute(route, inputs, config, settings) {
     if (!coverPaper || !format.papiereUmschlag.includes(coverPaper.id)) {
       return { key, name, typ, error: 'Umschlagpapier ist ungültig oder für dieses Format nicht zulässig.' };
     }
-    if (coverPaper.familie !== contentPaper.familie) {
+    if (!istUmschlagZulaessig(config, contentPaper, coverPaper)) {
       return {
         key,
         name,
@@ -266,6 +273,21 @@ function calcSingleRoute(route, inputs, config, settings) {
         error: 'Umschlag- und Inhaltspapier müssen aus derselben Papierfamilie stammen (CC/N/BD/R).',
       };
     }
+  }
+
+  // Seitenzahl-Validierung (Bug-Hunt B5): klare Meldung statt irreführendem
+  // Preistabellen-Fehler. 4 Seiten Inhalt sind seit P3 (Guido 05.08.2026) mit
+  // Umschlag zulässig — 1 Bogenteil Inhalt + 1 Umschlag = WV-Zeile 2.
+  const minSeiten = hasUmschlag ? 4 : 8;
+  if (seiten % 4 !== 0 || seiten < minSeiten) {
+    return {
+      key,
+      name,
+      typ,
+      error: hasUmschlag
+        ? 'Seitenzahl muss ein Vielfaches von 4 sein (mindestens 4 mit Umschlag).'
+        : 'Seitenzahl muss ein Vielfaches von 4 und mindestens 8 sein (4 Seiten Inhalt nur mit Umschlag).',
+    };
   }
 
   if (route.minAuflage && auflage < route.minAuflage) {
@@ -282,7 +304,7 @@ function calcSingleRoute(route, inputs, config, settings) {
     dickeInhalt: contentPaper.dickeUm,
     dickeUmschlag: hasUmschlag ? coverPaper.dickeUm : 0,
   });
-  if (maxSeiten < 8) {
+  if (maxSeiten < minSeiten) {
     return { key, name, typ, error: 'Papierkombination technisch nicht möglich (Broschüre zu dick).' };
   }
   if (seiten > maxSeiten) {
@@ -382,6 +404,21 @@ function calcSingleRoute(route, inputs, config, settings) {
     umschlagZuschlag = settings.gcUmschlagGrundkosten + settings.gcUmschlagStueckpreis * auflage;
   }
 
+  // Dickenaufschlag GC (P4, Guido 10.08.2026): weicher Übergang zum Partner bei
+  // dicken Broschüren in höherer Auflage. Aufschlag = (Buchdicke mm − AbMm) ×
+  // (Auflage − AbAuflage) × Faktor, beide Klammern bei 0 gedeckelt — unter 1 mm
+  // bzw. bis 80 Ex. passiert nichts, darüber wächst er stufenlos, bis die
+  // Empfehlung zum Partner kippt. Kalibrierung: RST-Update-V4-Plan Kap. 4.
+  let dickenAufschlag = 0;
+  if (route.dickenAufschlag) {
+    const buchdickeMm =
+      (bogenteile * contentPaper.dickeUm + (hasUmschlag ? coverPaper.dickeUm : 0)) / 1000;
+    dickenAufschlag =
+      Math.max(buchdickeMm - settings.gcDickenAufschlagAbMm, 0) *
+      Math.max(auflage - settings.gcDickenAufschlagAbAuflage, 0) *
+      settings.gcDickenAufschlagFaktor;
+  }
+
   const gsmUmschlag = hasUmschlag ? coverPaper.gsm : 0;
   const sheetAreaM2 = (format.offenB * format.offenH) / 1_000_000;
   const weightPerCopyG =
@@ -398,7 +435,8 @@ function calcSingleRoute(route, inputs, config, settings) {
   }
 
   const gesamtBase =
-    kostenDruckUndPapier + wvKosten + celloKostenGesamt + umschlagZuschlag + settings.setupKosten;
+    kostenDruckUndPapier + wvKosten + celloKostenGesamt + umschlagZuschlag +
+    dickenAufschlag + settings.setupKosten;
   const isExpress = produktionszeit === 'express';
   const expressSurcharge = isExpress ? gesamtBase * settings.expressFaktor : 0;
   const gesamt = gesamtBase + expressSurcharge;
@@ -443,6 +481,7 @@ function calcSingleRoute(route, inputs, config, settings) {
     celloStueckpreis,
     celloType: celloTypeEffektiv,
     umschlagZuschlag,
+    dickenAufschlag,
     setupKosten: settings.setupKosten,
     wvKosten,
     weightPerCopyG,

@@ -1,8 +1,8 @@
 {
   "meta": {
-    "version": "2.3.0",
-    "stand": "2026-08-06",
-    "kommentar": "V3-Update lt. Mail Guido 30.07.2026 (RST GC-AR-V3.xlsx, Preise gc.xlsx): 30 neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle, R_90-Preis final (41,20), Banner-Natur neu (N_80_BAN/N_120_BAN statt N_100_BAN, nicht lieferbar), R_300 nicht mehr als A5-Hoch-Umschlag (Breitbahn). Seitenlimits weiterhin per Dickenformel, Familienregel unveraendert (Entscheidung Armin 30.07.). 2.1.1: ILDA maxAuflage 500. 2.3.0 (Mail Guido 05.08.2026): Makulatur ist ein Prozentsatz auf die gedruckten Bogen des Gesamtauftrags (Kurve aus Makulatur.xlsx), bisher als absolute Bogenzahl je Komponente gerechnet — Kleinstauflagen minimal guenstiger, ab ca. 50 Ex. 3-4 % teurer. Kopp maxAuflage 1000 laut Guidos Produktionsmatrix (Bug-Hunt B1)."
+    "version": "2.4.0",
+    "stand": "2026-08-10",
+    "kommentar": "V3-Update lt. Mail Guido 30.07.2026 (RST GC-AR-V3.xlsx, Preise gc.xlsx): 30 neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle, R_90-Preis final (41,20), Banner-Natur neu (N_80_BAN/N_120_BAN statt N_100_BAN, nicht lieferbar), R_300 nicht mehr als A5-Hoch-Umschlag (Breitbahn). Seitenlimits weiterhin per Dickenformel, Familienregel unveraendert (Entscheidung Armin 30.07.). 2.1.1: ILDA maxAuflage 500. 2.3.0 (Mail Guido 05.08.2026): Makulatur ist ein Prozentsatz auf die gedruckten Bogen des Gesamtauftrags (Kurve aus Makulatur.xlsx), bisher als absolute Bogenzahl je Komponente gerechnet — Kleinstauflagen minimal guenstiger, ab ca. 50 Ex. 3-4 % teurer. Kopp maxAuflage 1000 laut Guidos Produktionsmatrix (Bug-Hunt B1). 2.4.0 (Guidos Rueckmeldung 10.08.2026): GC-Dickenaufschlag (Buchdicke mm - 1) x (Auflage - 80) x 5 EUR fuer den weichen Uebergang zum Partner; umschlagAusnahmen R_90 -> CC_250/N_250 (einziges Recycling-Inhaltspapier ohne R-Umschlag); 4 Seiten Inhalt mit Umschlag zugelassen."
   },
   "settings": {
     "baseGrundpreis1c": 0.015,
@@ -18,7 +18,13 @@
     "gcUmschlagStueckpreis": 0.05,
     "gcUmschlagAbAuflage": 11,
     "maxDickeGC": 1500,
-    "maxDickePartner": 2500
+    "maxDickePartner": 2500,
+    "gcDickenAufschlagAbMm": 1,
+    "gcDickenAufschlagAbAuflage": 80,
+    "gcDickenAufschlagFaktor": 5
+  },
+  "umschlagAusnahmen": {
+    "R_90": ["CC_250", "N_250"]
   },
   "gewichtszuschlaege": [
     {
@@ -685,6 +691,7 @@
       "maxAuflage": 500,
       "wvTabelleRef": "gc_horizon",
       "umschlagZuschlag": true,
+      "dickenAufschlag": true,
       "maxDickeRef": "maxDickeGC",
       "nutzenRef": "nutzenGC",
       "preferDeltaRef": "preferInternDelta"

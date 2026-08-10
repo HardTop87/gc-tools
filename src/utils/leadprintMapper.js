@@ -1,4 +1,4 @@
-import { calculateRSTPrice } from './calculateRSTPrice';
+import { calculateRSTPrice, getCoverPaperOptions } from './calculateRSTPrice';
 
 // Seitenzahlen, die als Listenwerte im Optionsfeld "Seitenanzahl Innenteil" (5628)
 // angelegt sind (siehe leadprintMapping.rst.json → optionsfelder).
@@ -23,10 +23,15 @@ function preis(config, inputs) {
 // kleinsten Seitenzahl + additive Aufschläge je weiterer Seitenzahl-Stützstelle.
 // Jeder einzelne Aufschlag ist die Differenz zweier vollständig gerechneter Preise
 // und damit exakt — auch über einen Routenwechsel hinweg (zellgenau gegen
-// RST-Rechner-Export.md verifiziert). Beim *Kombinieren* mehrerer Optionen entsteht
-// seit dem Makulatur-Prozentmodell (Preisbasis 2.3.0) eine kleine Ungenauigkeit,
-// weil der Makulatursatz am Gesamtvolumen hängt: max. 1,38 € bzw. 0,26 %, gemessen
-// über alle 108.556 Kombinationen — und nie zu Lasten des Betriebs (siehe Test).
+// RST-Rechner-Export.md verifiziert). Beim *Kombinieren* mehrerer Optionen ist die
+// Summe eine Näherung (Preisbasis 2.4.0, 110.040 Kombinationen gemessen):
+// (a) der Makulatursatz hängt am Gesamtvolumen (2.3.0) → Abweichungen im Cent- bis
+//     niedrigen Euro-Bereich;
+// (b) die Umschlag-Farbigkeit kann seit dem Dickenaufschlag (2.4.0) die Empfehlung
+//     kippen (GC mit Aufschlag ↔ Partner) → in solchen Eckfällen bis 20 € / 7,5 %,
+//     begrenzt durch die Empfehlungs-Toleranzen (preferInternDelta/preferKoppDelta).
+// In keinem gemessenen Fall liegt die Summe UNTER dem echten Preis — die Abweichung
+// geht immer zugunsten des Betriebs (siehe Test).
 // Stützstellen ohne mögliche Route liefern bewusst `null`; im Shop müssen daraus
 // LEERE Zellen werden (Leadprint blendet Optionen ohne Preis aus), niemals 0.
 export function computeInhaltZeile({ config, formatKey, farbigkeit, pInhaltId, auflage, seitenListe = SEITEN_STUETZSTELLEN }) {
@@ -106,14 +111,15 @@ export function computeArtikelOhneUmschlag({ config, formatKey, farbigkeit, aufl
 }
 
 // Vollständige Preismatrix für einen mit-Umschlag-Artikel: alle zulässigen
-// Inhaltspapier×Umschlagpapier-Kombinationen (Familienregel!) × Auflagenstaffeln.
+// Inhaltspapier×Umschlagpapier-Kombinationen × Auflagenstaffeln. Welche Umschläge
+// zulässig sind (Familienregel + umschlagAusnahmen), entscheidet ausschließlich
+// getCoverPaperOptions — dieselbe Quelle wie Rechner-Dropdown und Engine.
 export function computeArtikelMitUmschlag({ config, formatKey, farbigkeit, auflagen, seitenListe }) {
   const format = formatByKey(config, formatKey);
   if (!format) return [];
   const zeilen = [];
   for (const pInhaltId of format.papiereInhalt) {
-    const contentPaper = paperById(config, pInhaltId);
-    const coverIds = format.papiereUmschlag.filter((id) => paperById(config, id)?.familie === contentPaper.familie);
+    const coverIds = getCoverPaperOptions(config, formatKey, pInhaltId).map((p) => p.id);
     for (const pUmschlagId of coverIds) {
       for (const auflage of auflagen) {
         const zeile = computeUmschlagZeile({ config, formatKey, farbigkeit, pInhaltId, pUmschlagId, auflage, seitenListe });

@@ -494,30 +494,62 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
 
 **Umsetzungsreihenfolge:**
 
-1. **P2 Makulatur — ✅ umgesetzt am 06.08.** (Engine, Config 2.3.0 inkl. B1, Tests,
-   Referenz-Export, Preisvorschau). **Offen: veröffentlichen** — der Kopp-Deckel steckt
-   in der Config und wirkt erst, wenn in der Verwaltung „Auf Standard zurücksetzen"
-   geklickt und veröffentlicht wird; das neue Maku-Modell steckt im Code und wirkt
-   sofort mit dem Deploy. Bis dahin ist der geteilte Preisstand ein Mischzustand.
-2. **P4 — entsperrt am 10.08.:** Guido hat die Formel mit **A0 = 80 / X = 5 €**
-   gewählt (Komfortgrenze abgelehnt, ILDA-Ziele ok). Umsetzung nach Kap. 4:
+1. **P2 Makulatur — ✅ umgesetzt am 06.08.** (Engine, Config inkl. B1, Tests,
+   Referenz-Export, Preisvorschau).
+2. **P4 — ✅ umgesetzt am 10.08.** (Guidos Wahl: Formel mit A0 = 80 / X = 5 €):
    Aufschlag = (Buchdicke mm − 1) × (Auflage − 80) × 5 €, beide Faktoren bei 0
-   gedeckelt, nur GC, **vor** Express, eigene Tabellenzeile im Rechner, drei neue
-   Settings in der Verwaltung; Leadprint erbt automatisch. Die Kalibrierung bleibt
-   nach P2 gültig (Delta GC↔Partner ist maku-unabhängig, in 25.841 Kombis 0
-   Routenwechsel bestätigt).
-3. **P1 + P3 zusammen** — beide klein, beide berühren Engine + Rechner + Mapper;
-   B5 aus dem Bug-Hunt fließt in P3 ein
+   gedeckelt, nur GC, vor Express, eigene Zeile „Dickenaufschlag" in der
+   Vergleichstabelle (nur wenn > 0), drei Settings in der Verwaltung
+   (*RST › Faktoren & Grenzen*); Leadprint erbt automatisch. **Kalibrierungsziel in
+   der fertigen Engine bestätigt:** ab 200 Ex. wechseln 100 % der Broschüren
+   ≥ 1,25 mm (410/410), bei 150 Ex. 96 %.
+   *Leadprint-Nebenwirkung, gemessen über 110.040 Kombinationen:* Die an der
+   Basis-Seitenzahl gemessene Umschlag-Farbigkeit kann die Empfehlung kippen
+   (GC mit Aufschlag ↔ Partner) — die Options-Summe im Shop weicht in solchen
+   Eckfällen bis 20 € / 7,5 % nach **oben** ab (begrenzt durch die
+   Empfehlungs-Toleranzen), liegt aber in keinem einzigen Fall unter dem echten
+   Preis. Im Mapper-Kommentar und als Test festgehalten.
+3. **P1 + P3 — ✅ umgesetzt am 10.08.:** `umschlagAusnahmen: { R_90: [CC_250, N_250] }`
+   in der Config; Engine-Familiencheck, `getCoverPaperOptions` und der Mapper teilen
+   sich jetzt eine einzige Zulässigkeits-Quelle (`computeArtikelMitUmschlag` nutzt
+   `getCoverPaperOptions`, kein eigener Familienfilter mehr); `validatePricingConfig`
+   prüft das neue Feld. 4 Seiten Inhalt mit Umschlag rechnen über WV-Zeile 2; die
+   Eingabe „4" aktiviert den Umschlag automatisch, Abwahl setzt auf 8 zurück;
+   Seitenzahl-Fehler nennen jetzt die Seitenzahl statt der Preistabelle (B5).
+   Leadprint-seitig weiter offen: Backend-Listenwert „4" in Gruppe 5628 (Armin,
+   Backend-UI) — bis dahin bleibt die 4 im Shop einfach nicht anwählbar.
+
+**Alles zusammen als Preisbasis 2.4.0** (P2-Maku steckt im Code, Kopp-Deckel,
+Dickenaufschlag-Settings, umschlagAusnahmen in der Config). **Offen: veröffentlichen** —
+nach dem Deploy in der Verwaltung „Auf Standard zurücksetzen" + veröffentlichen; bis
+dahin ist der geteilte Preisstand ein Mischzustand (Code neu, Blob-Config alt).
 4. **P5 (neu, 10.08.): GC-Verarbeitungspreise auf GC-Realität stellen.** Guidos
    WV-Tabelle ist eine angepasste Rückrechnung aus Kopps Preisen; die BT-7-Stufe ist
    Kopps 6-Stationen-Turm, GC hat 2 Türme à 10 Stationen (Stufe gehörte, wenn
    überhaupt, zu BT 21 — im RST-Bereich bis BT 13 also gar keine). Guido fragt
-   explizit nach einem besseren Modell. **Blockiert:** seine angehängte Formel-Datei
-   liegt noch nicht im Projekt. Ansatz danach: seine Kopp-Formeln als Struktur
-   nehmen, GC-Parameter (Stationen, Rüstzeit, Stundensatz) einsetzen, gegen die
-   heutige Tabelle stellen und die Differenzen zeigen; solange er eigene Datenpunkte
-   sammelt, bleibt die Tabelle die Quelle — das Modell wird erst Vorschlag, dann
-   Ablösung. Betrifft direkt die 77 %-Sprünge aus 4.5 und den 24→28-S.-Sprung.
+   explizit nach einem besseren Modell.
+   **Entsperrt 10.08.:** Beide Dateien liegen im Projekt und sind entschlüsselt
+   (gitignoriert, lokal):
+   - *Preisliste_für_Rückstichheftung_ab_DINA6_10-01-2024…* = **Kopps** Preisliste
+     mit Guidos zurückgerechneter Formel:
+     `Preis(BT, 100 Ex.) = 49,90 + (BT−1) × 9,90 + 5 („Random", ab BT 4) + aufrunden(BT/6 − 1) × 15 (je weiterem Turm)`;
+     auflagenabhängig `+ (Auflage−100) × 0,018 („je Klammer") + (Auflage−100) × 0,009 × (BT−2)`.
+     Die Rückrechnung trifft Kopps Preise exakt (Spalten C–L = Werte, P–Y = Formeln).
+   - *Kalkuation der RST Preis bei GC auf Basis Kopp, Variante März und Juli 2026* =
+     **Guidos GC-Tabelle**, dieselbe Formelstruktur mit anderen Parametern:
+     Grundpreis 25 · je Fach 6,50 · je Turm 10 · Random 0 · Klammer 0,03 ·
+     Klammer/BT 0,01 — **inklusive Kopps `aufrunden(BT/6 − 1)`-Turmsprung**, obwohl
+     GC 2 Türme à 10 Stationen hat. Das ist die Quelle der BT-7-Stufe. Unten im Blatt
+     die ursprüngliche März-Version (Grundpreis 25, je Fach 5, ohne Klammer-Anteile
+     in dieser Höhe); die Juli-Erhöhung kam, weil ihm die Differenz zu Kopp zu klein
+     war. Die aktuelle WV-Tabelle der App (V3) = Juli-Version.
+   Ansatz für den Vorschlag an Guido: gleiche Formelstruktur, aber Turmsprung bei
+   GC auf `aufrunden(BT/10 − 2) × Turmpreis` (2 Türme à 10 Stationen → im
+   RST-Bereich bis BT 13 keine Stufe), Parameter so nachziehen, dass das heutige
+   Preisniveau im Mittel gehalten wird; Differenzen je Zelle zeigen. Solange er
+   eigene Datenpunkte sammelt, bleibt die Tabelle die Quelle — das Modell wird erst
+   Vorschlag, dann Ablösung. Betrifft direkt die 77 %-Sprünge aus 4.5 und den
+   24→28-S.-Sprung (löst ihn: −17,4 % Stufe entfällt).
 
 **Entschieden am 05.08. (Armin):**
 

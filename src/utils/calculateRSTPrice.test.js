@@ -3,7 +3,9 @@ import {
   calcMakulaturProzent,
   calcMaxSeiten,
   calculateRSTPrice,
+  getCoverPaperOptions,
 } from './calculateRSTPrice';
+import { computeArtikelMitUmschlag } from './leadprintMapper';
 import {
   applyPaperPriceRows,
   buildPaperPriceCsv,
@@ -412,6 +414,125 @@ describe('Makulatur als Prozentmodell (Guido 05.08.2026, Preisbasis 2.3.0)', () 
       const r = routeResult(calc, key);
       expect(r.error).toBeNull();
       expect(r.makulaturProzent).toBeCloseTo(calcMakulaturProzent(r.nettoBogenInhalt), 10);
+    }
+  });
+});
+
+describe('P4: GC-Dickenaufschlag (Guido 10.08.2026, A0=80 / X=5)', () => {
+  // BD_150 (132 µm): 32 S. = 8 BT × 132 µm = 1,056 mm — knapp über der 1-mm-Grenze
+  const dick = { pInhaltId: 'BD_150', seiten: '32' };
+
+  it('unter 1 mm Buchdicke und bis 80 Ex. passiert nichts', () => {
+    const duenn = routeResult(
+      calculateRSTPrice(baseForm({ auflage: '500', seiten: '16' }), config), // 4×126 µm = 0,504 mm
+      'gc_horizon',
+    );
+    expect(duenn.dickenAufschlag).toBe(0);
+    const wenige = routeResult(calculateRSTPrice(baseForm({ ...dick, auflage: '80' }), config), 'gc_horizon');
+    expect(wenige.dickenAufschlag).toBe(0);
+  });
+
+  it('rechnet (Buchdicke − 1) × (Auflage − 80) × 5 und zählt den Umschlag zur Dicke', () => {
+    const ohne = routeResult(calculateRSTPrice(baseForm({ ...dick, auflage: '200' }), config), 'gc_horizon');
+    expect(ohne.dickenAufschlag).toBeCloseTo((1.056 - 1) * (200 - 80) * 5, 8);
+
+    // + BD_350-Umschlag (350 µm): 24 S. Inhalt = 0,792 mm, mit Umschlag 1,142 mm
+    const mit = routeResult(
+      calculateRSTPrice(
+        baseForm({ pInhaltId: 'BD_150', seiten: '24', auflage: '200', hasUmschlag: true, pUmschlagId: 'BD_350' }),
+        config,
+      ),
+      'gc_horizon',
+    );
+    expect(mit.dickenAufschlag).toBeCloseTo((0.792 + 0.35 - 1) * (200 - 80) * 5, 8);
+  });
+
+  it('wirkt vor dem Express-Aufschlag und nur bei GC', () => {
+    const calc = calculateRSTPrice(baseForm({ ...dick, auflage: '200', produktionszeit: 'express' }), config);
+    const gc = routeResult(calc, 'gc_horizon');
+    const basis = gc.gesamt - gc.expressSurcharge;
+    expect(gc.expressSurcharge).toBeCloseTo(basis * 0.1, 8);
+    expect(gc.dickenAufschlag).toBeGreaterThan(0);
+    expect(routeResult(calc, 'kopp').dickenAufschlag).toBe(0);
+    expect(routeResult(calc, 'ilda').dickenAufschlag).toBe(0);
+  });
+
+  it('kippt die Empfehlung ab 200 Ex. bei ≥ 1,25 mm zum Partner (Kalibrierungsziel)', () => {
+    // CC_160 (166 µm), 32 S. = 1,328 mm
+    const zu = (auflage) =>
+      calculateRSTPrice(baseForm({ pInhaltId: 'CC_160', seiten: '32', auflage }), config).recommendedName;
+    expect(zu('80')).toBe('GC (Horizon)');
+    expect(zu('200')).not.toBe('GC (Horizon)');
+  });
+});
+
+describe('P1: Umschlag-Ausnahme R_90 → CC_250 / N_250 (A5 Hoch)', () => {
+  const r90 = (overrides) =>
+    baseForm({ formatKey: 'A5_Hoch', pInhaltId: 'R_90', hasUmschlag: true, ...overrides });
+
+  it('getCoverPaperOptions bietet für R_90 genau die beiden Ausnahmen an', () => {
+    const ids = getCoverPaperOptions(config, 'A5_Hoch', 'R_90').map((p) => p.id);
+    expect(ids.sort()).toEqual(['CC_250', 'N_250']);
+  });
+
+  it('die Engine rechnet R_90 mit CC_250 und N_250, lehnt andere Familien weiter ab', () => {
+    for (const pUmschlagId of ['CC_250', 'N_250']) {
+      const gc = routeResult(calculateRSTPrice(r90({ pUmschlagId }), config), 'gc_horizon');
+      expect(gc.error).toBeNull();
+    }
+    const bd = routeResult(calculateRSTPrice(r90({ pUmschlagId: 'BD_250' }), config), 'gc_horizon');
+    expect(bd.error).toContain('Papierfamilie');
+  });
+
+  it('die Ausnahme wirkt nirgendwo sonst (A4-Recycling behält nur R_300)', () => {
+    // R_90 existiert nur bei A5 Hoch als Inhalt; A4-Recycling (R_80/R_100) bleibt rein R
+    for (const pInhaltId of ['R_80', 'R_100']) {
+      const ids = getCoverPaperOptions(config, 'A4_Hoch', pInhaltId).map((p) => p.id);
+      expect(ids).toEqual(['R_300']);
+    }
+  });
+
+  it('CC_250-Umschlag auf R_90 erlaubt Cellophanierung (hängt an der Umschlag-Familie)', () => {
+    const gc = routeResult(
+      calculateRSTPrice(r90({ pUmschlagId: 'CC_250', celloUmschlag: 'matt' }), config),
+      'gc_horizon',
+    );
+    expect(gc.error).toBeNull();
+    expect(gc.celloKosten).toBeGreaterThan(0);
+  });
+
+  it('der Mapper übernimmt die Ausnahme aus getCoverPaperOptions', () => {
+    const zeilen = computeArtikelMitUmschlag({
+      config, formatKey: 'A5_Hoch', farbigkeit: '4c', auflagen: [100],
+    });
+    const r90Zeilen = zeilen.filter((z) => z.pInhaltId === 'R_90');
+    expect(r90Zeilen.map((z) => z.pUmschlagId).sort()).toEqual(['CC_250', 'N_250']);
+  });
+});
+
+describe('P3/B5: 4 Seiten Inhalt mit Umschlag, klare Seitenzahl-Meldungen', () => {
+  it('4 Seiten + Umschlag rechnet regulär über WV-Zeile 2', () => {
+    const calc = calculateRSTPrice(
+      baseForm({ seiten: '4', hasUmschlag: true, pUmschlagId: 'CC_250', auflage: '100' }),
+      config,
+    );
+    const gc = routeResult(calc, 'gc_horizon');
+    expect(gc.error).toBeNull();
+    expect(gc.nettoBogenInhalt).toBe(100); // 1 Bogenteil × 100 Ex., Nutzen 1
+    expect(gc.wvKosten).toBe(config.wvTabellen.gc_horizon[2][100]);
+    expect(routeResult(calc, 'kopp').error).toBeNull();
+  });
+
+  it('4 Seiten ohne Umschlag wird mit klarer Meldung abgelehnt', () => {
+    const gc = routeResult(calculateRSTPrice(baseForm({ seiten: '4' }), config), 'gc_horizon');
+    expect(gc.error).toContain('nur mit Umschlag');
+  });
+
+  it('kein Vielfaches von 4 nennt die Seitenzahl als Ursache, nicht die Preistabelle (B5)', () => {
+    const calc = calculateRSTPrice(baseForm({ seiten: '10' }), config);
+    for (const r of calc.results) {
+      expect(r.error).toContain('Vielfaches von 4');
+      expect(r.error).not.toContain('Preistabelle');
     }
   });
 });

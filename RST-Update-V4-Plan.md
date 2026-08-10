@@ -499,10 +499,25 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
    in der Config und wirkt erst, wenn in der Verwaltung „Auf Standard zurücksetzen"
    geklickt und veröffentlicht wird; das neue Maku-Modell steckt im Code und wirkt
    sofort mit dem Deploy. Bis dahin ist der geteilte Preisstand ein Mischzustand.
-2. **P1 + P3 zusammen** — beide klein, beide berühren Engine + Rechner + Mapper;
+2. **P4 — entsperrt am 10.08.:** Guido hat die Formel mit **A0 = 80 / X = 5 €**
+   gewählt (Komfortgrenze abgelehnt, ILDA-Ziele ok). Umsetzung nach Kap. 4:
+   Aufschlag = (Buchdicke mm − 1) × (Auflage − 80) × 5 €, beide Faktoren bei 0
+   gedeckelt, nur GC, **vor** Express, eigene Tabellenzeile im Rechner, drei neue
+   Settings in der Verwaltung; Leadprint erbt automatisch. Die Kalibrierung bleibt
+   nach P2 gültig (Delta GC↔Partner ist maku-unabhängig, in 25.841 Kombis 0
+   Routenwechsel bestätigt).
+3. **P1 + P3 zusammen** — beide klein, beide berühren Engine + Rechner + Mapper;
    B5 aus dem Bug-Hunt fließt in P3 ein
-3. **P4** — sobald Guido X und A0 gewählt hat; technisch von P2 unabhängig,
-   Endkontrolle danach
+4. **P5 (neu, 10.08.): GC-Verarbeitungspreise auf GC-Realität stellen.** Guidos
+   WV-Tabelle ist eine angepasste Rückrechnung aus Kopps Preisen; die BT-7-Stufe ist
+   Kopps 6-Stationen-Turm, GC hat 2 Türme à 10 Stationen (Stufe gehörte, wenn
+   überhaupt, zu BT 21 — im RST-Bereich bis BT 13 also gar keine). Guido fragt
+   explizit nach einem besseren Modell. **Blockiert:** seine angehängte Formel-Datei
+   liegt noch nicht im Projekt. Ansatz danach: seine Kopp-Formeln als Struktur
+   nehmen, GC-Parameter (Stationen, Rüstzeit, Stundensatz) einsetzen, gegen die
+   heutige Tabelle stellen und die Differenzen zeigen; solange er eigene Datenpunkte
+   sammelt, bleibt die Tabelle die Quelle — das Modell wird erst Vorschlag, dann
+   Ablösung. Betrifft direkt die 77 %-Sprünge aus 4.5 und den 24→28-S.-Sprung.
 
 **Entschieden am 05.08. (Armin):**
 
@@ -512,7 +527,38 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
   Config-Änderung ins P2-Paket (Version 2.3.0) — die bestehende Fehlermeldung
   „ist auf maximal 1000 Exemplare begrenzt" greift dann automatisch.
 
-**Fragen an Guido (gesammelt in einer Mail, wenn er zurück ist):**
+**Guidos Rückmeldung (10.08.) — Entscheidungen:**
+
+- **P4 entschieden: seine Formel mit A0 = 80 / X = 5 €.** Zitat: „Der Beginn mit 80
+  Exemplaren ist genau, was ich wollte. Leichte Preissteigerung und weicher Übergang
+  zum Partner. Bei Grenzfällen kann ich operativ entscheiden." Die Komfortgrenze
+  (Alternative A) lehnt er ab — genau wegen des Preissprungs bei kleiner
+  Eingabeänderung (90 Ex. GC / 100 Ex. Kopp), und: „Eine genau definierte Komfortzone
+  existiert nicht" — seine 1,0/1,5-mm-Angaben waren Näherungen, keine harte Regel.
+- **ILDA-Ziele ok:** „Kann so bleiben; wenn so ein Auftrag kommt, situativ entscheiden."
+- **Stufe bei BT 7 aufgeklärt — kein Tabellenfehler, aber auch keine echte GC-Kostenstufe:**
+  Guido hat seine WV-Preise aus den Preisen von Herrn Kopp zurückgerechnet (Formeln
+  ermittelt, Variablen angepasst; erste Version März, Juli leicht erhöht, weil ihm die
+  Differenz zu Kopp zu groß war). Die BT-7-Stufe ist **Kopps Maschinenrealität**
+  (Sortiertürme mit 6 Stationen → ab dem 7. Bogenteil Gebühr für den 2. Turm).
+  **GC hat aber 2 Türme à 10 Stationen** — die Stufe müsste bei GC eigentlich bei
+  BT 21 liegen, nicht bei 7. Guidos eigene Worte: „Meine Lösung basiert nicht auf
+  einer tatsächlichen Berechnung, da ich noch nicht ausreichend Datenpunkte aus
+  meiner eigenen Erfahrung habe. Haben Sie eine Idee, wie wir es besser abbilden
+  können?" → **neues Arbeitspaket P5** (unten). Er hat dazu eine Datei mit seinen
+  ermittelten Formeln angehängt — **liegt noch nicht im Projekt**.
+- **Makulatur-Nachrechnung aufgeklärt (kein neuer Bug):** Guido kommt auf 1.015 statt
+  1.050 Bogen — das ist exakt der Wert der **alten, noch live laufenden Engine**
+  (906 I + 109 U); die Korrektur liegt bisher nur auf dem Branch. Nach dem Deploy
+  liefert A4 exakt 1.050 (945/105). **A5 wird dann 529 statt 525 zeigen** — das ist
+  der Unterschied der beiden Lesarten: Basis gedruckte SRA3-Bogen (500 Bogen →
+  Kurve 5,75 % → 529, so entschieden und umgesetzt) vs. Exemplar-Bogenteile
+  (1.000 BT → 5 % → 525). Genau diese Basis-Frage steht noch zur Bestätigung aus —
+  Guidos Satz „A6 liefert einen anderen Wert, was aufgrund der Nutzen sinnvoll sein
+  kann" deutet auf Zustimmung zur Bogen-Lesart. (Kurios: A6 ergibt in alt und neu
+  zufällig beide 267 Bogen gesamt.)
+
+**Noch offene Fragen an Guido:**
 
 1. Nebeneffekt der Maku-Korrektur bestätigen: ab 100 Ex. rund +2,5 bis +3,8 % — das
    ist erwartet. **Wichtiger:** Kleinaufträge werden deutlich *günstiger* als gedacht
@@ -522,18 +568,10 @@ Blatt verwendete Empfehlungslogik stimmt bei allen 2.443 Fällen exakt mit
    **Will er die Kleinststaffeln der GC-Verarbeitungstabelle anheben** („Kompensation
    über den Verarbeitungspreis", sein eigener Satz)? Dazu: Basis „gedruckte Bogen"
    mitbestätigen.
-2. P4 — **Grundsatzfrage:** Preisaufschlag (seine Formel, A0 = 80 / X = 5) oder
-   auflagenabhängige Komfortgrenze (Alternative A, 4.6)? Beides erreicht sein Ziel,
-   die Grenze vollständig und ohne Kalibrierung.
-3. P4: Falls Aufschlag — sollen Aufträge mit genau 100 Ex. bereits zu Kopp gehen?
-   (Dann A0 = 50 / X = 4)
-4. P4: Darf die Empfehlung zu ILDA gehen, wo ILDA deutlich günstiger ist (+1 Werktag),
-   oder sollen alle gewechselten Aufträge zu Kopp?
-5. **Stufe bei 7 Bogenteilen in der GC-Verarbeitungstabelle** (4.5): gewollt
-   (zweiter Durchlauf / zusätzliche Station) oder Fehler in der V3-Tabelle?
-6. Hinweis, keine Frage: Die Preissprünge, die ihn stören, kommen zu 77 % aus der
-   Seitenzahl selbst und aus den Verarbeitungstabellen — ein Aufschlag ändert daran
-   nichts.
+2. **Maku-Basis final bestätigen, am konkreten Zahlenpaar:** A5, 100 Ex., 36 S. + U
+   nach dem Deploy = **529** Bogen (Basis gedruckte SRA3-Bogen) — seine
+   Exemplar-Lesart ergäbe 525. Welche Zahl erwartet er?
+   *(erledigt: ILDA-Frage → ok; BT-7-Frage → aufgeklärt, siehe oben)*
 
 **Nach Abschluss aller Punkte:** Leadprint-Preisvorschau und Grenzstaffel-Verifikation
 neu, Referenz-Export neu, Version 2.3.0 veröffentlichen.

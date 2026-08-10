@@ -105,6 +105,13 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Zeitpunkt der letzten Veröffentlichung, z. B. "10.08.2026, 18:23 Uhr"
+function fmtZeitpunkt(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}, ${date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+}
+
 function downloadBlob(filename, mime, content) {
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -585,6 +592,7 @@ export default function Verwaltung() {
           <>
             Gemeinsame Basis und Produkt-Faktoren · Version {config.meta.version} · Stand{' '}
             {config.meta.stand}
+            {config.meta.publishedAt && ` · veröffentlicht ${fmtZeitpunkt(config.meta.publishedAt)}`}
             {sharedStatus.state === 'shared' && ' · geteilter Stand'}
             {sharedStatus.state === 'none' && ' · noch nicht veröffentlicht'}
             {sharedStatus.state === 'offline' && ' · geteilter Speicher offline'}

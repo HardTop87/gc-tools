@@ -47,6 +47,12 @@ export function TopBar() {
         </nav>
 
         <div className="flex items-center gap-2.5">
+          <span
+            title={`Build ${__APP_COMMIT__} vom ${new Date(__APP_BUILD_TIME__).toLocaleString('de-DE')}`}
+            className="hidden select-none text-[11px] tabular-nums text-faint sm:block"
+          >
+            v{__APP_VERSION__} · {__APP_COMMIT__}
+          </span>
           <ThemeToggle />
           <Link
             to="/verwaltung"

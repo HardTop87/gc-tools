@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { downloadBlobFile } from '../utils/download';
 import {
     Download, UploadCloud, AlertTriangle, RotateCcw,
     Search, XCircle, Package, Truck, Zap,
@@ -96,17 +97,6 @@ const getExportAenderungen = (record) => {
 // B8: Download über eine kurzlebige Object-URL, die nach dem Klick wieder
 // freigegeben wird; mehrere Downloads werden gestaffelt statt gleichzeitig
 // gefeuert, damit der Browser sie nicht bündelt oder blockiert.
-const triggerDownload = (blob, filename, delayMs = 0) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    setTimeout(() => {
-        anchor.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }, delayMs);
-};
-
 const formatPLZ = (plz, land) => {
     let p = String(plz || '').trim();
     const l = String(land || 'DEU').toUpperCase();
@@ -887,7 +877,7 @@ export default function PostVersandManager() {
                 ...batch.map(r => `${toCsvCell(r.name)};${toCsvCell(r.zusatz)};${toCsvCell(r.strasse)};${toCsvCell(r.nummer)};${toCsvCell(formatPLZ(r.plz, r.landCode))};${toCsvCell(r.ort)};${toCsvCell(r.landCode)};${toCsvCell(r.type || 'HOUSE')}`)
             ].join('\r\n') + '\r\n';
             const blobCSV = new Blob([encodeWindows1252(content)], { type: 'text/csv;charset=windows-1252;' });
-            triggerDownload(blobCSV, `Rhaetia_${safeLabel}${partStr}.csv`, downloadNr++ * 400);
+            downloadBlobFile(`Rhaetia_${safeLabel}${partStr}.csv`, blobCSV, { delayMs: downloadNr++ * 400 });
 
             // 2. BEGLEITLISTE GENERIEREN (nur wenn nötig)
             // Für die Begleitliste zählt nur die Reihenfolge der Empfänger im Batch.
@@ -904,7 +894,7 @@ export default function PostVersandManager() {
                     begleitLines.push(`S. ${page}, Pos. ${pos} | ${r.name} | ${r.plz} ${r.ort} | ${r.hQty}x Herold, ${r.pQty}x Prog | ${r.totalWeight}g`);
                 });
                 const blobTXT = new Blob([begleitLines.join('\r\n')], { type: 'text/plain;charset=utf-8;' });
-                triggerDownload(blobTXT, `Begleitliste_${safeLabel}${partStr}.txt`, downloadNr++ * 400);
+                downloadBlobFile(`Begleitliste_${safeLabel}${partStr}.txt`, blobTXT, { delayMs: downloadNr++ * 400 });
             }
         }
     };
@@ -938,6 +928,17 @@ export default function PostVersandManager() {
         lines.push('Betroffene Etiketten vor dem Versand prüfen.');
         return lines;
     }, [results]);
+
+    // Ein Banner, zwei Ansichten (Vorschau + Download) — eine Quelle statt Copy-Paste.
+    const exportHinweisBanner = exportZeichenHinweis && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 rounded-2xl p-5 flex items-start gap-3">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+            <div className="text-sm font-semibold space-y-0.5">
+                <p className="font-black uppercase text-[10px] tracking-widest mb-1">Hinweis zum Rhaetia-Export</p>
+                {exportZeichenHinweis.map((line) => <p key={line}>{line}</p>)}
+            </div>
+        </div>
+    );
 
     // Erreichbare Schritte der Tab-Leiste: erst freigeschaltet, wenn die
     // jeweiligen Daten vorliegen.
@@ -1475,15 +1476,7 @@ export default function PostVersandManager() {
                                 <div className="text-center"><p className="text-3xl font-black text-slate-800 dark:text-gray-100">{previewShipmentCount}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Sendungen gesamt</p></div>
                             </div>
                         </div>
-                        {exportZeichenHinweis && (
-                            <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 rounded-2xl p-5 flex items-start gap-3">
-                                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
-                                <div className="text-sm font-semibold space-y-0.5">
-                                    <p className="font-black uppercase text-[10px] tracking-widest mb-1">Hinweis zum Rhaetia-Export</p>
-                                    {exportZeichenHinweis.map((line) => <p key={line}>{line}</p>)}
-                                </div>
-                            </div>
-                        )}
+                        {exportHinweisBanner}
                         {results && (
                             <div className="bg-white dark:bg-gray-900 border-2 border-slate-200 dark:border-gray-700 rounded-[2.5rem] overflow-hidden shadow-xl mt-6">
                                 <table className="w-full text-left">
@@ -1523,15 +1516,7 @@ export default function PostVersandManager() {
                             <div className="relative z-10"><p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-80">Gesamtes Briefporto</p><h2 className="text-8xl font-black mt-2 tracking-tighter italic">{results.totalCost.toFixed(2)} €</h2><p className="text-[10px] font-bold uppercase tracking-widest mt-3 opacity-80">nur Briefport, keine Pakete</p></div>
                             <div className="bg-white/10 p-10 rounded-[2.5rem] backdrop-blur-xl border border-white/20 text-center relative z-10"><p className="text-5xl font-black">{Object.values(results.groups).reduce((acc, arr) => acc + arr.length, 0)}</p><p className="text-[10px] font-black uppercase opacity-80 tracking-widest mt-2">Sendungen Gesamt</p></div>
                         </div>
-                        {exportZeichenHinweis && (
-                            <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 rounded-2xl p-5 flex items-start gap-3">
-                                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
-                                <div className="text-sm font-semibold space-y-0.5">
-                                    <p className="font-black uppercase text-[10px] tracking-widest mb-1">Hinweis zum Rhaetia-Export</p>
-                                    {exportZeichenHinweis.map((line) => <p key={line}>{line}</p>)}
-                                </div>
-                            </div>
-                        )}
+                        {exportHinweisBanner}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {Object.entries(results.groups).map(([label, records]) => (
                                 <div key={label} className="p-8 bg-white dark:bg-gray-900 rounded-[3rem] border-2 dark:border-gray-700 flex flex-col justify-between hover:border-[#8e014d] transition-all shadow-sm">

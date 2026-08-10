@@ -578,6 +578,17 @@ describe('pricingConfig: Schema-Migration beim Laden', () => {
     const voll = getDefaultPricingConfig();
     expect(migratePricingConfig(voll)).toBe(voll);
   });
+
+  it('ersetzt vorhandene, aber kaputte Werte NICHT still durch Defaults', () => {
+    // Ein String statt einer Zahl ist ein Datenfehler, kein fehlendes Feld —
+    // er muss laut in der Validierung auffallen, nicht heimlich mit einem
+    // Betrag weitergerechnet werden, den niemand eingegeben hat.
+    const kaputt = getDefaultPricingConfig();
+    kaputt.settings.setupKosten = '12';
+    const migriert = migratePricingConfig(kaputt);
+    expect(migriert.settings.setupKosten).toBe('12');
+    expect(validatePricingConfig(migriert).ok).toBe(false);
+  });
 });
 
 describe('pricingConfig: Validierung & Papierpreis-Import', () => {

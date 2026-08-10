@@ -10,6 +10,13 @@ export const DRUCK_OPTIONS = [
 // diese Zahl behandelt (Guido 05.08.2026).
 export const MIN_AUFLAGE_MAKU = 10;
 
+// Kleinste zulässige Seitenzahl: 8 ohne Umschlag (1 Bogenteil allein ist keine
+// Rückstichheftung), 4 mit Umschlag (P3, Guido 05.08.2026). Einzige Quelle der
+// Regel — Engine, Pflichtfeld-Prüfung und Rechner-UI leiten sich hiervon ab.
+export function minSeiten(hasUmschlag) {
+  return hasUmschlag ? 4 : 8;
+}
+
 function paperById(config, id) {
   return config.papiere.find((p) => p.id === id) ?? null;
 }
@@ -278,8 +285,8 @@ function calcSingleRoute(route, inputs, config, settings) {
   // Seitenzahl-Validierung (Bug-Hunt B5): klare Meldung statt irreführendem
   // Preistabellen-Fehler. 4 Seiten Inhalt sind seit P3 (Guido 05.08.2026) mit
   // Umschlag zulässig — 1 Bogenteil Inhalt + 1 Umschlag = WV-Zeile 2.
-  const minSeiten = hasUmschlag ? 4 : 8;
-  if (seiten % 4 !== 0 || seiten < minSeiten) {
+  const seitenMinimum = minSeiten(hasUmschlag);
+  if (seiten % 4 !== 0 || seiten < seitenMinimum) {
     return {
       key,
       name,
@@ -304,7 +311,7 @@ function calcSingleRoute(route, inputs, config, settings) {
     dickeInhalt: contentPaper.dickeUm,
     dickeUmschlag: hasUmschlag ? coverPaper.dickeUm : 0,
   });
-  if (maxSeiten < minSeiten) {
+  if (maxSeiten < seitenMinimum) {
     return { key, name, typ, error: 'Papierkombination technisch nicht möglich (Broschüre zu dick).' };
   }
   if (seiten > maxSeiten) {
@@ -340,14 +347,12 @@ function calcSingleRoute(route, inputs, config, settings) {
   // der 10er-Basis bemessen und auf die tatsächliche Netto-Bogenzahl aufgeschlagen.
   // Ab 10 Broschüren ist das identisch mit der direkten Rechnung.
   const auflageMaku = Math.max(auflage, MIN_AUFLAGE_MAKU);
-  const gesamtBogenBasis =
-    Math.ceil((auflageMaku * bogenteile) / nutzen) +
-    (hasUmschlag ? Math.ceil(auflageMaku / nutzen) : 0);
+  const nettoBasisInhalt = Math.ceil((auflageMaku * bogenteile) / nutzen);
+  const nettoBasisUmschlag = hasUmschlag ? Math.ceil(auflageMaku / nutzen) : 0;
+  const gesamtBogenBasis = nettoBasisInhalt + nettoBasisUmschlag;
   const makulaturProzent = calcMakulaturProzent(gesamtBogenBasis);
   const makulaturFaktor = 1 + makulaturProzent / 100;
 
-  const nettoBasisInhalt = Math.ceil((auflageMaku * bogenteile) / nutzen);
-  const nettoBasisUmschlag = hasUmschlag ? Math.ceil(auflageMaku / nutzen) : 0;
   const makulaturInhalt = applyMakulatur(nettoBasisInhalt, makulaturFaktor) - nettoBasisInhalt;
   const makulaturUmschlag = hasUmschlag
     ? applyMakulatur(nettoBasisUmschlag, makulaturFaktor) - nettoBasisUmschlag

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { downloadTextFile } from '../utils/download';
 import {
   AlertCircle,
   CheckCircle2,
@@ -561,6 +562,12 @@ export default function PayPalExport() {
   const [shopRows, setShopRows] = useState([]);
   const [payPalRows, setPayPalRows] = useState([]);
   const [reconciliation, setReconciliation] = useState(null);
+  // E2: Anzahl heuristischer Stage-2-Zuordnungen — einmal berechnet statt
+  // zweier Array-Scans pro Render im JSX.
+  const stage2Count = useMemo(
+    () => (reconciliation?.matched ?? []).filter((row) => row.matchType === 'stage2').length,
+    [reconciliation],
+  );
   const [initialStats, setInitialStats] = useState(null);
   const [activeTab, setActiveTab] = useState(TAB_KEYS.perfect);
   const [error, setError] = useState('');
@@ -833,13 +840,11 @@ export default function PayPalExport() {
         'Festschreibung',
       ],
     });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${new Date().toISOString().split('T')[0]}_PayPal_Reconciliation.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile(
+      `${new Date().toISOString().split('T')[0]}_PayPal_Reconciliation.csv`,
+      'text/csv;charset=utf-8;',
+      csv,
+    );
   };
 
   return (
@@ -974,9 +979,9 @@ export default function PayPalExport() {
                 <div className="overflow-x-auto">
                   {/* E2: Stage-2-Treffer beruhen nur auf Nachname + exaktem Betrag —
                       als Heuristik kenntlich machen statt wie sichere Matches aussehen zu lassen. */}
-                  {reconciliation.matched.some((row) => row.matchType === 'stage2') && (
+                  {stage2Count > 0 && (
                     <p className="border-b border-gray-100 dark:border-gray-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-2 text-xs font-semibold text-amber-800 dark:text-amber-300">
-                      {reconciliation.matched.filter((row) => row.matchType === 'stage2').length}{' '}
+                      {stage2Count}{' '}
                       Zuordnung(en) beruhen auf der Heuristik „Nachname + exakter Betrag“ (unten
                       markiert) — bei gleichem Nachnamen und Betrag im selben Zeitraum kann die
                       Belegzuordnung vertauscht sein, bitte gegenprüfen.

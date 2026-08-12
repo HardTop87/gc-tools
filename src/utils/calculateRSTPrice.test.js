@@ -66,10 +66,10 @@ describe('Seitenlimits aus Blattdicken (Spec 4.1)', () => {
 });
 
 describe('GC (Horizon)', () => {
-  it('interpoliert die Data_GC-Tabelle (V3) linear (BT6, 150 Ex. → 61,00 €)', () => {
-    // V3-Werte BT6: 100 Ex. = 57,50 | 200 Ex. = 64,50 → bei 150: (64,5−57,5)/100×50+57,5
+  it('interpoliert die GC-Tabelle (Variante B, 2.5.0) linear (BT6, 150 Ex. → 63,50 €)', () => {
+    // Variante-B-Werte BT6: 100 Ex. = 60 | 200 Ex. = 67 → bei 150: (67−60)/100×50+60
     const calc = calculateRSTPrice(baseForm({ auflage: '150' }), config);
-    expect(routeResult(calc, 'gc_horizon').wvKosten).toBeCloseTo(61.0, 10);
+    expect(routeResult(calc, 'gc_horizon').wvKosten).toBeCloseTo(63.5, 10);
   });
 
   it('erlaubt Auflagen bis 500 und lehnt darüber ab', () => {

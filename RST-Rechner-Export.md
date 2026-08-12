@@ -1,7 +1,15 @@
 # RST-Rechner — Kompletter Export der Berechnungslogik (Rückstichheftung)
 
-> **Version 2.4.0 · Stand 2026-08-10.** Ersetzt den Export vom 2026-07-30.
-> **Neu in 2.4.0** (Guidos Rückmeldung vom 10.08.2026):
+> **Version 2.5.0 · Stand 2026-08-12.** Ersetzt den Export vom 2026-08-10.
+> **Neu in 2.5.0** (Guidos Wahl vom 12.08.2026 — „Variante B"): Die GC-Verarbeitungs-
+> tabelle folgt ab Staffel 100 der Formel
+> `25 + (Bogenteile − 1) × 7,00 + (Auflage − 100) × 0,03 + (Auflage − 100) × 0,01 × (Bogenteile − 2)`
+> — der Turm-Sprung `aufrunden(BT/6 − 1) × 10` (Kopps 6-Stationen-Türme) entfällt,
+> dafür steigt „je Fach" von 6,50 auf 7,00 € (Kap. 6.1). Die handgesetzten
+> Kleinmengen-Staffeln 1–50 bleiben unverändert. Wirkung: dünne Broschüren bis
+> +2,50 €, dicke bis −7,00 €; keine Empfehlungs-Wechsel in den Referenzfällen.
+>
+> **Aus 2.4.0** (Guidos Rückmeldung vom 10.08.2026):
 > **GC-Dickenaufschlag** für den weichen Übergang zum Partner (Kap. 5.6):
 > Aufschlag = (Buchdicke mm − 1) × (Auflage − 80) × 5 €, nur GC. Außerdem
 > **Umschlag-Ausnahme** R_90 → CC_250/N_250 (Kap. 4) und **4 Seiten Inhalt mit
@@ -269,21 +277,24 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 
 ## 6. Verarbeitungspreis-Tabellen (€ pro Auftrag)
 
-### 6.1 GC (Horizon) — V3 (Data_GC, Stand 30.07.2026), Auflagen 1–500
+### 6.1 GC (Horizon) — Variante B (Guidos Wahl 12.08.2026), Auflagen 1–500
+
+Staffeln 1–50: handgesetzte Kleinmengenpreise (unverändert aus V3). Staffeln 100–500:
+`25 + (BT − 1) × 7,00 + (A − 100) × 0,03 + (A − 100) × 0,01 × (BT − 2)` — ohne Turm-Sprung.
 
 | Bogenteile \ Auflage | 1 | 2 | 3 | 4 | 5 | 10 | 20 | 50 | 100 | 200 | 300 | 400 | 500 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2 | 5 | 7 | 9 | 11 | 13 | 15 | 20 | 25 | 31,5 | 34,5 | 37,5 | 40,5 | 43,5 |
-| 3 | 5 | 8 | 11 | 14 | 16,5 | 19 | 25 | 30 | 38 | 42 | 46 | 50 | 54 |
-| 4 | 5 | 9 | 13 | 16 | 20 | 23 | 29 | 35 | 44,5 | 49,5 | 54,5 | 59,5 | 64,5 |
-| 5 | 5 | 9 | 13 | 17 | 21 | 25 | 33 | 40 | 51 | 57 | 63 | 69 | 75 |
-| 6 | 10 | 14 | 17 | 21 | 25 | 28 | 37,5 | 50 | 57,5 | 64,5 | 71,5 | 78,5 | 85,5 |
-| 7 | 10 | 15 | 21 | 26 | 32 | 37 | 48 | 60 | 74 | 82 | 90 | 98 | 106 |
-| 8 | 10 | 16 | 22 | 28 | 34 | 40 | 52 | 65 | 80,5 | 89,5 | 98,5 | 107,5 | 116,5 |
-| 9 | 15 | 20 | 26 | 31 | 37 | 43 | 56 | 70 | 87 | 97 | 107 | 117 | 127 |
-| 10 | 15 | 21,5 | 28 | 34 | 40 | 47 | 60 | 75 | 93,5 | 104,5 | 115,5 | 126,5 | 137,5 |
-| 11 | 20 | 26 | 32 | 38 | 44 | 50 | 65 | 80 | 100 | 112 | 124 | 136 | 148 |
-| 12 | 20 | 27 | 33 | 39 | 45 | 53 | 70 | 85 | 106,5 | 119,5 | 132,5 | 145,5 | 158,5 |
+| 2 | 5 | 7 | 9 | 11 | 13 | 15 | 20 | 25 | 32 | 35 | 38 | 41 | 44 |
+| 3 | 5 | 8 | 11 | 14 | 16,5 | 19 | 25 | 30 | 39 | 43 | 47 | 51 | 55 |
+| 4 | 5 | 9 | 13 | 16 | 20 | 23 | 29 | 35 | 46 | 51 | 56 | 61 | 66 |
+| 5 | 5 | 9 | 13 | 17 | 21 | 25 | 33 | 40 | 53 | 59 | 65 | 71 | 77 |
+| 6 | 10 | 14 | 17 | 21 | 25 | 28 | 37,5 | 50 | 60 | 67 | 74 | 81 | 88 |
+| 7 | 10 | 15 | 21 | 26 | 32 | 37 | 48 | 60 | 67 | 75 | 83 | 91 | 99 |
+| 8 | 10 | 16 | 22 | 28 | 34 | 40 | 52 | 65 | 74 | 83 | 92 | 101 | 110 |
+| 9 | 15 | 20 | 26 | 31 | 37 | 43 | 56 | 70 | 81 | 91 | 101 | 111 | 121 |
+| 10 | 15 | 21,5 | 28 | 34 | 40 | 47 | 60 | 75 | 88 | 99 | 110 | 121 | 132 |
+| 11 | 20 | 26 | 32 | 38 | 44 | 50 | 65 | 80 | 95 | 107 | 119 | 131 | 143 |
+| 12 | 20 | 27 | 33 | 39 | 45 | 53 | 70 | 85 | 102 | 115 | 128 | 141 | 154 |
 
 ### 6.2 Partner Kopp (unverändert)
 
@@ -405,8 +416,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 288.28,
-      "stueckPreis": 2.8828,
+      "gesamt": 290.78,
+      "stueckPreis": 2.9078,
       "nutzen": 1,
       "maxSeiten": 44,
       "nettoBogenInhalt": 600,
@@ -417,7 +428,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "makulaturProzent": 5.51,
       "kostenPapierGesamt": 50.71,
       "kostenKlickGesamt": 165.07,
-      "wvKosten": 57.5,
+      "wvKosten": 60,
       "umschlagZuschlag": 0,
       "dickenAufschlag": 0,
       "celloKosten": 0,
@@ -503,8 +514,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 1537.16,
-      "stueckPreis": 5.1239,
+      "gesamt": 1531.16,
+      "stueckPreis": 5.1039,
       "nutzen": 1,
       "maxSeiten": 36,
       "nettoBogenInhalt": 2400,
@@ -515,7 +526,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "makulaturProzent": 4.38,
       "kostenPapierGesamt": 260.8,
       "kostenKlickGesamt": 707.46,
-      "wvKosten": 107,
+      "wvKosten": 101,
       "umschlagZuschlag": 20,
       "dickenAufschlag": 344.3,
       "celloKosten": 82.6,
@@ -601,8 +612,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 132.86,
-      "stueckPreis": 1.3286,
+      "gesamt": 135.36,
+      "stueckPreis": 1.3536,
       "nutzen": 4,
       "maxSeiten": 44,
       "nettoBogenInhalt": 150,
@@ -613,7 +624,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "makulaturProzent": 7.43,
       "kostenPapierGesamt": 13.47,
       "kostenKlickGesamt": 46.89,
-      "wvKosten": 57.5,
+      "wvKosten": 60,
       "umschlagZuschlag": 0,
       "dickenAufschlag": 0,
       "celloKosten": 0,
@@ -867,8 +878,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 910.41,
-      "stueckPreis": 4.552,
+      "gesamt": 903.91,
+      "stueckPreis": 4.5195,
       "nutzen": 1,
       "maxSeiten": 36,
       "nettoBogenInhalt": 1600,
@@ -879,7 +890,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "makulaturProzent": 4.65,
       "kostenPapierGesamt": 174.4,
       "kostenKlickGesamt": 434.71,
-      "wvKosten": 89.5,
+      "wvKosten": 83,
       "umschlagZuschlag": 0,
       "dickenAufschlag": 196.8,
       "celloKosten": 0,
@@ -965,8 +976,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 231.55,
-      "stueckPreis": 2.3155,
+      "gesamt": 224.55,
+      "stueckPreis": 2.2455,
       "nutzen": 2,
       "maxSeiten": 40,
       "nettoBogenInhalt": 300,
@@ -977,7 +988,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "makulaturProzent": 6.19,
       "kostenPapierGesamt": 29.95,
       "kostenKlickGesamt": 102.59,
-      "wvKosten": 74,
+      "wvKosten": 67,
       "umschlagZuschlag": 10,
       "dickenAufschlag": 0,
       "celloKosten": 0,
@@ -1063,8 +1074,8 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
   "results": [
     {
       "name": "GC (Horizon)",
-      "gesamt": 156.67,
-      "stueckPreis": 1.5667,
+      "gesamt": 157.17,
+      "stueckPreis": 1.5717,
       "nutzen": 1,
       "maxSeiten": 36,
       "nettoBogenInhalt": 100,
@@ -1075,7 +1086,7 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
       "makulaturProzent": 7,
       "kostenPapierGesamt": 28.17,
       "kostenKlickGesamt": 72,
-      "wvKosten": 31.5,
+      "wvKosten": 32,
       "umschlagZuschlag": 10,
       "dickenAufschlag": 0,
       "celloKosten": 0,
@@ -1145,9 +1156,13 @@ gewichtProExemplarG = (bogenteile × gsmInhalt + [1 falls U] × gsmUmschlag) × 
 > eigentliche Kleinmengenpuffer. Mit dem Prozentmodell fällt er weg; die vier
 > Kleinmengen-Zielpreise (25 / 30 / 30 / 35 €) werden jetzt um 2,5–7 € unterschritten.
 > Guidos eigener Satz dazu lautet „Kompensation über den Verarbeitungspreis" — dafür
-> müssten die Kleinststaffeln der GC-Verarbeitungstabelle angehoben werden. **Offene
-> Frage an Guido.**
+> müssen die Kleinststaffeln der GC-Verarbeitungstabelle angehoben werden.
+> **Entschieden am 12.08.2026:** Guido folgt dem Vorschlag; seine Zielpreise gelten
+> jetzt 4/4-farbig (20 S.: 30 / 25 €, 40 S.: 35 / 30 € — mit / ohne Umschlag), die
+> Staffeln 2–50 entstehen aus seiner Prozentregel (10 Ex. = 50 %, 20 = 65 %, 50 = 80 %
+> der 100er-Spalte; 2–5 linear zwischen 1 und 10). Die regenerierte Kleinmengen-Zone
+> liegt als Vorschlags-Excel zur Abnahme vor und wird nach Freigabe eingespielt.
 
 ---
 
-*Generiert am 2026-08-10 direkt aus `pricingConfig.default.json` (Version 2.4.0) und der produktiven Engine.*
+*Generiert am 2026-08-12 direkt aus `pricingConfig.default.json` (Version 2.5.0) und der produktiven Engine.*

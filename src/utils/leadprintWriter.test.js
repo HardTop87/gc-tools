@@ -3,6 +3,7 @@ import mapping from '../data/leadprintMapping.rst.json';
 import { getDefaultPricingConfig } from './pricingConfig';
 import { calculateRSTPrice } from './calculateRSTPrice';
 import {
+  ROUTE_TAGS,
   SEITEN_STUETZSTELLEN_MIT_UMSCHLAG,
   buildPreiszeilenOhneUmschlag,
   pruefeMappingVollstaendigkeit,
@@ -42,6 +43,29 @@ describe('Leadprint-Writer: Datenschicht (ohne-Umschlag-Artikel)', () => {
     expect(zeile.preis).toBeCloseTo(direkt(8), 8);
     const lw24 = mapping.optionsfelder['Seitenanzahl Innenteil'].werte['24'];
     expect(zeile.aufschlaege[lw24]).toBeCloseTo(direkt(24) - direkt(8), 8);
+  });
+
+  it('stempelt jede Zeile mit Routen-Tag in der Artikelnummer und Liefertagen (Option 2 + Bonus)', () => {
+    const { zeilen, probleme } = buildPreiszeilenOhneUmschlag({
+      config,
+      mapping,
+      artikelKey: 'A4_Hoch|4c|ohne',
+    });
+    expect(probleme).toEqual([]);
+    // GC-Zelle: CC_120 × 100 Ex. (Referenzfall — Empfehlung GC)
+    const gcZeile = zeilen.find((z) => z.papierId === 'CC_120' && z.auflage === 100);
+    expect(gcZeile.route).toBe('GC (Horizon)');
+    expect(gcZeile.artikelnummer).toBe('BRO-RST-A4H-44-GC');
+    expect(gcZeile.liefertage).toBe(gcZeile.produktionszeitWT);
+    // Partner-Zelle: über GC-Maximum (500) muss ein Partner-Tag stehen
+    const partnerZeile = zeilen.find((z) => z.papierId === 'CC_120' && z.auflage === 1000);
+    expect(['KOPP', 'ILDA']).toContain(partnerZeile.artikelnummer.split('-').pop());
+    expect(partnerZeile.artikelnummer.startsWith('BRO-RST-A4H-44-')).toBe(true);
+    // jede Zeile hat einen bekannten Tag
+    for (const z of zeilen) {
+      expect(z.artikelnummer).toBe(`BRO-RST-A4H-44-${ROUTE_TAGS[z.route]}`);
+      expect(z.liefertage).toBeGreaterThan(0);
+    }
   });
 
   it('unmögliche Kombinationen bleiben null — nie 0 (Entscheidung D1)', () => {

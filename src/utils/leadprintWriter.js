@@ -17,6 +17,19 @@ import { computeArtikelOhneUmschlag, SEITEN_STUETZSTELLEN } from './leadprintMap
 // lassen seine Zelle leer → im Shop nicht wählbar.)
 export const SEITEN_STUETZSTELLEN_MIT_UMSCHLAG = [4, ...SEITEN_STUETZSTELLEN];
 
+// Routen-Tag je Preiszeile (Entscheidung Armin 13.08.): wandert als Suffix in
+// articlePrices.artikelnummer (z. B. BRO-RST-A4H-44-GC), damit der
+// Enfocus-Switch-Flow den Produzenten aus der Auftrags-XML lesen kann.
+// Achtung Näherung: getaggt wird die Route der Basiskalkulation der Zeile —
+// in seltenen Eckfällen kann eine Option (Umschlag-Farbigkeit) die echte
+// Empfehlung kippen; die exakte Auskunft bleibt der RST-Rechner (später
+// Option 3: /api/route für Switch).
+export const ROUTE_TAGS = {
+  'GC (Horizon)': 'GC',
+  'Partner Kopp': 'KOPP',
+  'Partner ILDA': 'ILDA',
+};
+
 function seitenListenwerte(mapping) {
   const feld = mapping.optionsfelder?.['Seitenanzahl Innenteil'];
   return feld?.werte ?? {};
@@ -57,6 +70,15 @@ export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
       probleme.push(`Papier ${zeile.pInhaltId}: keine sortenId im Mapping.`);
       continue;
     }
+    const routeTag = ROUTE_TAGS[zeile.route];
+    if (!routeTag) {
+      probleme.push(`Route „${zeile.route}" hat keinen Tag in ROUTE_TAGS.`);
+      continue;
+    }
+    if (!artikel.artikelnummer) {
+      probleme.push(`Artikel ${artikelKey}: keine artikelnummer im Mapping.`);
+      continue;
+    }
     const aufschlaege = {};
     for (const seiten of SEITEN_STUETZSTELLEN) {
       const listenwertId = listenwerte[String(seiten)] ?? listenwerte[seiten];
@@ -71,6 +93,10 @@ export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
       preis: zeile.basisPreis,
       route: zeile.route,
       produktionszeitWT: zeile.produktionszeitWT,
+      // Shop-Spalten (Option 2 + Bonus): Routen-Tag in der Artikelnummer,
+      // echte Produktionszeit der Zeile als Liefertage
+      artikelnummer: `${artikel.artikelnummer}-${routeTag}`,
+      liefertage: zeile.produktionszeitWT,
       aufschlaege,
     });
   }
@@ -120,6 +146,10 @@ export function pruefeMappingVollstaendigkeit(config, mapping) {
   }
 
   // 4. Jede Format×Farbigkeit×Umschlag-Kombination der Config braucht einen Artikel
+  // mit Artikelnummer (Basis des Routen-Tags in articlePrices.artikelnummer)
+  for (const a of mapping.artikel ?? []) {
+    if (!a.artikelnummer) probleme.push(`Artikel ${a.key}: keine artikelnummer im Mapping.`);
+  }
   const artikelKeys = new Set((mapping.artikel ?? []).map((a) => a.key));
   for (const format of config.formate) {
     if (format.isBanner) continue;

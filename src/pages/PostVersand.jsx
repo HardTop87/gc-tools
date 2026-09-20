@@ -25,8 +25,10 @@ const INITIAL_WEIGHTS = {
     programmNetto: 15, programmBrutto: 18 
 };
 
+// Porto Deutsche Post seit 01.01.2025 (Kompaktbrief Inland 1,00 → 1,10 EUR).
+// Die Summe ist informativ; sie geht nicht in die Rhaetia-CSV ein.
 const RATES = {
-    de: { standard: 0.95, kompakt: 1.00, gross: 1.80, maxi: 2.90, paket: 5.49 },
+    de: { standard: 0.95, kompakt: 1.10, gross: 1.80, maxi: 2.90, paket: 5.49 },
     intl: { standard: 1.25, kompakt: 1.80, gross: 3.30, maxi: 6.50, paket: 15.99 }
 };
 
@@ -97,50 +99,73 @@ const getExportAenderungen = (record) => {
 // B8: Download über eine kurzlebige Object-URL, die nach dem Klick wieder
 // freigegeben wird; mehrere Downloads werden gestaffelt statt gleichzeitig
 // gefeuert, damit der Browser sie nicht bündelt oder blockiert.
+// Länder-Normalisierung auf ISO-3 (Rhaetia-Format). Unbekannte Werte bleiben
+// unverändert, damit nichts still verloren geht — sie fallen in der Vorschau auf.
+const COUNTRY_CODE_MAP = {
+    DE: 'DEU', D: 'DEU', DEU: 'DEU', DEUTSCHLAND: 'DEU', GERMANY: 'DEU',
+    AT: 'AUT', A: 'AUT', AUT: 'AUT', OESTERREICH: 'AUT', ÖSTERREICH: 'AUT', AUSTRIA: 'AUT',
+    CH: 'CHE', CHE: 'CHE', SCHWEIZ: 'CHE', SWITZERLAND: 'CHE',
+    IT: 'ITA', ITA: 'ITA', ITALIEN: 'ITA', ITALY: 'ITA',
+    NL: 'NLD', NLD: 'NLD', NIEDERLANDE: 'NLD', NETHERLANDS: 'NLD', HOLLAND: 'NLD',
+    BE: 'BEL', BEL: 'BEL', BELGIEN: 'BEL', BELGIUM: 'BEL',
+    LU: 'LUX', LUX: 'LUX', LUXEMBURG: 'LUX', LUXEMBOURG: 'LUX',
+    FR: 'FRA', FRA: 'FRA', FRANKREICH: 'FRA', FRANCE: 'FRA',
+    ES: 'ESP', ESP: 'ESP', SPANIEN: 'ESP', SPAIN: 'ESP',
+    PT: 'PRT', PRT: 'PRT', PORTUGAL: 'PRT',
+    GB: 'GBR', UK: 'GBR', GBR: 'GBR', GROSSBRITANNIEN: 'GBR', GROßBRITANNIEN: 'GBR',
+    'VEREINIGTES KÖNIGREICH': 'GBR', 'UNITED KINGDOM': 'GBR', ENGLAND: 'GBR',
+    IE: 'IRL', IRL: 'IRL', IRLAND: 'IRL', IRELAND: 'IRL',
+    DK: 'DNK', DNK: 'DNK', DÄNEMARK: 'DNK', DAENEMARK: 'DNK', DENMARK: 'DNK',
+    SE: 'SWE', SWE: 'SWE', SCHWEDEN: 'SWE', SWEDEN: 'SWE',
+    NO: 'NOR', NOR: 'NOR', NORWEGEN: 'NOR', NORWAY: 'NOR',
+    FI: 'FIN', FIN: 'FIN', FINNLAND: 'FIN', FINLAND: 'FIN',
+    PL: 'POL', POL: 'POL', POLEN: 'POL', POLAND: 'POL',
+    CZ: 'CZE', CZE: 'CZE', TSCHECHIEN: 'CZE', 'CZECH REPUBLIC': 'CZE', CZECHIA: 'CZE',
+    SK: 'SVK', SVK: 'SVK', SLOWAKEI: 'SVK', SLOVAKIA: 'SVK',
+    HU: 'HUN', HUN: 'HUN', UNGARN: 'HUN', HUNGARY: 'HUN',
+    SI: 'SVN', SVN: 'SVN', SLOWENIEN: 'SVN', SLOVENIA: 'SVN',
+    HR: 'HRV', HRV: 'HRV', KROATIEN: 'HRV', CROATIA: 'HRV',
+    GR: 'GRC', GRC: 'GRC', GRIECHENLAND: 'GRC', GREECE: 'GRC',
+    LI: 'LIE', LIE: 'LIE', LIECHTENSTEIN: 'LIE',
+    VA: 'VAT', VAT: 'VAT', VATIKAN: 'VAT', VATIKANSTADT: 'VAT',
+    TR: 'TUR', TUR: 'TUR', TÜRKEI: 'TUR', TUERKEI: 'TUR', TURKEY: 'TUR',
+    US: 'USA', USA: 'USA', 'VEREINIGTE STAATEN': 'USA', 'UNITED STATES': 'USA',
+    CA: 'CAN', CAN: 'CAN', KANADA: 'CAN', CANADA: 'CAN',
+    AU: 'AUS', AUS: 'AUS', AUSTRALIEN: 'AUS', AUSTRALIA: 'AUS',
+    JP: 'JPN', JPN: 'JPN', JAPAN: 'JPN',
+    IL: 'ISR', ISR: 'ISR', ISRAEL: 'ISR',
+};
+const KNOWN_ISO3 = new Set(Object.values(COUNTRY_CODE_MAP));
+
+const normalizeCountryCode = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (!raw) return '';
+    return COUNTRY_CODE_MAP[raw] || raw;
+};
+
+// Nur deutsche PLZ werden auf 5 Stellen aufgefüllt (Excel frisst führende
+// Nullen: 01067 Dresden kommt als 1067 an). Vorher griff das auch für
+// „NIEDERLANDE" oder „SCHWEDEN", weil dort „DE" im Namen steckt.
 const formatPLZ = (plz, land) => {
-    let p = String(plz || '').trim();
-    const l = String(land || 'DEU').toUpperCase();
-    if ((l.includes('DE') || l === '') && p.length > 0 && p.length < 5) {
+    const p = String(plz ?? '').trim();
+    const l = normalizeCountryCode(land) || 'DEU';
+    if (l === 'DEU' && p.length > 0 && p.length < 5 && /^\d+$/.test(p)) {
         return p.padStart(5, '0');
     }
     return p;
 };
 
-const normalizeCountryCode = (value) => {
-    const raw = String(value || '').trim().toUpperCase();
-    if (!raw) return '';
-
-    const map = {
-        DE: 'DEU',
-        D: 'DEU',
-        DEU: 'DEU',
-        DEUTSCHLAND: 'DEU',
-        GERMANY: 'DEU',
-        AT: 'AUT',
-        AUT: 'AUT',
-        A: 'AUT',
-        OESTERREICH: 'AUT',
-        ÖSTERREICH: 'AUT',
-        AUSTRIA: 'AUT',
-        CH: 'CHE',
-        CHE: 'CHE',
-        SCHWEIZ: 'CHE',
-        SWITZERLAND: 'CHE',
-        IT: 'ITA',
-        ITA: 'ITA',
-        ITALIEN: 'ITA',
-        ITALY: 'ITA',
-        NL: 'NLD',
-        NLD: 'NLD',
-        NIEDERLANDE: 'NLD',
-        NETHERLANDS: 'NLD',
-        HOLLAND: 'NLD',
-    };
-
-    return map[raw] || raw;
-};
-
 // --- HILFSFUNKTIONEN FÜR DATENBANK-ABGLEICH ---
+// Zellwert als getrimmter String (Excel liefert Zahlen für PLZ/Hausnummer).
+const cellStr = (value) => (value === null || value === undefined ? '' : String(value).trim());
+
+// Feldwerte ohne undefined/null/'' zu einem Text verbinden.
+const joinParts = (...parts) =>
+    parts
+        .map((p) => (p === null || p === undefined ? '' : String(p).trim()))
+        .filter(Boolean)
+        .join(' ');
+
 const cleanForMatch = (str) => {
     if (!str) return "";
     return String(str)
@@ -202,7 +227,7 @@ const normalizeSearchText = (value) =>
         .replace(/\s+/g, ' ')
         .trim();
 
-    const isStrictCountryCode = (code) => ['DEU', 'AUT', 'CHE', 'ITA'].includes(code);
+const isStrictCountryCode = (code) => KNOWN_ISO3.has(code);
 
 const looksLikeMojibake = (text) => /Ã.|â.|Â.|�/.test(text);
 
@@ -232,6 +257,28 @@ const normalizeRow = (row) => {
         normalized[cleanKey] = normalizeText(value);
     });
     return normalized;
+};
+
+// Spalten der Quelldatei automatisch zuordnen. Eine Liste für CSV und Excel —
+// vorher gab es zwei Kopien, und die Excel-Variante kannte „Strasse" ohne ß nicht.
+const MAPPING_HINTS = {
+    anrede: ['anrede'], titel: ['titel'], akad: ['akademischer'],
+    vorname: ['vorname'], nachname: ['nachname'], zusatz: ['zusatz'],
+    strasse: ['straße', 'strasse', 'str.', 'adresse'], plz: ['plz', 'postleitzahl'],
+    ort: ['ort', 'stadt'], land: ['land'],
+    herold: ['herold'], programm: ['programm'],
+};
+
+const autoDetectMapping = (headers) => {
+    const lower = headers.map((h) => String(h).toLowerCase());
+    const findCol = (keys) => {
+        // Exakter Treffer zuerst („Land" vor „Bundesland"), dann Teilstring.
+        const exactIdx = lower.findIndex((h) => keys.includes(h));
+        if (exactIdx !== -1) return headers[exactIdx];
+        const idx = lower.findIndex((h) => keys.some((k) => h.includes(k)));
+        return idx !== -1 ? headers[idx] : '';
+    };
+    return Object.fromEntries(Object.entries(MAPPING_HINTS).map(([key, hints]) => [key, findCol(hints)]));
 };
 
 const parseCsvFile = (file, onComplete, onError) => {
@@ -309,13 +356,26 @@ export default function PostVersandManager() {
     const [results, setResults] = useState(null);
     const [view, setView] = useState('upload'); 
     const [searchTerm, setSearchTerm] = useState('');
-    const [procStats, setProcStats] = useState({ manuell: 0, db: 0, total: 0, eta: 0, progress: 0 });
+    const [procStats, setProcStats] = useState({ manuell: 0, db: 0, total: 0 });
     const [uploadEncoding, setUploadEncoding] = useState({ source: '', db: '' });
     const [showOnlyMismatches, setShowOnlyMismatches] = useState(false);
     const [expandedMatchRows, setExpandedMatchRows] = useState({});
 
+    // Neue Quelldatei → alles Nachgelagerte ist ungültig.
+    const applySourceRows = (rows, currentHeaders, sourceLabel) => {
+        setHeaders(currentHeaders);
+        setRawData(rows);
+        setMapping(autoDetectMapping(currentHeaders));
+        setUploadEncoding((prev) => ({ ...prev, source: sourceLabel }));
+        setPreMatchResults(null);
+        setResults(null);
+    };
+
     const handleSourceUpload = (e) => {
         const file = e.target.files[0];
+        // Input zurücksetzen, sonst feuert onChange nicht, wenn dieselbe Datei
+        // (z. B. nach einer Korrektur in Excel) noch einmal gewählt wird.
+        e.target.value = '';
         if (!file) return;
 
         if (file.name.toLowerCase().endsWith('.csv')) {
@@ -327,25 +387,7 @@ export default function PostVersandManager() {
                         alert('CSV enthält keine verwertbaren Spalten.');
                         return;
                     }
-
-                    setUploadEncoding((prev) => ({ ...prev, source: `CSV: ${meta?.encodingUsed || 'UTF-8'}` }));
-
-                    setHeaders(currentHeaders);
-                    setRawData(rows);
-
-                    const findCol = (keys) =>
-                        currentHeaders.find((h) =>
-                            keys.some((k) => String(h).toLowerCase().includes(k)),
-                        ) || '';
-
-                    setMapping({
-                        anrede: findCol(['anrede']), titel: findCol(['titel']), 
-                        akad: findCol(['akademischer']), vorname: findCol(['vorname']), 
-                        nachname: findCol(['nachname']), zusatz: findCol(['zusatz']),
-                        strasse: findCol(['straße', 'strasse', 'adresse']), plz: findCol(['plz']), 
-                        ort: findCol(['ort', 'stadt']), land: findCol(['land']), 
-                        herold: findCol(['herold']), programm: findCol(['programm'])
-                    });
+                    applySourceRows(rows, currentHeaders, `CSV: ${meta?.encodingUsed || 'UTF-8'}`);
                 },
                 () => {
                     setUploadEncoding((prev) => ({ ...prev, source: 'CSV: Fehler beim Lesen' }));
@@ -359,34 +401,23 @@ export default function PostVersandManager() {
         reader.onload = (evt) => {
             const wb = XLSX.read(evt.target.result, { type: 'array' });
             const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-            
+
             const hIdx = data.findIndex(r => r && r.some(c => String(c||'').toLowerCase().includes('nachname')));
             if (hIdx === -1) return alert("Konnte Kopfzeile nicht finden!");
-            
-            const currentHeaders = data[hIdx].map(h => String(h || '').trim());
-            setHeaders(currentHeaders);
-            setRawData(
-                XLSX.utils
-                    .sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx })
-                    .map(normalizeRow),
-            );
-            setUploadEncoding((prev) => ({ ...prev, source: 'Excel: XLS/XLSX' }));
-            
-            const findCol = (keys) => currentHeaders.find(h => keys.some(k => String(h).toLowerCase().includes(k))) || '';
-            setMapping({
-                anrede: findCol(['anrede']), titel: findCol(['titel']), 
-                akad: findCol(['akademischer']), vorname: findCol(['vorname']), 
-                nachname: findCol(['nachname']), zusatz: findCol(['zusatz']),
-                strasse: findCol(['straße', 'adresse']), plz: findCol(['plz']), 
-                ort: findCol(['ort', 'stadt']), land: findCol(['land']), 
-                herold: findCol(['herold']), programm: findCol(['programm'])
-            });
+
+            const currentHeaders = data[hIdx].map(h => String(h || '').trim()).filter(Boolean);
+            const rows = XLSX.utils
+                .sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx })
+                .map(normalizeRow);
+            applySourceRows(rows, currentHeaders, 'Excel: XLS/XLSX');
         };
+        reader.onerror = () => alert('Excel-Datei konnte nicht gelesen werden.');
         reader.readAsArrayBuffer(file);
     };
 
     const handleDbUpload = (e) => {
         const file = e.target.files[0];
+        e.target.value = '';
         if (!file) return;
 
         if (file.name.toLowerCase().endsWith('.csv')) {
@@ -412,6 +443,7 @@ export default function PostVersandManager() {
             );
             setUploadEncoding((prev) => ({ ...prev, db: 'Excel: XLS/XLSX' }));
         };
+        reader.onerror = () => alert('Datenbank-Excel konnte nicht gelesen werden.');
         reader.readAsArrayBuffer(file);
     };
 
@@ -432,12 +464,16 @@ export default function PostVersandManager() {
         if (!dbData || dbData.length === 0) return { match: null, reason: 'Keine Datenbank geladen' };
         const rawLand = normalizeCountryCode(rawRow.land || 'DEU');
         const rawPlz = formatPLZ(rawRow.plz, rawLand);
-        const sourceCloud = cleanForMatch(`${rawRow.anrede} ${rawRow.titel} ${rawRow.vorname} ${rawRow.nachname} ${rawRow.zusatz}`);
+        // Leere Excel-Zellen und nicht zugeordnete Spalten liefern undefined —
+        // im Template-Literal wurde daraus der Text „undefined" und verwässerte
+        // die Token-Quote (halbierte den Score bei fehlendem Titel/Zusatz).
+        const sourceNameText = joinParts(rawRow.anrede, rawRow.titel, rawRow.vorname, rawRow.nachname, rawRow.zusatz);
+        const sourceCloud = cleanForMatch(sourceNameText);
         const sourceNumbers = extractNumbers(rawRow.strasse);
         const sourceStreet = normalizeStreet(rawRow.strasse);
         const sourceFirstName = cleanForMatch(rawRow.vorname);
         const sourceLastName = cleanForMatch(rawRow.nachname);
-        const sourceTokens = tokenizeName(`${rawRow.anrede} ${rawRow.titel} ${rawRow.vorname} ${rawRow.nachname} ${rawRow.zusatz}`);
+        const sourceTokens = tokenizeName(sourceNameText);
         const sourceIsPerson = /herr|frau/i.test(String(rawRow.anrede || '')) || String(rawRow.vorname || '').trim().length > 1;
 
         const candidates = dbData.map((dbRow) => {
@@ -446,10 +482,10 @@ export default function PostVersandManager() {
             if (dbPlz !== rawPlz) return null;
             if (isStrictCountryCode(rawLand) && isStrictCountryCode(dbLand) && dbLand !== rawLand) return null;
 
-            const dbCombinedName = `${dbRow.NAME || ''} ${dbRow.ZUSATZ || ''}`.trim();
+            const dbCombinedName = joinParts(dbRow.NAME, dbRow.ZUSATZ);
             const dbNameClean = cleanForMatch(dbCombinedName);
             const dbNameTokens = tokenizeName(dbCombinedName);
-            const dbNumbers = extractNumbers(`${dbRow.STRASSE} ${dbRow.NUMMER}`);
+            const dbNumbers = extractNumbers(joinParts(dbRow.STRASSE, dbRow.NUMMER));
             const dbStreet = normalizeStreet(dbRow.STRASSE);
             let score = 0;
 
@@ -510,7 +546,25 @@ export default function PostVersandManager() {
     };
 
     const prepareDbMatch = () => {
-        if (dbData.length === 0) return alert("Bitte lade zuerst eine Datenbank hoch, um automatisch abzugleichen.");
+        if (rawData.length === 0) return alert('Bitte zuerst eine Quelldatei hochladen.');
+        if (!mapping.herold && !mapping.programm) {
+            return alert('Bitte mindestens eine Mengen-Spalte (Herold oder Programm) zuordnen — sonst wäre jede Zeile „Kein Versand".');
+        }
+        if (!mapping.nachname && !mapping.zusatz) {
+            return alert('Bitte die Spalte „Nachname" (oder „Zusatz" für Institutionen) zuordnen.');
+        }
+        // Die Datenbank ist optional: ohne sie landen alle Zeilen in der
+        // manuellen Liste und werden 1:1 aus der Quelldatei exportiert.
+        if (dbData.length === 0 && !window.confirm('Keine Datenbank geladen. Ohne Abgleich werden alle Adressen direkt aus der Quelldatei übernommen. Fortfahren?')) {
+            return;
+        }
+
+        // Alter Vorschau-/CSV-Stand wäre ab jetzt veraltet.
+        setResults(null);
+        setExpandedMatchRows({});
+        setShowOnlyMismatches(false);
+        setSearchTerm('');
+
         const matchedList = []; const unmatchedList = [];
 
         rawData.forEach((row, index) => {
@@ -537,7 +591,16 @@ export default function PostVersandManager() {
             if (cached) {
                 const normalizedLand = normalizeCountryCode(cached.LAND || cached.landCode || 'DEU') || 'DEU';
                 const ship = getVersandArt(weight, normalizedLand);
-                matchedList.push({ ...mini, name: cached.NAME, zusatz: cached.ZUSATZ, strasse: cached.STRASSE, nummer: cached.NUMMER, plz: cached.PLZ, ort: cached.STADT || cached.ORT, landCode: normalizedLand, type: cached.ADRESS_TYP || 'HOUSE', label: ship.label, price: ship.price, isDHL: ship.isDHL, fromDB: true });
+                // Alle Felder als String: aus Excel kommen PLZ/Hausnummer als Zahl,
+                // und `r.plz.includes(...)` in der Vorschau-Suche stürzte daran ab.
+                matchedList.push({
+                    ...mini,
+                    name: cellStr(cached.NAME), zusatz: cellStr(cached.ZUSATZ),
+                    strasse: cellStr(cached.STRASSE), nummer: cellStr(cached.NUMMER),
+                    plz: formatPLZ(cached.PLZ, normalizedLand), ort: cellStr(cached.STADT || cached.ORT),
+                    landCode: normalizedLand, type: cellStr(cached.ADRESS_TYP) || 'HOUSE',
+                    label: ship.label, price: ship.price, isDHL: ship.isDHL, fromDB: true,
+                });
             } else {
                 unmatchedList.push({ ...mini, matchHint: dbDecision.reason || 'Kein eindeutiger Datenbank-Treffer', isFrozen: false });
             }
@@ -549,6 +612,7 @@ export default function PostVersandManager() {
     };
 
     const unmatchItem = (id) => {
+        setResults(null); // Vorschau/CSV passen nicht mehr zur Clearing Station
         setPreMatchResults(prev => {
             const itemToUnmatch = prev.matchedList.find(m => m.id === id);
             const newMatched = prev.matchedList.filter(m => m.id !== id);
@@ -582,10 +646,19 @@ export default function PostVersandManager() {
         return { plz: raw, land: normalizeCountryCode(fallbackLand) || 'DEU' };
     };
 
-    const buildPlzInput = (plz) => {
-        const cleanPlz = String(plz || '').trim();
-        if (!cleanPlz) return '';
-        return cleanPlz;
+    // Straße/Hausnummer/Typ für den Export bestimmen. Unbearbeitete Quellzeilen
+    // haben die Hausnummer noch im Straßenfeld („Luisenstr. 27") — vorher wurde
+    // sie nur getrennt, wenn der Anwender die Zeile im Editor geöffnet hatte.
+    const resolveAddressFields = (item) => {
+        const strasse = cellStr(item.strasse);
+        const nummer = cellStr(item.nummer);
+        if (nummer || !strasse) return { strasse, nummer, type: item.type || 'HOUSE' };
+
+        const postfach = strasse.match(/^postfach\s*(.*)$/i);
+        if (postfach) return { strasse: 'Postfach', nummer: postfach[1].trim(), type: 'POBOX' };
+
+        const split = splitStreetAndNumber(strasse);
+        return { strasse: split.street, nummer: split.number, type: item.type || 'HOUSE' };
     };
 
     const getSearchSeed = (item, fallbackName = '') => {
@@ -609,16 +682,16 @@ export default function PostVersandManager() {
                 .join(' ')
                 .trim();
         const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
-        const splitAddress = splitStreetAndNumber(item.strasse || '');
+        const address = resolveAddressFields(item);
         return {
             name: sourceName || '',
-            zusatz: item.zusatz || '',
-            strasse: splitAddress.street || item.strasse || '',
-            nummer: item.nummer || splitAddress.number || '',
-            plz: buildPlzInput(parsed.plz),
-            stadt: item.ort || item.stadt || '',
+            zusatz: cellStr(item.zusatz),
+            strasse: address.strasse,
+            nummer: address.nummer,
+            plz: cellStr(parsed.plz),
+            stadt: cellStr(item.ort || item.stadt),
             land: parsed.land,
-            adressTyp: item.type || item.adressTyp || (/postfach/i.test(item.strasse || '') ? 'POBOX' : 'HOUSE'),
+            adressTyp: item.adressTyp || address.type,
         };
     };
 
@@ -654,6 +727,7 @@ export default function PostVersandManager() {
 
     const saveCurrentEditorItem = () => {
         if (!currentItemToMatch || currentItemToMatch.isFrozen) return;
+        setResults(null);
         setPreMatchResults((prev) => ({
             ...prev,
             unmatchedList: prev.unmatchedList.map((item) =>
@@ -799,16 +873,17 @@ export default function PostVersandManager() {
             const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
             const landCode = normalizeCountryCode(item.landCode || item.land || parsed.land || 'DEU') || 'DEU';
             const ship = getVersandArt(item.totalWeight, landCode);
+            const address = resolveAddressFields(item);
             previewList.push({
                 ...item,
-                name: item.name || [item.anrede, item.titel, item.akad, item.vorname, item.nachname].filter(Boolean).join(' ').trim() || 'Fehler: Name fehlt',
-                zusatz: item.zusatz || '-',
-                strasse: item.strasse || '',
-                nummer: item.nummer || '',
+                name: item.name || joinParts(item.anrede, item.titel, item.akad, item.vorname, item.nachname) || 'Fehler: Name fehlt',
+                zusatz: cellStr(item.zusatz) || '-',
+                strasse: address.strasse,
+                nummer: address.nummer,
                 plz: formatPLZ(parsed.plz, landCode),
-                ort: item.ort || '',
+                ort: cellStr(item.ort),
                 landCode,
-                type: item.type || 'HOUSE',
+                type: address.type,
                 label: ship.label,
                 price: ship.price,
                 isDHL: ship.isDHL,
@@ -833,6 +908,21 @@ export default function PostVersandManager() {
     };
 
 
+    // Ein Weg in die Vorschau für beide Einstiege: aus dem Editor („Fertigstellen")
+    // und direkt aus der Clearing Station. Vorher gab es nur den Editor-Weg —
+    // bei 100 % Auto-Match (kein Editor-Button) war die Vorschau unerreichbar.
+    const proceedToPreview = (matchedList, unmatchedList) => {
+        const prepared = finalizeManualToPreview(matchedList, unmatchedList);
+        setProcStats({
+            manuell: unmatchedList.length,
+            db: matchedList.filter((m) => m.fromDB).length,
+            total: rawData.length,
+        });
+        setResults(prepared);
+        setMatchModalOpen(false);
+        setView('preview');
+    };
+
     const finishManualEditing = () => {
         if (!preMatchResults) return;
 
@@ -847,18 +937,12 @@ export default function PostVersandManager() {
             ...prev,
             unmatchedList: mergedUnmatched,
         }));
+        proceedToPreview(preMatchResults.matchedList, mergedUnmatched);
+    };
 
-        const prepared = finalizeManualToPreview(preMatchResults.matchedList, mergedUnmatched);
-        setProcStats({
-            manuell: mergedUnmatched.length,
-            db: preMatchResults.matchedList.filter((m) => m.fromDB).length,
-            total: rawData.length,
-            eta: 0,
-            progress: 100,
-        });
-        setResults(prepared);
-        setMatchModalOpen(false);
-        setView('preview');
+    const continueFromClearing = () => {
+        if (!preMatchResults) return;
+        proceedToPreview(preMatchResults.matchedList, preMatchResults.unmatchedList);
     };
 
     const downloadCSV = (label, records) => {
@@ -899,7 +983,17 @@ export default function PostVersandManager() {
         }
     };
 
-    const filteredPreview = useMemo(() => results ? results.preview.filter(r => (r.name?.toLowerCase().includes(searchTerm.toLowerCase())) || (r.plz?.includes(searchTerm))) : [], [results, searchTerm]);
+    const filteredPreview = useMemo(() => {
+        if (!results) return [];
+        const needle = searchTerm.trim().toLowerCase();
+        if (!needle) return results.preview;
+        return results.preview.filter((r) =>
+            cellStr(r.name).toLowerCase().includes(needle)
+            || cellStr(r.zusatz).toLowerCase().includes(needle)
+            || cellStr(r.ort).toLowerCase().includes(needle)
+            || cellStr(r.plz).includes(needle),
+        );
+    }, [results, searchTerm]);
     const previewShipmentCount = useMemo(() => {
         if (!results) return 0;
         return results.preview.filter((r) => !r.excluded && !isNoShippingRecord(r)).length;
@@ -939,6 +1033,20 @@ export default function PostVersandManager() {
             </div>
         </div>
     );
+
+    // Reset: Ergebnisse und Bearbeitungszustand verwerfen, hochgeladene Dateien
+    // und Gewichte bleiben (man will meist nur den Abgleich neu starten).
+    const resetWorkflow = () => {
+        setView('upload');
+        setResults(null);
+        setPreMatchResults(null);
+        setMatchModalOpen(false);
+        setCurrentItemToMatch(null);
+        setExpandedMatchRows({});
+        setShowOnlyMismatches(false);
+        setSearchTerm('');
+        setActiveTab('matched');
+    };
 
     // Erreichbare Schritte der Tab-Leiste: erst freigeschaltet, wenn die
     // jeweiligen Daten vorliegen.
@@ -1057,7 +1165,7 @@ export default function PostVersandManager() {
                 <SecondaryButton
                     icon={RotateCcw}
                     label="Reset"
-                    onClick={() => { setView('upload'); setResults(null); setPreMatchResults(null); }}
+                    onClick={resetWorkflow}
                 />
             </PageHeader>
 
@@ -1149,12 +1257,29 @@ export default function PostVersandManager() {
                     <div className="space-y-6 animate-in fade-in">
                         <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-6">
                             <h2 className="text-4xl font-black tracking-tighter uppercase italic">Clearing Station</h2>
-                            {preMatchResults.unmatchedList.length > 0 && (
-                                <button onClick={() => openManualEditor()} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#8e014d] transition-all flex items-center gap-2">
-                                    <CheckSquare size={18} /> Editor für {preMatchResults.unmatchedList.length} öffnen
+                            <div className="flex flex-wrap items-center gap-3">
+                                {preMatchResults.unmatchedList.length > 0 && (
+                                    <button onClick={() => openManualEditor()} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#8e014d] transition-all flex items-center gap-2">
+                                        <CheckSquare size={18} /> Editor für {preMatchResults.unmatchedList.length} öffnen
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={continueFromClearing}
+                                    title={preMatchResults.unmatchedList.length > 0
+                                        ? `${preMatchResults.unmatchedList.length} manuelle Adressen werden unverändert aus der Quelldatei übernommen`
+                                        : 'Alle Adressen sind zugeordnet'}
+                                    className="bg-[#8e014d] text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#b00260] transition-all flex items-center gap-2"
+                                >
+                                    Weiter zur Vorschau <ChevronRight size={18} />
                                 </button>
-                            )}
+                            </div>
                         </div>
+                        {preMatchResults.unmatchedList.length > 0 && (
+                            <p className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 -mt-4">
+                                Hinweis: „Weiter zur Vorschau" übernimmt die {preMatchResults.unmatchedList.length} nicht zugeordneten Adressen so, wie sie in der Quelldatei stehen. Zum Prüfen oder Korrigieren vorher den Editor nutzen.
+                            </p>
+                        )}
 
                         <div className="flex gap-4 mb-6 border-b-2 border-slate-200 dark:border-gray-700 pb-4">
                             <button onClick={() => setActiveTab('matched')} className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 ${activeTab === 'matched' ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-white dark:bg-gray-900 text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-gray-800'}`}>

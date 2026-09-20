@@ -16,6 +16,7 @@ import {
   resolveAddressFields,
   splitIntoBatches,
   splitStreetAndNumber,
+  stripSenderRows,
   toCsvCell,
   tokenizeName,
 } from './postVersand';
@@ -153,6 +154,11 @@ describe('Post-Manager: Begleitliste und Teillisten', () => {
     expect(txt.split('\r\n')[0]).toBe('BEGLEITLISTE - Großbrief');
     expect(txt).toContain('S. 1, Pos. 2 | B | 80333 München | 3x Herold, 0x Prog | 540g');
     expect(txt).not.toContain('\n\n');
+  });
+
+  it('wirft den Absender aus einer als Datenbank geladenen Rhaetia-CSV', () => {
+    const rows = [{ NAME: 'K.B.St.V. Rhaetia', PLZ: '80333' }, { NAME: 'Max Mustermann', PLZ: '80333' }];
+    expect(stripSenderRows(rows).map((r) => r.NAME)).toEqual(['Max Mustermann']);
   });
 
   it('sortiert Mehrfachempfänger nach oben und teilt in 99er-Blöcke', () => {

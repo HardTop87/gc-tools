@@ -17,6 +17,9 @@ import {
   splitIntoBatches,
   splitStreetAndNumber,
   stripSenderRows,
+  normalizeDbRow,
+  mergeIntoDatabase,
+  buildDatabaseCsv,
   toCsvCell,
   tokenizeName,
 } from './postVersand';
@@ -166,5 +169,43 @@ describe('Post-Manager: Begleitliste und Teillisten', () => {
     const batches = splitIntoBatches(records);
     expect(batches.map((b) => b.length)).toEqual([99, 51]);
     expect(batches[0][0].name).toBe('R149');
+  });
+});
+
+describe('Post-Manager: Datenbank für den nächsten Versand', () => {
+  const alt = [
+    { NAME: 'Max Mustermann', STRASSE: 'Altweg', NUMMER: '1', PLZ: 80333, STADT: 'München', LAND: 'DE' },
+    { NAME: 'Erika Beispiel', STRASSE: 'Ring', NUMMER: '9', PLZ: '1067', ORT: 'Dresden', LAND: 'DEU' },
+    { NAME: 'K.B.St.V. Rhaetia', STRASSE: 'Luisenstr.', NUMMER: '27', PLZ: '80333', STADT: 'München', LAND: 'DEU' },
+  ];
+  const versand = [
+    { name: 'Max Mustermann', zusatz: '-', strasse: 'Neuweg', nummer: '5', plz: '80333', ort: 'München', landCode: 'DEU', type: 'HOUSE', label: 'Großbrief' },
+    { name: 'Neu Dabei', zusatz: 'Bibliothek', strasse: 'Weg', nummer: '2', plz: '10115', ort: 'Berlin', landCode: 'DEU', type: 'HOUSE', label: 'Großbrief' },
+    { name: 'Raus Genommen', strasse: 'X', nummer: '1', plz: '10115', ort: 'Berlin', landCode: 'DEU', label: 'Großbrief', excluded: true },
+    { name: 'Kein Versand', strasse: '', plz: '', landCode: 'DEU', label: 'Kein Versand', errorMsg: 'Kein Versand (0 Stk)' },
+  ];
+
+  it('normalisiert Aliasse, PLZ und Land', () => {
+    expect(normalizeDbRow(alt[1])).toEqual({ NAME: 'Erika Beispiel', ZUSATZ: '', STRASSE: 'Ring', NUMMER: '9', PLZ: '01067', STADT: 'Dresden', LAND: 'DEU', ADRESS_TYP: 'HOUSE' });
+    expect(normalizeDbRow(alt[0]).LAND).toBe('DEU');
+    expect(normalizeDbRow(alt[0]).PLZ).toBe('80333');
+  });
+
+  it('führt zusammen: aktuelle Adresse gewinnt, alte bleibt, Absender/ausgenommen/kein Versand fliegen raus', () => {
+    const rows = mergeIntoDatabase(alt, versand);
+    const names = rows.map((r) => r.NAME).sort();
+    expect(names).toEqual(['Erika Beispiel', 'Max Mustermann', 'Neu Dabei']);
+    const max = rows.find((r) => r.NAME === 'Max Mustermann');
+    expect(max.STRASSE).toBe('Neuweg');
+    expect(max.ZUSATZ).toBe('');
+  });
+
+  it('schreibt die Datenbank als Rhaetia-CSV ohne Absender', () => {
+    const csv = buildDatabaseCsv(mergeIntoDatabase(alt, versand));
+    const lines = csv.trimEnd().split('\r\n');
+    expect(lines[0]).toBe('NAME;ZUSATZ;STRASSE;NUMMER;PLZ;STADT;LAND;ADRESS_TYP');
+    expect(lines).toHaveLength(4);
+    expect(lines.some((l) => l.startsWith('K.B.St.V. Rhaetia'))).toBe(false);
+    expect(lines).toContain('Neu Dabei;Bibliothek;Weg;2;10115;Berlin;DEU;HOUSE');
   });
 });

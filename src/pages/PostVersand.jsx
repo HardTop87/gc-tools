@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { downloadBlobFile } from '../utils/download';
 import {
     Download, UploadCloud, AlertTriangle, RotateCcw,
@@ -16,6 +16,7 @@ import {
     normalizeSearchText, isStrictCountryCode, looksLikeMojibake, normalizeRow,
     autoDetectMapping, getVersandArt, parsePlzAndLand, resolveAddressFields,
     buildRhaetiaCsv, buildBegleitliste, splitIntoBatches, stripSenderRows,
+    mergeIntoDatabase, buildDatabaseCsv,
 } from '../utils/postVersand';
 
 // --- KONFIGURATION ---
@@ -30,6 +31,28 @@ const WEIGHT_LABELS = {
     heroldBrutto: 'Herold, erstes Exemplar inkl. Umschlag',
     programmNetto: 'Programm, jedes weitere Exemplar',
     programmBrutto: 'Programm, erstes Exemplar inkl. Umschlag',
+};
+
+// Gespeicherte Datenbank (Versandliste des letzten Versands, im Browser).
+// Bewusst nur lokal: Es sind personenbezogene Adressdaten, die nichts auf
+// dem Server verloren haben. Für einen anderen Rechner gibt es den CSV-Export.
+const DB_STORAGE_KEY = 'gc_post_db';
+const loadStoredDb = () => {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(DB_STORAGE_KEY) || 'null');
+        if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+            return { rows: parsed.rows, savedAt: parsed.savedAt || null };
+        }
+    } catch {
+        // kein oder kaputter Speicher → keine gespeicherte Datenbank
+    }
+    return null;
+};
+const formatSavedAt = (iso) => {
+    const d = iso ? new Date(iso) : null;
+    return d && !Number.isNaN(d.getTime())
+        ? d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : 'unbekannt';
 };
 
 const WEIGHTS_STORAGE_KEY = 'gc_post_weights';
@@ -116,7 +139,13 @@ export default function PostVersandManager() {
     const weightsAreDefault = Object.keys(INITIAL_WEIGHTS).every((k) => weights[k] === INITIAL_WEIGHTS[k]);
     
     const [rawData, setRawData] = useState([]);
-    const [dbData, setDbData] = useState([]); 
+    // Datenbank: beim Start die gespeicherte Versandliste des letzten Versands.
+    const [storedDb, setStoredDb] = useState(loadStoredDb);
+    const [dbData, setDbData] = useState(() => storedDb?.rows || []);
+    const [dbSavedForResults, setDbSavedForResults] = useState(false);
+    // Synchroner Spiegel des States: „Alle Gruppen" ruft downloadCSV mehrfach
+    // in einem Tick auf, der State wäre dabei noch veraltet.
+    const dbSavedRef = useRef(false);
     const [headers, setHeaders] = useState([]);
     const [mapping, setMapping] = useState({});
     
@@ -142,7 +171,10 @@ export default function PostVersandManager() {
     const [view, setView] = useState('upload'); 
     const [searchTerm, setSearchTerm] = useState('');
     const [procStats, setProcStats] = useState({ manuell: 0, db: 0, total: 0 });
-    const [uploadEncoding, setUploadEncoding] = useState({ source: '', db: '' });
+    const [uploadEncoding, setUploadEncoding] = useState(() => ({
+        source: '',
+        db: storedDb ? `Gespeichert: ${formatSavedAt(storedDb.savedAt)}` : '',
+    }));
     const [showOnlyMismatches, setShowOnlyMismatches] = useState(false);
     const [expandedMatchRows, setExpandedMatchRows] = useState({});
 
@@ -687,8 +719,48 @@ export default function PostVersandManager() {
             total: rawData.length,
         });
         setResults(prepared);
+        setDbSavedForResults(false);
+        dbSavedRef.current = false;
         setMatchModalOpen(false);
         setView('preview');
+    };
+
+    // Fertige Versandliste + bisherige Datenbank → neue Datenbank im Browser.
+    // Läuft automatisch beim ersten Download und auf Knopfdruck.
+    const saveDatabaseForNextTime = ({ silent = false } = {}) => {
+        if (!results) return false;
+        const rows = mergeIntoDatabase(dbData, results.preview);
+        const savedAt = new Date().toISOString();
+        try {
+            localStorage.setItem(DB_STORAGE_KEY, JSON.stringify({ savedAt, rows }));
+        } catch {
+            if (!silent) alert('Speichern im Browser fehlgeschlagen (Speicher voll oder gesperrt). Bitte die Datenbank als CSV herunterladen.');
+            return false;
+        }
+        setStoredDb({ rows, savedAt });
+        setDbData(rows);
+        setUploadEncoding((prev) => ({ ...prev, db: `Gespeichert: ${formatSavedAt(savedAt)}` }));
+        setDbSavedForResults(true);
+        dbSavedRef.current = true;
+        return true;
+    };
+
+    const discardStoredDb = () => {
+        if (!window.confirm('Gespeicherte Datenbank aus diesem Browser löschen?')) return;
+        try { localStorage.removeItem(DB_STORAGE_KEY); } catch { /* egal */ }
+        setStoredDb(null);
+        setDbData([]);
+        setUploadEncoding((prev) => ({ ...prev, db: '' }));
+        setPreMatchResults(null);
+        setResults(null);
+    };
+
+    const downloadDatabaseCsv = () => {
+        const rows = results ? mergeIntoDatabase(dbData, results.preview) : mergeIntoDatabase(dbData, []);
+        if (rows.length === 0) return alert('Keine Datenbank vorhanden.');
+        const stamp = new Date().toISOString().slice(0, 10);
+        const bytes = encodeWindows1252(buildDatabaseCsv(rows));
+        downloadBlobFile(`Rhaetia_Datenbank_${stamp}.csv`, new Blob([bytes], { type: 'text/csv;charset=windows-1252;' }));
     };
 
     const finishManualEditing = () => {
@@ -717,6 +789,7 @@ export default function PostVersandManager() {
     // die Staffelung über alle Gruppen fortführen kann (Browser bündeln oder
     // blockieren sonst gleichzeitig gestartete Downloads, B8).
     const downloadCSV = (label, records, startNr = 0) => {
+        if (!dbSavedRef.current) saveDatabaseForNextTime({ silent: true });
         const batches = splitIntoBatches(records);
         const safeLabel = label.replace(/\s/g, '_').replace(/[()]/g, '');
         let downloadNr = startNr;
@@ -990,6 +1063,23 @@ export default function PostVersandManager() {
                                     {uploadEncoding.db && <p className="text-[10px] font-bold text-slate-500 dark:text-gray-400 mt-1 uppercase tracking-wider">{uploadEncoding.db}</p>}
                                 </div>
                             </div>
+                            {storedDb && uploadEncoding.db.startsWith('Gespeichert') && (
+                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-5 py-3 text-emerald-900 dark:text-emerald-200">
+                                    <p className="text-xs font-semibold">
+                                        <Database size={14} className="inline mr-2 -mt-0.5" />
+                                        Datenbank aus dem letzten Versand geladen: {storedDb.rows.length} Adressen, Stand {formatSavedAt(storedDb.savedAt)}.
+                                        {' '}Eine hochgeladene Datei ersetzt sie für diesen Durchlauf.
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={downloadDatabaseCsv} className="text-[10px] font-black uppercase tracking-widest border border-emerald-300 dark:border-emerald-700 rounded-lg px-3 py-1.5 hover:bg-white dark:hover:bg-emerald-900/40">
+                                            Als CSV sichern
+                                        </button>
+                                        <button type="button" onClick={discardStoredDb} className="text-[10px] font-black uppercase tracking-widest border border-emerald-300 dark:border-emerald-700 rounded-lg px-3 py-1.5 hover:bg-white dark:hover:bg-emerald-900/40">
+                                            Verwerfen
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {headers.length > 0 && (
                                 <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl animate-in slide-in-from-bottom-4">
@@ -1435,6 +1525,24 @@ export default function PostVersandManager() {
                             >
                                 <Download size={16} /> Alle Gruppen herunterladen
                             </button>
+                        </div>
+                        <div className="rounded-3xl border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-6 flex flex-wrap items-center justify-between gap-4">
+                            <div className="text-emerald-900 dark:text-emerald-200">
+                                <p className="text-[10px] font-black uppercase tracking-widest mb-1 flex items-center gap-2"><Database size={14} /> Datenbank für den nächsten Versand</p>
+                                <p className="text-xs font-semibold max-w-2xl">
+                                    {dbSavedForResults
+                                        ? `Gespeichert: ${dbData.length} Adressen (bisherige Datenbank + diese Versandliste), Stand ${formatSavedAt(storedDb?.savedAt)}. Beim nächsten Versand ist sie automatisch geladen.`
+                                        : `Beim ersten Download wird diese Versandliste automatisch mit der Datenbank zusammengeführt und in diesem Browser gespeichert (${mergeIntoDatabase(dbData, results.preview).length} Adressen). Nur hier lokal, nicht auf dem Server.`}
+                                </p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => saveDatabaseForNextTime()} className="text-[10px] font-black uppercase tracking-widest bg-emerald-700 text-white rounded-xl px-4 py-2.5 hover:bg-emerald-800">
+                                    {dbSavedForResults ? 'Erneut speichern' : 'Jetzt speichern'}
+                                </button>
+                                <button type="button" onClick={downloadDatabaseCsv} className="text-[10px] font-black uppercase tracking-widest border border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 rounded-xl px-4 py-2.5 hover:bg-white dark:hover:bg-emerald-900/40">
+                                    Datenbank als CSV
+                                </button>
+                            </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {Object.entries(results.groups).map(([label, records]) => (

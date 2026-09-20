@@ -4,6 +4,12 @@
 // (siehe postVersand.test.js). Die Seite PostVersand.jsx importiert von hier.
 
 export const SENDER_ROW = "K.B.St.V. Rhaetia;Herold-Schriftleitung;Luisenstr.;27;80333;München;DEU;HOUSE";
+export const SENDER_NAME = SENDER_ROW.split(';')[0];
+
+// Als Datenbank dient meist eine frühere Rhaetia-CSV — deren erste Datenzeile
+// ist der Absender selbst. Der darf kein Match-Kandidat für Empfänger sein.
+export const stripSenderRows = (rows) =>
+    rows.filter((row) => String(row?.NAME ?? '').trim() !== SENDER_NAME);
 
 export const INITIAL_WEIGHTS = { 
     heroldNetto: 170, heroldBrutto: 200, 

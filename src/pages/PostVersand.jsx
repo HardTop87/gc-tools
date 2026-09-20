@@ -15,7 +15,7 @@ import {
     cellStr, joinParts, cleanForMatch, extractNumbers, tokenizeName, normalizeStreet,
     normalizeSearchText, isStrictCountryCode, looksLikeMojibake, normalizeRow,
     autoDetectMapping, getVersandArt, parsePlzAndLand, resolveAddressFields,
-    buildRhaetiaCsv, buildBegleitliste, splitIntoBatches,
+    buildRhaetiaCsv, buildBegleitliste, splitIntoBatches, stripSenderRows,
 } from '../utils/postVersand';
 
 // --- KONFIGURATION ---
@@ -30,6 +30,23 @@ const WEIGHT_LABELS = {
     heroldBrutto: 'Herold, erstes Exemplar inkl. Umschlag',
     programmNetto: 'Programm, jedes weitere Exemplar',
     programmBrutto: 'Programm, erstes Exemplar inkl. Umschlag',
+};
+
+const WEIGHTS_STORAGE_KEY = 'gc_post_weights';
+const loadStoredWeights = () => {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(WEIGHTS_STORAGE_KEY) || 'null');
+        if (parsed && typeof parsed === 'object') {
+            const merged = { ...INITIAL_WEIGHTS };
+            Object.keys(INITIAL_WEIGHTS).forEach((k) => {
+                if (Number.isFinite(parsed[k]) && parsed[k] >= 0) merged[k] = parsed[k];
+            });
+            return merged;
+        }
+    } catch {
+        // kein oder kaputter Speicher → Standardwerte
+    }
+    return INITIAL_WEIGHTS;
 };
 
 const STEPS = [
@@ -87,7 +104,16 @@ const parseCsvFile = (file, onComplete, onError) => {
 };
 
 export default function PostVersandManager() {
-    const [weights, setWeights] = useState(INITIAL_WEIGHTS);
+    // Gewichte bleiben über Sitzungen erhalten (rein lokale Bequemlichkeit).
+    const [weights, setWeights] = useState(loadStoredWeights);
+    useEffect(() => {
+        try {
+            localStorage.setItem(WEIGHTS_STORAGE_KEY, JSON.stringify(weights));
+        } catch {
+            // Privat-Modus oder gesperrter Speicher: dann eben nicht merken.
+        }
+    }, [weights]);
+    const weightsAreDefault = Object.keys(INITIAL_WEIGHTS).every((k) => weights[k] === INITIAL_WEIGHTS[k]);
     
     const [rawData, setRawData] = useState([]);
     const [dbData, setDbData] = useState([]); 
@@ -189,13 +215,18 @@ export default function PostVersandManager() {
         e.target.value = '';
         if (!file) return;
 
+        // Neue Datenbank → alter Abgleich ist hinfällig.
+        const applyDbRows = (rows, label) => {
+            setDbData(stripSenderRows(rows));
+            setUploadEncoding((prev) => ({ ...prev, db: label }));
+            setPreMatchResults(null);
+            setResults(null);
+        };
+
         if (file.name.toLowerCase().endsWith('.csv')) {
             parseCsvFile(
                 file,
-                (rows, meta) => {
-                    setDbData(rows);
-                    setUploadEncoding((prev) => ({ ...prev, db: `CSV: ${meta?.encodingUsed || 'UTF-8'}` }));
-                },
+                (rows, meta) => applyDbRows(rows, `CSV: ${meta?.encodingUsed || 'UTF-8'}`),
                 () => {
                     setUploadEncoding((prev) => ({ ...prev, db: 'CSV: Fehler beim Lesen' }));
                     alert('Datenbank-CSV konnte nicht gelesen werden.');
@@ -207,15 +238,27 @@ export default function PostVersandManager() {
         const reader = new FileReader();
         reader.onload = (evt) => {
             const wb = XLSX.read(evt.target.result, { type: 'array' });
-            setDbData(
+            applyDbRows(
                 XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]).map(normalizeRow),
+                'Excel: XLS/XLSX',
             );
-            setUploadEncoding((prev) => ({ ...prev, db: 'Excel: XLS/XLSX' }));
         };
         reader.onerror = () => alert('Datenbank-Excel konnte nicht gelesen werden.');
         reader.readAsArrayBuffer(file);
     };
 
+    // PLZ-Index über die Datenbank: der Abgleich prüfte bisher jede Quellzeile
+    // gegen jede DB-Zeile (Quelle × DB), obwohl nur gleiche PLZ in Frage kommen.
+    const dbByPlz = useMemo(() => {
+        const index = new Map();
+        dbData.forEach((dbRow) => {
+            const dbLand = normalizeCountryCode(dbRow.LAND || dbRow.landCode || 'DEU');
+            const key = formatPLZ(dbRow.PLZ || dbRow.plz, dbLand);
+            if (!index.has(key)) index.set(key, []);
+            index.get(key).push({ dbRow, dbLand });
+        });
+        return index;
+    }, [dbData]);
 
     const findInDatabase = (rawRow) => {
         if (!dbData || dbData.length === 0) return { match: null, reason: 'Keine Datenbank geladen' };
@@ -233,10 +276,7 @@ export default function PostVersandManager() {
         const sourceTokens = tokenizeName(sourceNameText);
         const sourceIsPerson = /herr|frau/i.test(String(rawRow.anrede || '')) || String(rawRow.vorname || '').trim().length > 1;
 
-        const candidates = dbData.map((dbRow) => {
-            const dbLand = normalizeCountryCode(dbRow.LAND || dbRow.landCode || 'DEU');
-            const dbPlz = formatPLZ(dbRow.PLZ || dbRow.plz, dbLand);
-            if (dbPlz !== rawPlz) return null;
+        const candidates = (dbByPlz.get(rawPlz) || []).map(({ dbRow, dbLand }) => {
             if (isStrictCountryCode(rawLand) && isStrictCountryCode(dbLand) && dbLand !== rawLand) return null;
 
             const dbCombinedName = joinParts(dbRow.NAME, dbRow.ZUSATZ);
@@ -673,10 +713,13 @@ export default function PostVersandManager() {
         proceedToPreview(preMatchResults.matchedList, preMatchResults.unmatchedList);
     };
 
-    const downloadCSV = (label, records) => {
+    // Gibt die Anzahl gestarteter Downloads zurück, damit „Alle herunterladen"
+    // die Staffelung über alle Gruppen fortführen kann (Browser bündeln oder
+    // blockieren sonst gleichzeitig gestartete Downloads, B8).
+    const downloadCSV = (label, records, startNr = 0) => {
         const batches = splitIntoBatches(records);
         const safeLabel = label.replace(/\s/g, '_').replace(/[()]/g, '');
-        let downloadNr = 0; // staffelt alle Downloads dieses Aufrufs (B8)
+        let downloadNr = startNr;
 
         batches.forEach((batch, idx) => {
             const partStr = batches.length > 1 ? `_Teil_${idx + 1}` : '';
@@ -690,6 +733,15 @@ export default function PostVersandManager() {
                 const blobTXT = new Blob([begleit], { type: 'text/plain;charset=utf-8;' });
                 downloadBlobFile(`Begleitliste_${safeLabel}${partStr}.txt`, blobTXT, { delayMs: downloadNr++ * 400 });
             }
+        });
+        return downloadNr;
+    };
+
+    const downloadAllGroups = () => {
+        if (!results) return;
+        let nr = 0;
+        Object.entries(results.groups).forEach(([label, records]) => {
+            nr = downloadCSV(label, records, nr);
         });
     };
 
@@ -959,7 +1011,19 @@ export default function PostVersandManager() {
 
                         {/* KLARES EINGABEFELD-DESIGN FÜR GEWICHTE */}
                         <div className="bg-white dark:bg-gray-900 p-10 rounded-[3rem] border-2 border-slate-100 dark:border-gray-800 shadow-sm">
-                            <h3 className="text-[12px] font-black uppercase text-[#8e014d] mb-8 flex items-center gap-2"><Package size={16}/> Gewichte (g)</h3>
+                            <div className="mb-8 flex items-center justify-between gap-3">
+                                <h3 className="text-[12px] font-black uppercase text-[#8e014d] flex items-center gap-2"><Package size={16}/> Gewichte (g)</h3>
+                                {!weightsAreDefault && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setWeights(INITIAL_WEIGHTS)}
+                                        title="Zurück auf die Standardgewichte"
+                                        className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-gray-400 hover:text-[#8e014d] border border-slate-200 dark:border-gray-700 rounded-lg px-2 py-1"
+                                    >
+                                        Standard
+                                    </button>
+                                )}
+                            </div>
                             <div className="grid grid-cols-1 gap-6">
                                 {Object.keys(weights).map(k => (
                                     <div key={k} className="pb-2">
@@ -1359,6 +1423,19 @@ export default function PostVersandManager() {
                             <div className="bg-white/10 p-10 rounded-[2.5rem] backdrop-blur-xl border border-white/20 text-center relative z-10"><p className="text-5xl font-black">{Object.values(results.groups).reduce((acc, arr) => acc + arr.length, 0)}</p><p className="text-[10px] font-black uppercase opacity-80 tracking-widest mt-2">Sendungen Gesamt</p></div>
                         </div>
                         {exportHinweisBanner}
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-gray-400">
+                                {Object.keys(results.groups).length} Gruppen · je Gruppe eine CSV (max. 99 Adressen je Teil) plus Begleitliste bei Mehrfachempfängern
+                            </p>
+                            <button
+                                type="button"
+                                onClick={downloadAllGroups}
+                                disabled={Object.keys(results.groups).length === 0}
+                                className="bg-[#8e014d] text-white px-8 py-3 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-[#b00260] transition-all flex items-center gap-2 disabled:opacity-40"
+                            >
+                                <Download size={16} /> Alle Gruppen herunterladen
+                            </button>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {Object.entries(results.groups).map(([label, records]) => (
                                 <div key={label} className="p-8 bg-white dark:bg-gray-900 rounded-[3rem] border-2 dark:border-gray-700 flex flex-col justify-between hover:border-[#8e014d] transition-all shadow-sm">

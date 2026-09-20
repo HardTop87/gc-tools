@@ -7,6 +7,7 @@ import Verwaltung from './pages/Verwaltung';
 import PayPalExport from './pages/PayPalExport';
 import PostVersand from './pages/PostVersand';
 import { ThemeProvider } from './context/ThemeContext';
+import { RouteErrorBoundary } from './components/ErrorBoundary';
 import { Lock, Info } from 'lucide-react';
 
 function Login({ onLogin }) {
@@ -108,6 +109,7 @@ export default function App() {
     <div className="min-h-screen bg-bg">
       <BrowserRouter>
         <AppTopBar isAuthenticated={isAuthenticated} />
+        <RouteErrorBoundary>
         <Routes>
           <Route
             path="/login"
@@ -134,6 +136,7 @@ export default function App() {
           {/* Fallback */}
           <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
         </Routes>
+        </RouteErrorBoundary>
       </BrowserRouter>
     </div>
     </ThemeProvider>

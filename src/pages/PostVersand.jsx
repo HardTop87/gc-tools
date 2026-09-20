@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { downloadBlobFile } from '../utils/download';
 import {
     Download, UploadCloud, AlertTriangle, RotateCcw,
@@ -9,8 +9,29 @@ import {
 import { PageHeader, SecondaryButton } from '../components/PageHeader';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import {
+    INITIAL_WEIGHTS, isLetterPostLabel, isNoShippingRecord,
+    encodeWindows1252, getExportAenderungen, normalizeCountryCode, formatPLZ,
+    cellStr, joinParts, cleanForMatch, extractNumbers, tokenizeName, normalizeStreet,
+    normalizeSearchText, isStrictCountryCode, looksLikeMojibake, normalizeRow,
+    autoDetectMapping, getVersandArt, parsePlzAndLand, resolveAddressFields,
+    buildRhaetiaCsv, buildBegleitliste, splitIntoBatches,
+} from '../utils/postVersand';
 
 // --- KONFIGURATION ---
+const MAPPING_LABELS = {
+    anrede: 'Anrede', titel: 'Titel', akad: 'Akad. Grad', vorname: 'Vorname', nachname: 'Nachname',
+    zusatz: 'Zusatz / Institution', strasse: 'Straße (+ Nr.)', plz: 'PLZ', ort: 'Ort', land: 'Land',
+    herold: 'Menge Herold', programm: 'Menge Programm',
+};
+
+const WEIGHT_LABELS = {
+    heroldNetto: 'Herold, jedes weitere Exemplar',
+    heroldBrutto: 'Herold, erstes Exemplar inkl. Umschlag',
+    programmNetto: 'Programm, jedes weitere Exemplar',
+    programmBrutto: 'Programm, erstes Exemplar inkl. Umschlag',
+};
+
 const STEPS = [
     { key: 'upload', label: 'Upload' },
     { key: 'db-preview', label: 'Pre-Match' },
@@ -18,221 +39,6 @@ const STEPS = [
     { key: 'final', label: 'CSV' },
 ];
 
-const SENDER_ROW = "K.B.St.V. Rhaetia;Herold-Schriftleitung;Luisenstr.;27;80333;München;DEU;HOUSE";
-
-const INITIAL_WEIGHTS = { 
-    heroldNetto: 170, heroldBrutto: 200, 
-    programmNetto: 15, programmBrutto: 18 
-};
-
-const RATES = {
-    de: { standard: 0.95, kompakt: 1.00, gross: 1.80, maxi: 2.90, paket: 5.49 },
-    intl: { standard: 1.25, kompakt: 1.80, gross: 3.30, maxi: 6.50, paket: 15.99 }
-};
-
-
-const isLetterPostLabel = (label) => !/paket/i.test(String(label || ''));
-const isNoShippingRecord = (record) => record?.label === 'Kein Versand' || Boolean(record?.errorMsg);
-
-const WINDOWS_1252_SPECIAL = {
-    0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
-    0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
-    0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
-    0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
-    0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
-    0x017E: 0x9E, 0x0178: 0x9F,
-};
-
-const encodeWindows1252 = (text) => {
-    const bytes = [];
-    for (const ch of String(text || '')) {
-        const cp = ch.codePointAt(0);
-        if (cp <= 0xFF) {
-            bytes.push(cp);
-            continue;
-        }
-        if (WINDOWS_1252_SPECIAL[cp] !== undefined) {
-            bytes.push(WINDOWS_1252_SPECIAL[cp]);
-            continue;
-        }
-        bytes.push(0x3F); // '?' fallback for unsupported characters
-    }
-    return new Uint8Array(bytes);
-};
-
-const toCsvCell = (value) => {
-    const raw = String(value ?? '').trim();
-    const emptyNormalized = raw === '-' ? '' : raw;
-    return emptyNormalized
-        .replace(/"/g, '')
-        .replace(/[;\r\n]+/g, ' ')
-        .trim();
-};
-
-// F1/F2: Der Rhaetia-Export verändert manche Adressen zwangsläufig — Zeichen
-// außerhalb von Windows-1252 (ł, ř, ş, ğ …) werden zu '?', Anführungszeichen
-// entfernt, Semikolon/Zeilenumbruch durch Leerzeichen ersetzt. Diese Prüfung
-// erkennt betroffene Datensätze, damit der Anwender es VOR dem Versand erfährt.
-const EXPORT_FIELDS = ['name', 'zusatz', 'strasse', 'nummer', 'plz', 'ort', 'landCode', 'type'];
-
-const hasUnsupportedWin1252 = (text) => {
-    for (const ch of String(text || '')) {
-        const cp = ch.codePointAt(0);
-        if (cp > 0xFF && WINDOWS_1252_SPECIAL[cp] === undefined) return true;
-    }
-    return false;
-};
-
-const getExportAenderungen = (record) => {
-    let ersetzt = false;   // '?' statt nicht darstellbarer Zeichen (F1)
-    let bereinigt = false; // von toCsvCell entfernte/ersetzte Zeichen (F2)
-    for (const field of EXPORT_FIELDS) {
-        const value = String(record?.[field] ?? '');
-        if (hasUnsupportedWin1252(value)) ersetzt = true;
-        if (/[";\r\n]/.test(value)) bereinigt = true;
-    }
-    return { ersetzt, bereinigt };
-};
-
-// B8: Download über eine kurzlebige Object-URL, die nach dem Klick wieder
-// freigegeben wird; mehrere Downloads werden gestaffelt statt gleichzeitig
-// gefeuert, damit der Browser sie nicht bündelt oder blockiert.
-const formatPLZ = (plz, land) => {
-    let p = String(plz || '').trim();
-    const l = String(land || 'DEU').toUpperCase();
-    if ((l.includes('DE') || l === '') && p.length > 0 && p.length < 5) {
-        return p.padStart(5, '0');
-    }
-    return p;
-};
-
-const normalizeCountryCode = (value) => {
-    const raw = String(value || '').trim().toUpperCase();
-    if (!raw) return '';
-
-    const map = {
-        DE: 'DEU',
-        D: 'DEU',
-        DEU: 'DEU',
-        DEUTSCHLAND: 'DEU',
-        GERMANY: 'DEU',
-        AT: 'AUT',
-        AUT: 'AUT',
-        A: 'AUT',
-        OESTERREICH: 'AUT',
-        ÖSTERREICH: 'AUT',
-        AUSTRIA: 'AUT',
-        CH: 'CHE',
-        CHE: 'CHE',
-        SCHWEIZ: 'CHE',
-        SWITZERLAND: 'CHE',
-        IT: 'ITA',
-        ITA: 'ITA',
-        ITALIEN: 'ITA',
-        ITALY: 'ITA',
-        NL: 'NLD',
-        NLD: 'NLD',
-        NIEDERLANDE: 'NLD',
-        NETHERLANDS: 'NLD',
-        HOLLAND: 'NLD',
-    };
-
-    return map[raw] || raw;
-};
-
-// --- HILFSFUNKTIONEN FÜR DATENBANK-ABGLEICH ---
-const cleanForMatch = (str) => {
-    if (!str) return "";
-    return String(str)
-        .toLowerCase()
-        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|-bibliothek/g, "")
-        .replace(/[^a-z0-9äöüß]/g, "") 
-        .trim();
-};
-
-const extractNumbers = (str) => {
-    if (!str) return "";
-    const matches = String(str).match(/\d+/g);
-    return matches ? matches.join("") : "";
-};
-
-const tokenizeName = (str) => {
-    if (!str) return [];
-    return String(str)
-        .toLowerCase()
-        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|dipl-ing|ing\.|-bibliothek/g, ' ')
-        .replace(/[^a-z0-9äöüß\s-]/g, ' ')
-        .split(/[\s-]+/)
-        .map((t) => t.trim())
-        .filter((t) => t.length >= 2);
-};
-
-const normalizeStreet = (str) => {
-    if (!str) return '';
-    return String(str)
-        .toLowerCase()
-        .replace(/straße/g, 'str')
-        .replace(/str\./g, 'str')
-        .replace(/\s+/g, ' ')
-        .replace(/[^a-z0-9äöüß\s]/g, '')
-        .trim();
-};
-
-const splitStreetAndNumber = (value) => {
-    const raw = String(value || '').trim();
-    if (!raw) return { street: '', number: '' };
-
-    const match = raw.match(/^(.*?)(\s+\d+[a-zA-Z/-]*\s*)$/);
-    if (!match) {
-        return { street: raw, number: '' };
-    }
-
-    return {
-        street: String(match[1] || '').trim().replace(/[.,;]$/, ''),
-        number: String(match[2] || '').trim(),
-    };
-};
-
-const normalizeSearchText = (value) =>
-    String(value || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const isStrictCountryCode = (code) => ['DEU', 'AUT', 'CHE', 'ITA'].includes(code);
-
-const looksLikeMojibake = (text) => /Ã.|â.|Â.|�/.test(text);
-
-const normalizeText = (value) => {
-    if (value === null || value === undefined) return '';
-    if (typeof value !== 'string') return value;
-
-    let text = value.replace(/^\uFEFF/, '').trim();
-
-    if (looksLikeMojibake(text)) {
-        try {
-            const repaired = decodeURIComponent(escape(text));
-            if (repaired) text = repaired;
-        } catch {
-            // Fallback: keep original text when repair is not possible.
-        }
-    }
-
-    return text;
-};
-
-const normalizeRow = (row) => {
-    const normalized = {};
-    Object.entries(row || {}).forEach(([key, value]) => {
-        const cleanKey = String(normalizeText(key) || '').trim();
-        if (!cleanKey) return;
-        normalized[cleanKey] = normalizeText(value);
-    });
-    return normalized;
-};
 
 const parseCsvFile = (file, onComplete, onError) => {
     const reader = new FileReader();
@@ -309,13 +115,36 @@ export default function PostVersandManager() {
     const [results, setResults] = useState(null);
     const [view, setView] = useState('upload'); 
     const [searchTerm, setSearchTerm] = useState('');
-    const [procStats, setProcStats] = useState({ manuell: 0, db: 0, total: 0, eta: 0, progress: 0 });
+    const [procStats, setProcStats] = useState({ manuell: 0, db: 0, total: 0 });
     const [uploadEncoding, setUploadEncoding] = useState({ source: '', db: '' });
     const [showOnlyMismatches, setShowOnlyMismatches] = useState(false);
     const [expandedMatchRows, setExpandedMatchRows] = useState({});
 
+    // Escape schließt den Editor (wie das X: ungespeicherte Feldänderungen verfallen).
+    useEffect(() => {
+        if (!matchModalOpen) return undefined;
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') setMatchModalOpen(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [matchModalOpen]);
+
+    // Neue Quelldatei → alles Nachgelagerte ist ungültig.
+    const applySourceRows = (rows, currentHeaders, sourceLabel) => {
+        setHeaders(currentHeaders);
+        setRawData(rows);
+        setMapping(autoDetectMapping(currentHeaders));
+        setUploadEncoding((prev) => ({ ...prev, source: sourceLabel }));
+        setPreMatchResults(null);
+        setResults(null);
+    };
+
     const handleSourceUpload = (e) => {
         const file = e.target.files[0];
+        // Input zurücksetzen, sonst feuert onChange nicht, wenn dieselbe Datei
+        // (z. B. nach einer Korrektur in Excel) noch einmal gewählt wird.
+        e.target.value = '';
         if (!file) return;
 
         if (file.name.toLowerCase().endsWith('.csv')) {
@@ -327,25 +156,7 @@ export default function PostVersandManager() {
                         alert('CSV enthält keine verwertbaren Spalten.');
                         return;
                     }
-
-                    setUploadEncoding((prev) => ({ ...prev, source: `CSV: ${meta?.encodingUsed || 'UTF-8'}` }));
-
-                    setHeaders(currentHeaders);
-                    setRawData(rows);
-
-                    const findCol = (keys) =>
-                        currentHeaders.find((h) =>
-                            keys.some((k) => String(h).toLowerCase().includes(k)),
-                        ) || '';
-
-                    setMapping({
-                        anrede: findCol(['anrede']), titel: findCol(['titel']), 
-                        akad: findCol(['akademischer']), vorname: findCol(['vorname']), 
-                        nachname: findCol(['nachname']), zusatz: findCol(['zusatz']),
-                        strasse: findCol(['straße', 'strasse', 'adresse']), plz: findCol(['plz']), 
-                        ort: findCol(['ort', 'stadt']), land: findCol(['land']), 
-                        herold: findCol(['herold']), programm: findCol(['programm'])
-                    });
+                    applySourceRows(rows, currentHeaders, `CSV: ${meta?.encodingUsed || 'UTF-8'}`);
                 },
                 () => {
                     setUploadEncoding((prev) => ({ ...prev, source: 'CSV: Fehler beim Lesen' }));
@@ -359,34 +170,23 @@ export default function PostVersandManager() {
         reader.onload = (evt) => {
             const wb = XLSX.read(evt.target.result, { type: 'array' });
             const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-            
+
             const hIdx = data.findIndex(r => r && r.some(c => String(c||'').toLowerCase().includes('nachname')));
             if (hIdx === -1) return alert("Konnte Kopfzeile nicht finden!");
-            
-            const currentHeaders = data[hIdx].map(h => String(h || '').trim());
-            setHeaders(currentHeaders);
-            setRawData(
-                XLSX.utils
-                    .sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx })
-                    .map(normalizeRow),
-            );
-            setUploadEncoding((prev) => ({ ...prev, source: 'Excel: XLS/XLSX' }));
-            
-            const findCol = (keys) => currentHeaders.find(h => keys.some(k => String(h).toLowerCase().includes(k))) || '';
-            setMapping({
-                anrede: findCol(['anrede']), titel: findCol(['titel']), 
-                akad: findCol(['akademischer']), vorname: findCol(['vorname']), 
-                nachname: findCol(['nachname']), zusatz: findCol(['zusatz']),
-                strasse: findCol(['straße', 'adresse']), plz: findCol(['plz']), 
-                ort: findCol(['ort', 'stadt']), land: findCol(['land']), 
-                herold: findCol(['herold']), programm: findCol(['programm'])
-            });
+
+            const currentHeaders = data[hIdx].map(h => String(h || '').trim()).filter(Boolean);
+            const rows = XLSX.utils
+                .sheet_to_json(wb.Sheets[wb.SheetNames[0]], { range: hIdx })
+                .map(normalizeRow);
+            applySourceRows(rows, currentHeaders, 'Excel: XLS/XLSX');
         };
+        reader.onerror = () => alert('Excel-Datei konnte nicht gelesen werden.');
         reader.readAsArrayBuffer(file);
     };
 
     const handleDbUpload = (e) => {
         const file = e.target.files[0];
+        e.target.value = '';
         if (!file) return;
 
         if (file.name.toLowerCase().endsWith('.csv')) {
@@ -412,32 +212,25 @@ export default function PostVersandManager() {
             );
             setUploadEncoding((prev) => ({ ...prev, db: 'Excel: XLS/XLSX' }));
         };
+        reader.onerror = () => alert('Datenbank-Excel konnte nicht gelesen werden.');
         reader.readAsArrayBuffer(file);
     };
 
-    const getVersandArt = (gewicht, landCode) => {
-        const normalizedLand = normalizeCountryCode(landCode || 'DEU') || 'DEU';
-        const isDE = normalizedLand === 'DEU' || normalizedLand === 'DE';
-        const rates = isDE ? RATES.de : RATES.intl;
-        const prefix = isDE ? "" : "Int. ";
-
-        if (gewicht <= 20) return { label: prefix + 'Standardbrief', price: rates.standard };
-        if (gewicht <= 50) return { label: prefix + 'Kompaktbrief', price: rates.kompakt };
-        if (gewicht <= 500) return { label: prefix + 'Großbrief', price: rates.gross };
-        if (gewicht <= 1000) return { label: prefix + 'Maxibrief', price: rates.maxi };
-        return { label: prefix + 'Paket', price: rates.paket, isDHL: true };
-    };
 
     const findInDatabase = (rawRow) => {
         if (!dbData || dbData.length === 0) return { match: null, reason: 'Keine Datenbank geladen' };
         const rawLand = normalizeCountryCode(rawRow.land || 'DEU');
         const rawPlz = formatPLZ(rawRow.plz, rawLand);
-        const sourceCloud = cleanForMatch(`${rawRow.anrede} ${rawRow.titel} ${rawRow.vorname} ${rawRow.nachname} ${rawRow.zusatz}`);
+        // Leere Excel-Zellen und nicht zugeordnete Spalten liefern undefined —
+        // im Template-Literal wurde daraus der Text „undefined" und verwässerte
+        // die Token-Quote (halbierte den Score bei fehlendem Titel/Zusatz).
+        const sourceNameText = joinParts(rawRow.anrede, rawRow.titel, rawRow.vorname, rawRow.nachname, rawRow.zusatz);
+        const sourceCloud = cleanForMatch(sourceNameText);
         const sourceNumbers = extractNumbers(rawRow.strasse);
         const sourceStreet = normalizeStreet(rawRow.strasse);
         const sourceFirstName = cleanForMatch(rawRow.vorname);
         const sourceLastName = cleanForMatch(rawRow.nachname);
-        const sourceTokens = tokenizeName(`${rawRow.anrede} ${rawRow.titel} ${rawRow.vorname} ${rawRow.nachname} ${rawRow.zusatz}`);
+        const sourceTokens = tokenizeName(sourceNameText);
         const sourceIsPerson = /herr|frau/i.test(String(rawRow.anrede || '')) || String(rawRow.vorname || '').trim().length > 1;
 
         const candidates = dbData.map((dbRow) => {
@@ -446,10 +239,10 @@ export default function PostVersandManager() {
             if (dbPlz !== rawPlz) return null;
             if (isStrictCountryCode(rawLand) && isStrictCountryCode(dbLand) && dbLand !== rawLand) return null;
 
-            const dbCombinedName = `${dbRow.NAME || ''} ${dbRow.ZUSATZ || ''}`.trim();
+            const dbCombinedName = joinParts(dbRow.NAME, dbRow.ZUSATZ);
             const dbNameClean = cleanForMatch(dbCombinedName);
             const dbNameTokens = tokenizeName(dbCombinedName);
-            const dbNumbers = extractNumbers(`${dbRow.STRASSE} ${dbRow.NUMMER}`);
+            const dbNumbers = extractNumbers(joinParts(dbRow.STRASSE, dbRow.NUMMER));
             const dbStreet = normalizeStreet(dbRow.STRASSE);
             let score = 0;
 
@@ -510,7 +303,25 @@ export default function PostVersandManager() {
     };
 
     const prepareDbMatch = () => {
-        if (dbData.length === 0) return alert("Bitte lade zuerst eine Datenbank hoch, um automatisch abzugleichen.");
+        if (rawData.length === 0) return alert('Bitte zuerst eine Quelldatei hochladen.');
+        if (!mapping.herold && !mapping.programm) {
+            return alert('Bitte mindestens eine Mengen-Spalte (Herold oder Programm) zuordnen — sonst wäre jede Zeile „Kein Versand".');
+        }
+        if (!mapping.nachname && !mapping.zusatz) {
+            return alert('Bitte die Spalte „Nachname" (oder „Zusatz" für Institutionen) zuordnen.');
+        }
+        // Die Datenbank ist optional: ohne sie landen alle Zeilen in der
+        // manuellen Liste und werden 1:1 aus der Quelldatei exportiert.
+        if (dbData.length === 0 && !window.confirm('Keine Datenbank geladen. Ohne Abgleich werden alle Adressen direkt aus der Quelldatei übernommen. Fortfahren?')) {
+            return;
+        }
+
+        // Alter Vorschau-/CSV-Stand wäre ab jetzt veraltet.
+        setResults(null);
+        setExpandedMatchRows({});
+        setShowOnlyMismatches(false);
+        setSearchTerm('');
+
         const matchedList = []; const unmatchedList = [];
 
         rawData.forEach((row, index) => {
@@ -537,7 +348,16 @@ export default function PostVersandManager() {
             if (cached) {
                 const normalizedLand = normalizeCountryCode(cached.LAND || cached.landCode || 'DEU') || 'DEU';
                 const ship = getVersandArt(weight, normalizedLand);
-                matchedList.push({ ...mini, name: cached.NAME, zusatz: cached.ZUSATZ, strasse: cached.STRASSE, nummer: cached.NUMMER, plz: cached.PLZ, ort: cached.STADT || cached.ORT, landCode: normalizedLand, type: cached.ADRESS_TYP || 'HOUSE', label: ship.label, price: ship.price, isDHL: ship.isDHL, fromDB: true });
+                // Alle Felder als String: aus Excel kommen PLZ/Hausnummer als Zahl,
+                // und `r.plz.includes(...)` in der Vorschau-Suche stürzte daran ab.
+                matchedList.push({
+                    ...mini,
+                    name: cellStr(cached.NAME), zusatz: cellStr(cached.ZUSATZ),
+                    strasse: cellStr(cached.STRASSE), nummer: cellStr(cached.NUMMER),
+                    plz: formatPLZ(cached.PLZ, normalizedLand), ort: cellStr(cached.STADT || cached.ORT),
+                    landCode: normalizedLand, type: cellStr(cached.ADRESS_TYP) || 'HOUSE',
+                    label: ship.label, price: ship.price, isDHL: ship.isDHL, fromDB: true,
+                });
             } else {
                 unmatchedList.push({ ...mini, matchHint: dbDecision.reason || 'Kein eindeutiger Datenbank-Treffer', isFrozen: false });
             }
@@ -549,6 +369,7 @@ export default function PostVersandManager() {
     };
 
     const unmatchItem = (id) => {
+        setResults(null); // Vorschau/CSV passen nicht mehr zur Clearing Station
         setPreMatchResults(prev => {
             const itemToUnmatch = prev.matchedList.find(m => m.id === id);
             const newMatched = prev.matchedList.filter(m => m.id !== id);
@@ -566,27 +387,7 @@ export default function PostVersandManager() {
         });
     };
 
-    const parsePlzAndLand = (value, fallbackLand = 'DEU') => {
-        const raw = String(value || '').trim();
-        if (!raw) return { plz: '', land: normalizeCountryCode(fallbackLand) || 'DEU' };
 
-        const parts = raw.split(/\s+/);
-        const maybeLand = normalizeCountryCode(parts[parts.length - 1]);
-        if (parts.length > 1 && maybeLand && maybeLand.length === 3) {
-            return {
-                plz: parts.slice(0, -1).join(' ').trim(),
-                land: maybeLand,
-            };
-        }
-
-        return { plz: raw, land: normalizeCountryCode(fallbackLand) || 'DEU' };
-    };
-
-    const buildPlzInput = (plz) => {
-        const cleanPlz = String(plz || '').trim();
-        if (!cleanPlz) return '';
-        return cleanPlz;
-    };
 
     const getSearchSeed = (item, fallbackName = '') => {
         const directLastName = String(item?.nachname || '').trim();
@@ -609,16 +410,16 @@ export default function PostVersandManager() {
                 .join(' ')
                 .trim();
         const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
-        const splitAddress = splitStreetAndNumber(item.strasse || '');
+        const address = resolveAddressFields(item);
         return {
             name: sourceName || '',
-            zusatz: item.zusatz || '',
-            strasse: splitAddress.street || item.strasse || '',
-            nummer: item.nummer || splitAddress.number || '',
-            plz: buildPlzInput(parsed.plz),
-            stadt: item.ort || item.stadt || '',
+            zusatz: cellStr(item.zusatz),
+            strasse: address.strasse,
+            nummer: address.nummer,
+            plz: cellStr(parsed.plz),
+            stadt: cellStr(item.ort || item.stadt),
             land: parsed.land,
-            adressTyp: item.type || item.adressTyp || (/postfach/i.test(item.strasse || '') ? 'POBOX' : 'HOUSE'),
+            adressTyp: item.adressTyp || address.type,
         };
     };
 
@@ -654,6 +455,7 @@ export default function PostVersandManager() {
 
     const saveCurrentEditorItem = () => {
         if (!currentItemToMatch || currentItemToMatch.isFrozen) return;
+        setResults(null);
         setPreMatchResults((prev) => ({
             ...prev,
             unmatchedList: prev.unmatchedList.map((item) =>
@@ -799,16 +601,17 @@ export default function PostVersandManager() {
             const parsed = parsePlzAndLand(item.plz, item.landCode || item.land || 'DEU');
             const landCode = normalizeCountryCode(item.landCode || item.land || parsed.land || 'DEU') || 'DEU';
             const ship = getVersandArt(item.totalWeight, landCode);
+            const address = resolveAddressFields(item);
             previewList.push({
                 ...item,
-                name: item.name || [item.anrede, item.titel, item.akad, item.vorname, item.nachname].filter(Boolean).join(' ').trim() || 'Fehler: Name fehlt',
-                zusatz: item.zusatz || '-',
-                strasse: item.strasse || '',
-                nummer: item.nummer || '',
+                name: item.name || joinParts(item.anrede, item.titel, item.akad, item.vorname, item.nachname) || 'Fehler: Name fehlt',
+                zusatz: cellStr(item.zusatz) || '-',
+                strasse: address.strasse,
+                nummer: address.nummer,
                 plz: formatPLZ(parsed.plz, landCode),
-                ort: item.ort || '',
+                ort: cellStr(item.ort),
                 landCode,
-                type: item.type || 'HOUSE',
+                type: address.type,
                 label: ship.label,
                 price: ship.price,
                 isDHL: ship.isDHL,
@@ -833,6 +636,21 @@ export default function PostVersandManager() {
     };
 
 
+    // Ein Weg in die Vorschau für beide Einstiege: aus dem Editor („Fertigstellen")
+    // und direkt aus der Clearing Station. Vorher gab es nur den Editor-Weg —
+    // bei 100 % Auto-Match (kein Editor-Button) war die Vorschau unerreichbar.
+    const proceedToPreview = (matchedList, unmatchedList) => {
+        const prepared = finalizeManualToPreview(matchedList, unmatchedList);
+        setProcStats({
+            manuell: unmatchedList.length,
+            db: matchedList.filter((m) => m.fromDB).length,
+            total: rawData.length,
+        });
+        setResults(prepared);
+        setMatchModalOpen(false);
+        setView('preview');
+    };
+
     const finishManualEditing = () => {
         if (!preMatchResults) return;
 
@@ -847,59 +665,45 @@ export default function PostVersandManager() {
             ...prev,
             unmatchedList: mergedUnmatched,
         }));
+        proceedToPreview(preMatchResults.matchedList, mergedUnmatched);
+    };
 
-        const prepared = finalizeManualToPreview(preMatchResults.matchedList, mergedUnmatched);
-        setProcStats({
-            manuell: mergedUnmatched.length,
-            db: preMatchResults.matchedList.filter((m) => m.fromDB).length,
-            total: rawData.length,
-            eta: 0,
-            progress: 100,
-        });
-        setResults(prepared);
-        setMatchModalOpen(false);
-        setView('preview');
+    const continueFromClearing = () => {
+        if (!preMatchResults) return;
+        proceedToPreview(preMatchResults.matchedList, preMatchResults.unmatchedList);
     };
 
     const downloadCSV = (label, records) => {
-        // SORTIEREN: Mehrfachempfänger nach ganz oben
-        const sorted = [...records].sort((a, b) => ((b.hQty||0)+(b.pQty||0)) - ((a.hQty||0)+(a.pQty||0)));
-        const limit = 99;
+        const batches = splitIntoBatches(records);
+        const safeLabel = label.replace(/\s/g, '_').replace(/[()]/g, '');
         let downloadNr = 0; // staffelt alle Downloads dieses Aufrufs (B8)
 
-        for (let i = 0; i < sorted.length; i += limit) {
-            const batch = sorted.slice(i, i + limit);
-            const partStr = sorted.length > limit ? `_Teil_${(i/limit)+1}` : '';
-            const safeLabel = label.replace(/\s/g, '_').replace(/[()]/g, '');
+        batches.forEach((batch, idx) => {
+            const partStr = batches.length > 1 ? `_Teil_${idx + 1}` : '';
 
-            // 1. CSV GENERIEREN
-            const content = ["NAME;ZUSATZ;STRASSE;NUMMER;PLZ;STADT;LAND;ADRESS_TYP", SENDER_ROW,
-                ...batch.map(r => `${toCsvCell(r.name)};${toCsvCell(r.zusatz)};${toCsvCell(r.strasse)};${toCsvCell(r.nummer)};${toCsvCell(formatPLZ(r.plz, r.landCode))};${toCsvCell(r.ort)};${toCsvCell(r.landCode)};${toCsvCell(r.type || 'HOUSE')}`)
-            ].join('\r\n') + '\r\n';
-            const blobCSV = new Blob([encodeWindows1252(content)], { type: 'text/csv;charset=windows-1252;' });
+            const csvBytes = encodeWindows1252(buildRhaetiaCsv(batch));
+            const blobCSV = new Blob([csvBytes], { type: 'text/csv;charset=windows-1252;' });
             downloadBlobFile(`Rhaetia_${safeLabel}${partStr}.csv`, blobCSV, { delayMs: downloadNr++ * 400 });
 
-            // 2. BEGLEITLISTE GENERIEREN (nur wenn nötig)
-            // Für die Begleitliste zählt nur die Reihenfolge der Empfänger im Batch.
-            // Der Absender steht im CSV zwar an Position 1, wird in der Begleitliste aber nicht mitgezählt.
-            // Also ist Index 0 im Batch = Pos. 1 auf dem Etikettenblatt.
-            const begleitRecords = batch.map((r, idx) => ({ ...r, labelIndex: idx + 1 }))
-                                        .filter(r => r.hQty > 1 || r.pQty > 1);
-
-            if (begleitRecords.length > 0) {
-                const begleitLines = [`BEGLEITLISTE - ${label}${partStr}\n\n`];
-                begleitRecords.forEach(r => {
-                    const page = Math.floor((r.labelIndex - 1) / 12) + 1;
-                    const pos = ((r.labelIndex - 1) % 12) + 1;
-                    begleitLines.push(`S. ${page}, Pos. ${pos} | ${r.name} | ${r.plz} ${r.ort} | ${r.hQty}x Herold, ${r.pQty}x Prog | ${r.totalWeight}g`);
-                });
-                const blobTXT = new Blob([begleitLines.join('\r\n')], { type: 'text/plain;charset=utf-8;' });
+            const begleit = buildBegleitliste(`${label}${partStr}`, batch);
+            if (begleit) {
+                const blobTXT = new Blob([begleit], { type: 'text/plain;charset=utf-8;' });
                 downloadBlobFile(`Begleitliste_${safeLabel}${partStr}.txt`, blobTXT, { delayMs: downloadNr++ * 400 });
             }
-        }
+        });
     };
 
-    const filteredPreview = useMemo(() => results ? results.preview.filter(r => (r.name?.toLowerCase().includes(searchTerm.toLowerCase())) || (r.plz?.includes(searchTerm))) : [], [results, searchTerm]);
+    const filteredPreview = useMemo(() => {
+        if (!results) return [];
+        const needle = searchTerm.trim().toLowerCase();
+        if (!needle) return results.preview;
+        return results.preview.filter((r) =>
+            cellStr(r.name).toLowerCase().includes(needle)
+            || cellStr(r.zusatz).toLowerCase().includes(needle)
+            || cellStr(r.ort).toLowerCase().includes(needle)
+            || cellStr(r.plz).includes(needle),
+        );
+    }, [results, searchTerm]);
     const previewShipmentCount = useMemo(() => {
         if (!results) return 0;
         return results.preview.filter((r) => !r.excluded && !isNoShippingRecord(r)).length;
@@ -939,6 +743,20 @@ export default function PostVersandManager() {
             </div>
         </div>
     );
+
+    // Reset: Ergebnisse und Bearbeitungszustand verwerfen, hochgeladene Dateien
+    // und Gewichte bleiben (man will meist nur den Abgleich neu starten).
+    const resetWorkflow = () => {
+        setView('upload');
+        setResults(null);
+        setPreMatchResults(null);
+        setMatchModalOpen(false);
+        setCurrentItemToMatch(null);
+        setExpandedMatchRows({});
+        setShowOnlyMismatches(false);
+        setSearchTerm('');
+        setActiveTab('matched');
+    };
 
     // Erreichbare Schritte der Tab-Leiste: erst freigeschaltet, wenn die
     // jeweiligen Daten vorliegen.
@@ -1027,6 +845,20 @@ export default function PostVersandManager() {
         return { fields, score, mismatches };
     };
 
+    // Match-Bewertung einmal pro Zeile statt dreimal pro Render (Filter,
+    // Zeile und Leer-Hinweis riefen getMatchInsights jeweils neu auf).
+    const matchedRows = useMemo(() => {
+        const list = preMatchResults?.matchedList || [];
+        return list.filter((m) => m.fromDB).map((record) => ({ record, insights: getMatchInsights(record) }));
+        // getMatchInsights hängt nur von `mapping` ab, das in den Deps steht.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [preMatchResults, mapping]);
+
+    const visibleMatchedRows = useMemo(
+        () => (showOnlyMismatches ? matchedRows.filter((row) => row.insights.mismatches.length > 0) : matchedRows),
+        [matchedRows, showOnlyMismatches],
+    );
+
     const getStatusClass = (status) => {
         if (status === 'exact') return 'text-emerald-700 bg-emerald-100 border-emerald-200';
         if (status === 'similar') return 'text-amber-700 bg-amber-100 border-amber-200';
@@ -1057,7 +889,7 @@ export default function PostVersandManager() {
                 <SecondaryButton
                     icon={RotateCcw}
                     label="Reset"
-                    onClick={() => { setView('upload'); setResults(null); setPreMatchResults(null); }}
+                    onClick={resetWorkflow}
                 />
             </PageHeader>
 
@@ -1112,7 +944,7 @@ export default function PostVersandManager() {
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-10">
                                         {Object.keys(mapping).map(k => (
                                             <div key={k} className="flex flex-col gap-1">
-                                                <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">{k}</label>
+                                                <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">{MAPPING_LABELS[k] || k}</label>
                                                 <select value={mapping[k]} onChange={e => setMapping({...mapping, [k]: e.target.value})} className="bg-slate-800 border-none text-white text-[10px] rounded-lg p-3 outline-none focus:ring-2 ring-[#8e014d]">
                                                     <option value="">- ignorieren -</option>
                                                     {headers.map(h => <option key={h} value={h}>{h}</option>)}
@@ -1131,7 +963,7 @@ export default function PostVersandManager() {
                             <div className="grid grid-cols-1 gap-6">
                                 {Object.keys(weights).map(k => (
                                     <div key={k} className="pb-2">
-                                        <label className="text-[9px] font-black text-slate-500 dark:text-gray-400 uppercase tracking-widest">{k}</label>
+                                        <label className="text-[9px] font-black text-slate-500 dark:text-gray-400 uppercase tracking-widest">{WEIGHT_LABELS[k] || k}</label>
                                         <input
                                             type="number"
                                             value={weights[k]}
@@ -1149,12 +981,29 @@ export default function PostVersandManager() {
                     <div className="space-y-6 animate-in fade-in">
                         <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-6">
                             <h2 className="text-4xl font-black tracking-tighter uppercase italic">Clearing Station</h2>
-                            {preMatchResults.unmatchedList.length > 0 && (
-                                <button onClick={() => openManualEditor()} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#8e014d] transition-all flex items-center gap-2">
-                                    <CheckSquare size={18} /> Editor für {preMatchResults.unmatchedList.length} öffnen
+                            <div className="flex flex-wrap items-center gap-3">
+                                {preMatchResults.unmatchedList.length > 0 && (
+                                    <button onClick={() => openManualEditor()} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#8e014d] transition-all flex items-center gap-2">
+                                        <CheckSquare size={18} /> Editor für {preMatchResults.unmatchedList.length} öffnen
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={continueFromClearing}
+                                    title={preMatchResults.unmatchedList.length > 0
+                                        ? `${preMatchResults.unmatchedList.length} manuelle Adressen werden unverändert aus der Quelldatei übernommen`
+                                        : 'Alle Adressen sind zugeordnet'}
+                                    className="bg-[#8e014d] text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg hover:bg-[#b00260] transition-all flex items-center gap-2"
+                                >
+                                    Weiter zur Vorschau <ChevronRight size={18} />
                                 </button>
-                            )}
+                            </div>
                         </div>
+                        {preMatchResults.unmatchedList.length > 0 && (
+                            <p className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 -mt-4">
+                                Hinweis: „Weiter zur Vorschau" übernimmt die {preMatchResults.unmatchedList.length} nicht zugeordneten Adressen so, wie sie in der Quelldatei stehen. Zum Prüfen oder Korrigieren vorher den Editor nutzen.
+                            </p>
+                        )}
 
                         <div className="flex gap-4 mb-6 border-b-2 border-slate-200 dark:border-gray-700 pb-4">
                             <button onClick={() => setActiveTab('matched')} className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 ${activeTab === 'matched' ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-white dark:bg-gray-900 text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-gray-800'}`}>
@@ -1187,17 +1036,10 @@ export default function PostVersandManager() {
                                         <tr><th className="p-5">Quelle (Excel)</th><th className="p-5">Gefunden in Datenbank</th><th className="p-5">Match-Check & Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                        {preMatchResults.matchedList
-                                            .filter(m => m.fromDB)
-                                            .filter((r) => {
-                                                if (!showOnlyMismatches) return true;
-                                                return getMatchInsights(r).mismatches.length > 0;
-                                            })
-                                            .map((r, i) => {
-                                                const insights = getMatchInsights(r);
+                                        {visibleMatchedRows.map(({ record: r, insights }) => {
                                                 const isExpanded = !!expandedMatchRows[r.id];
                                                 return (
-                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-gray-800 align-top">
+                                            <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-gray-800 align-top">
                                                 <td className="p-5">
                                                     <div className="space-y-2">
                                                         {insights.fields.map((f) => (
@@ -1274,8 +1116,8 @@ export default function PostVersandManager() {
                                                 </td>
                                             </tr>
                                         )})}
-                                        {preMatchResults.matchedList.filter(m=>m.fromDB).length === 0 && <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Keine automatischen Treffer.</td></tr>}
-                                        {preMatchResults.matchedList.filter(m=>m.fromDB).length > 0 && preMatchResults.matchedList.filter(m=>m.fromDB).filter((r) => !showOnlyMismatches || getMatchInsights(r).mismatches.length > 0).length === 0 && (
+                                        {matchedRows.length === 0 && <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Keine automatischen Treffer.</td></tr>}
+                                        {matchedRows.length > 0 && visibleMatchedRows.length === 0 && (
                                             <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Aktuell keine Abweichungen in den gematchten Datensätzen.</td></tr>
                                         )}
                                     </tbody>
@@ -1291,8 +1133,8 @@ export default function PostVersandManager() {
                                         <tr><th className="p-5">Quelle (Excel)</th><th className="p-5">Status</th><th className="p-5 text-right">Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                        {preMatchResults.unmatchedList.map((r, i) => (
-                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-gray-800">
+                                        {preMatchResults.unmatchedList.map((r) => (
+                                            <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-gray-800">
                                                 <td className="p-5">
                                                     <div className="font-bold text-slate-800 dark:text-gray-100">
                                                         {r.name || [r.anrede, r.titel, r.akad, r.vorname, r.nachname].filter(Boolean).join(' ')}
@@ -1484,8 +1326,8 @@ export default function PostVersandManager() {
                                         <tr><th className="p-5">Name (Z.1)</th><th className="p-5">Zusatz (Z.2)</th><th className="p-5">Adresse / Land</th><th className="p-5 text-right">Versand / Porto</th><th className="p-5 text-right">Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                        {filteredPreview.map((r, i) => (
-                                            <tr key={i} className={`${r.excluded ? 'bg-slate-100 text-slate-500' : r.errorMsg ? 'bg-red-300 text-red-950 border-y-2 border-red-500' : r.label === 'Kein Versand' ? 'bg-red-100 text-red-900 opacity-70' : ''}`}>
+                                        {filteredPreview.map((r) => (
+                                            <tr key={r.id} className={`${r.excluded ? 'bg-slate-100 text-slate-500' : r.errorMsg ? 'bg-red-300 text-red-950 border-y-2 border-red-500' : r.label === 'Kein Versand' ? 'bg-red-100 text-red-900 opacity-70' : ''}`}>
                                                 <td className="p-5 font-bold">{r.fromDB && <Database size={10} className="inline text-emerald-500 mr-2" />}{r.name}</td>
                                                 <td className="p-5 opacity-60 italic">{r.zusatz || '-'}</td>
                                                 <td className="p-5"><div className="font-semibold">{`${r.strasse || ''} ${r.nummer || ''}`.trim()}</div><div className="text-[10px] uppercase mt-1">{`${r.plz || ''} ${r.ort || ''}`.trim()} ({r.landCode || ''})</div></td>

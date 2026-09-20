@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { downloadBlobFile } from '../utils/download';
 import {
     Download, UploadCloud, AlertTriangle, RotateCcw,
@@ -9,8 +9,29 @@ import {
 import { PageHeader, SecondaryButton } from '../components/PageHeader';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import {
+    INITIAL_WEIGHTS, isLetterPostLabel, isNoShippingRecord,
+    encodeWindows1252, getExportAenderungen, normalizeCountryCode, formatPLZ,
+    cellStr, joinParts, cleanForMatch, extractNumbers, tokenizeName, normalizeStreet,
+    normalizeSearchText, isStrictCountryCode, looksLikeMojibake, normalizeRow,
+    autoDetectMapping, getVersandArt, parsePlzAndLand, resolveAddressFields,
+    buildRhaetiaCsv, buildBegleitliste, splitIntoBatches,
+} from '../utils/postVersand';
 
 // --- KONFIGURATION ---
+const MAPPING_LABELS = {
+    anrede: 'Anrede', titel: 'Titel', akad: 'Akad. Grad', vorname: 'Vorname', nachname: 'Nachname',
+    zusatz: 'Zusatz / Institution', strasse: 'Straße (+ Nr.)', plz: 'PLZ', ort: 'Ort', land: 'Land',
+    herold: 'Menge Herold', programm: 'Menge Programm',
+};
+
+const WEIGHT_LABELS = {
+    heroldNetto: 'Herold, jedes weitere Exemplar',
+    heroldBrutto: 'Herold, erstes Exemplar inkl. Umschlag',
+    programmNetto: 'Programm, jedes weitere Exemplar',
+    programmBrutto: 'Programm, erstes Exemplar inkl. Umschlag',
+};
+
 const STEPS = [
     { key: 'upload', label: 'Upload' },
     { key: 'db-preview', label: 'Pre-Match' },
@@ -18,268 +39,6 @@ const STEPS = [
     { key: 'final', label: 'CSV' },
 ];
 
-const SENDER_ROW = "K.B.St.V. Rhaetia;Herold-Schriftleitung;Luisenstr.;27;80333;München;DEU;HOUSE";
-
-const INITIAL_WEIGHTS = { 
-    heroldNetto: 170, heroldBrutto: 200, 
-    programmNetto: 15, programmBrutto: 18 
-};
-
-// Porto Deutsche Post seit 01.01.2025 (Kompaktbrief Inland 1,00 → 1,10 EUR).
-// Die Summe ist informativ; sie geht nicht in die Rhaetia-CSV ein.
-const RATES = {
-    de: { standard: 0.95, kompakt: 1.10, gross: 1.80, maxi: 2.90, paket: 5.49 },
-    intl: { standard: 1.25, kompakt: 1.80, gross: 3.30, maxi: 6.50, paket: 15.99 }
-};
-
-
-const isLetterPostLabel = (label) => !/paket/i.test(String(label || ''));
-const isNoShippingRecord = (record) => record?.label === 'Kein Versand' || Boolean(record?.errorMsg);
-
-const WINDOWS_1252_SPECIAL = {
-    0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
-    0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
-    0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
-    0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
-    0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
-    0x017E: 0x9E, 0x0178: 0x9F,
-};
-
-const encodeWindows1252 = (text) => {
-    const bytes = [];
-    for (const ch of String(text || '')) {
-        const cp = ch.codePointAt(0);
-        if (cp <= 0xFF) {
-            bytes.push(cp);
-            continue;
-        }
-        if (WINDOWS_1252_SPECIAL[cp] !== undefined) {
-            bytes.push(WINDOWS_1252_SPECIAL[cp]);
-            continue;
-        }
-        bytes.push(0x3F); // '?' fallback for unsupported characters
-    }
-    return new Uint8Array(bytes);
-};
-
-const toCsvCell = (value) => {
-    const raw = String(value ?? '').trim();
-    const emptyNormalized = raw === '-' ? '' : raw;
-    return emptyNormalized
-        .replace(/"/g, '')
-        .replace(/[;\r\n]+/g, ' ')
-        .trim();
-};
-
-// F1/F2: Der Rhaetia-Export verändert manche Adressen zwangsläufig — Zeichen
-// außerhalb von Windows-1252 (ł, ř, ş, ğ …) werden zu '?', Anführungszeichen
-// entfernt, Semikolon/Zeilenumbruch durch Leerzeichen ersetzt. Diese Prüfung
-// erkennt betroffene Datensätze, damit der Anwender es VOR dem Versand erfährt.
-const EXPORT_FIELDS = ['name', 'zusatz', 'strasse', 'nummer', 'plz', 'ort', 'landCode', 'type'];
-
-const hasUnsupportedWin1252 = (text) => {
-    for (const ch of String(text || '')) {
-        const cp = ch.codePointAt(0);
-        if (cp > 0xFF && WINDOWS_1252_SPECIAL[cp] === undefined) return true;
-    }
-    return false;
-};
-
-const getExportAenderungen = (record) => {
-    let ersetzt = false;   // '?' statt nicht darstellbarer Zeichen (F1)
-    let bereinigt = false; // von toCsvCell entfernte/ersetzte Zeichen (F2)
-    for (const field of EXPORT_FIELDS) {
-        const value = String(record?.[field] ?? '');
-        if (hasUnsupportedWin1252(value)) ersetzt = true;
-        if (/[";\r\n]/.test(value)) bereinigt = true;
-    }
-    return { ersetzt, bereinigt };
-};
-
-// B8: Download über eine kurzlebige Object-URL, die nach dem Klick wieder
-// freigegeben wird; mehrere Downloads werden gestaffelt statt gleichzeitig
-// gefeuert, damit der Browser sie nicht bündelt oder blockiert.
-// Länder-Normalisierung auf ISO-3 (Rhaetia-Format). Unbekannte Werte bleiben
-// unverändert, damit nichts still verloren geht — sie fallen in der Vorschau auf.
-const COUNTRY_CODE_MAP = {
-    DE: 'DEU', D: 'DEU', DEU: 'DEU', DEUTSCHLAND: 'DEU', GERMANY: 'DEU',
-    AT: 'AUT', A: 'AUT', AUT: 'AUT', OESTERREICH: 'AUT', ÖSTERREICH: 'AUT', AUSTRIA: 'AUT',
-    CH: 'CHE', CHE: 'CHE', SCHWEIZ: 'CHE', SWITZERLAND: 'CHE',
-    IT: 'ITA', ITA: 'ITA', ITALIEN: 'ITA', ITALY: 'ITA',
-    NL: 'NLD', NLD: 'NLD', NIEDERLANDE: 'NLD', NETHERLANDS: 'NLD', HOLLAND: 'NLD',
-    BE: 'BEL', BEL: 'BEL', BELGIEN: 'BEL', BELGIUM: 'BEL',
-    LU: 'LUX', LUX: 'LUX', LUXEMBURG: 'LUX', LUXEMBOURG: 'LUX',
-    FR: 'FRA', FRA: 'FRA', FRANKREICH: 'FRA', FRANCE: 'FRA',
-    ES: 'ESP', ESP: 'ESP', SPANIEN: 'ESP', SPAIN: 'ESP',
-    PT: 'PRT', PRT: 'PRT', PORTUGAL: 'PRT',
-    GB: 'GBR', UK: 'GBR', GBR: 'GBR', GROSSBRITANNIEN: 'GBR', GROßBRITANNIEN: 'GBR',
-    'VEREINIGTES KÖNIGREICH': 'GBR', 'UNITED KINGDOM': 'GBR', ENGLAND: 'GBR',
-    IE: 'IRL', IRL: 'IRL', IRLAND: 'IRL', IRELAND: 'IRL',
-    DK: 'DNK', DNK: 'DNK', DÄNEMARK: 'DNK', DAENEMARK: 'DNK', DENMARK: 'DNK',
-    SE: 'SWE', SWE: 'SWE', SCHWEDEN: 'SWE', SWEDEN: 'SWE',
-    NO: 'NOR', NOR: 'NOR', NORWEGEN: 'NOR', NORWAY: 'NOR',
-    FI: 'FIN', FIN: 'FIN', FINNLAND: 'FIN', FINLAND: 'FIN',
-    PL: 'POL', POL: 'POL', POLEN: 'POL', POLAND: 'POL',
-    CZ: 'CZE', CZE: 'CZE', TSCHECHIEN: 'CZE', 'CZECH REPUBLIC': 'CZE', CZECHIA: 'CZE',
-    SK: 'SVK', SVK: 'SVK', SLOWAKEI: 'SVK', SLOVAKIA: 'SVK',
-    HU: 'HUN', HUN: 'HUN', UNGARN: 'HUN', HUNGARY: 'HUN',
-    SI: 'SVN', SVN: 'SVN', SLOWENIEN: 'SVN', SLOVENIA: 'SVN',
-    HR: 'HRV', HRV: 'HRV', KROATIEN: 'HRV', CROATIA: 'HRV',
-    GR: 'GRC', GRC: 'GRC', GRIECHENLAND: 'GRC', GREECE: 'GRC',
-    LI: 'LIE', LIE: 'LIE', LIECHTENSTEIN: 'LIE',
-    VA: 'VAT', VAT: 'VAT', VATIKAN: 'VAT', VATIKANSTADT: 'VAT',
-    TR: 'TUR', TUR: 'TUR', TÜRKEI: 'TUR', TUERKEI: 'TUR', TURKEY: 'TUR',
-    US: 'USA', USA: 'USA', 'VEREINIGTE STAATEN': 'USA', 'UNITED STATES': 'USA',
-    CA: 'CAN', CAN: 'CAN', KANADA: 'CAN', CANADA: 'CAN',
-    AU: 'AUS', AUS: 'AUS', AUSTRALIEN: 'AUS', AUSTRALIA: 'AUS',
-    JP: 'JPN', JPN: 'JPN', JAPAN: 'JPN',
-    IL: 'ISR', ISR: 'ISR', ISRAEL: 'ISR',
-};
-const KNOWN_ISO3 = new Set(Object.values(COUNTRY_CODE_MAP));
-
-const normalizeCountryCode = (value) => {
-    const raw = String(value || '').trim().toUpperCase();
-    if (!raw) return '';
-    return COUNTRY_CODE_MAP[raw] || raw;
-};
-
-// Nur deutsche PLZ werden auf 5 Stellen aufgefüllt (Excel frisst führende
-// Nullen: 01067 Dresden kommt als 1067 an). Vorher griff das auch für
-// „NIEDERLANDE" oder „SCHWEDEN", weil dort „DE" im Namen steckt.
-const formatPLZ = (plz, land) => {
-    const p = String(plz ?? '').trim();
-    const l = normalizeCountryCode(land) || 'DEU';
-    if (l === 'DEU' && p.length > 0 && p.length < 5 && /^\d+$/.test(p)) {
-        return p.padStart(5, '0');
-    }
-    return p;
-};
-
-// --- HILFSFUNKTIONEN FÜR DATENBANK-ABGLEICH ---
-// Zellwert als getrimmter String (Excel liefert Zahlen für PLZ/Hausnummer).
-const cellStr = (value) => (value === null || value === undefined ? '' : String(value).trim());
-
-// Feldwerte ohne undefined/null/'' zu einem Text verbinden.
-const joinParts = (...parts) =>
-    parts
-        .map((p) => (p === null || p === undefined ? '' : String(p).trim()))
-        .filter(Boolean)
-        .join(' ');
-
-const cleanForMatch = (str) => {
-    if (!str) return "";
-    return String(str)
-        .toLowerCase()
-        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|-bibliothek/g, "")
-        .replace(/[^a-z0-9äöüß]/g, "") 
-        .trim();
-};
-
-const extractNumbers = (str) => {
-    if (!str) return "";
-    const matches = String(str).match(/\d+/g);
-    return matches ? matches.join("") : "";
-};
-
-const tokenizeName = (str) => {
-    if (!str) return [];
-    return String(str)
-        .toLowerCase()
-        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|dipl-ing|ing\.|-bibliothek/g, ' ')
-        .replace(/[^a-z0-9äöüß\s-]/g, ' ')
-        .split(/[\s-]+/)
-        .map((t) => t.trim())
-        .filter((t) => t.length >= 2);
-};
-
-const normalizeStreet = (str) => {
-    if (!str) return '';
-    return String(str)
-        .toLowerCase()
-        .replace(/straße/g, 'str')
-        .replace(/str\./g, 'str')
-        .replace(/\s+/g, ' ')
-        .replace(/[^a-z0-9äöüß\s]/g, '')
-        .trim();
-};
-
-const splitStreetAndNumber = (value) => {
-    const raw = String(value || '').trim();
-    if (!raw) return { street: '', number: '' };
-
-    const match = raw.match(/^(.*?)(\s+\d+[a-zA-Z/-]*\s*)$/);
-    if (!match) {
-        return { street: raw, number: '' };
-    }
-
-    return {
-        street: String(match[1] || '').trim().replace(/[.,;]$/, ''),
-        number: String(match[2] || '').trim(),
-    };
-};
-
-const normalizeSearchText = (value) =>
-    String(value || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-const isStrictCountryCode = (code) => KNOWN_ISO3.has(code);
-
-const looksLikeMojibake = (text) => /Ã.|â.|Â.|�/.test(text);
-
-const normalizeText = (value) => {
-    if (value === null || value === undefined) return '';
-    if (typeof value !== 'string') return value;
-
-    let text = value.replace(/^\uFEFF/, '').trim();
-
-    if (looksLikeMojibake(text)) {
-        try {
-            const repaired = decodeURIComponent(escape(text));
-            if (repaired) text = repaired;
-        } catch {
-            // Fallback: keep original text when repair is not possible.
-        }
-    }
-
-    return text;
-};
-
-const normalizeRow = (row) => {
-    const normalized = {};
-    Object.entries(row || {}).forEach(([key, value]) => {
-        const cleanKey = String(normalizeText(key) || '').trim();
-        if (!cleanKey) return;
-        normalized[cleanKey] = normalizeText(value);
-    });
-    return normalized;
-};
-
-// Spalten der Quelldatei automatisch zuordnen. Eine Liste für CSV und Excel —
-// vorher gab es zwei Kopien, und die Excel-Variante kannte „Strasse" ohne ß nicht.
-const MAPPING_HINTS = {
-    anrede: ['anrede'], titel: ['titel'], akad: ['akademischer'],
-    vorname: ['vorname'], nachname: ['nachname'], zusatz: ['zusatz'],
-    strasse: ['straße', 'strasse', 'str.', 'adresse'], plz: ['plz', 'postleitzahl'],
-    ort: ['ort', 'stadt'], land: ['land'],
-    herold: ['herold'], programm: ['programm'],
-};
-
-const autoDetectMapping = (headers) => {
-    const lower = headers.map((h) => String(h).toLowerCase());
-    const findCol = (keys) => {
-        // Exakter Treffer zuerst („Land" vor „Bundesland"), dann Teilstring.
-        const exactIdx = lower.findIndex((h) => keys.includes(h));
-        if (exactIdx !== -1) return headers[exactIdx];
-        const idx = lower.findIndex((h) => keys.some((k) => h.includes(k)));
-        return idx !== -1 ? headers[idx] : '';
-    };
-    return Object.fromEntries(Object.entries(MAPPING_HINTS).map(([key, hints]) => [key, findCol(hints)]));
-};
 
 const parseCsvFile = (file, onComplete, onError) => {
     const reader = new FileReader();
@@ -360,6 +119,16 @@ export default function PostVersandManager() {
     const [uploadEncoding, setUploadEncoding] = useState({ source: '', db: '' });
     const [showOnlyMismatches, setShowOnlyMismatches] = useState(false);
     const [expandedMatchRows, setExpandedMatchRows] = useState({});
+
+    // Escape schließt den Editor (wie das X: ungespeicherte Feldänderungen verfallen).
+    useEffect(() => {
+        if (!matchModalOpen) return undefined;
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') setMatchModalOpen(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [matchModalOpen]);
 
     // Neue Quelldatei → alles Nachgelagerte ist ungültig.
     const applySourceRows = (rows, currentHeaders, sourceLabel) => {
@@ -447,18 +216,6 @@ export default function PostVersandManager() {
         reader.readAsArrayBuffer(file);
     };
 
-    const getVersandArt = (gewicht, landCode) => {
-        const normalizedLand = normalizeCountryCode(landCode || 'DEU') || 'DEU';
-        const isDE = normalizedLand === 'DEU' || normalizedLand === 'DE';
-        const rates = isDE ? RATES.de : RATES.intl;
-        const prefix = isDE ? "" : "Int. ";
-
-        if (gewicht <= 20) return { label: prefix + 'Standardbrief', price: rates.standard };
-        if (gewicht <= 50) return { label: prefix + 'Kompaktbrief', price: rates.kompakt };
-        if (gewicht <= 500) return { label: prefix + 'Großbrief', price: rates.gross };
-        if (gewicht <= 1000) return { label: prefix + 'Maxibrief', price: rates.maxi };
-        return { label: prefix + 'Paket', price: rates.paket, isDHL: true };
-    };
 
     const findInDatabase = (rawRow) => {
         if (!dbData || dbData.length === 0) return { match: null, reason: 'Keine Datenbank geladen' };
@@ -630,36 +387,7 @@ export default function PostVersandManager() {
         });
     };
 
-    const parsePlzAndLand = (value, fallbackLand = 'DEU') => {
-        const raw = String(value || '').trim();
-        if (!raw) return { plz: '', land: normalizeCountryCode(fallbackLand) || 'DEU' };
 
-        const parts = raw.split(/\s+/);
-        const maybeLand = normalizeCountryCode(parts[parts.length - 1]);
-        if (parts.length > 1 && maybeLand && maybeLand.length === 3) {
-            return {
-                plz: parts.slice(0, -1).join(' ').trim(),
-                land: maybeLand,
-            };
-        }
-
-        return { plz: raw, land: normalizeCountryCode(fallbackLand) || 'DEU' };
-    };
-
-    // Straße/Hausnummer/Typ für den Export bestimmen. Unbearbeitete Quellzeilen
-    // haben die Hausnummer noch im Straßenfeld („Luisenstr. 27") — vorher wurde
-    // sie nur getrennt, wenn der Anwender die Zeile im Editor geöffnet hatte.
-    const resolveAddressFields = (item) => {
-        const strasse = cellStr(item.strasse);
-        const nummer = cellStr(item.nummer);
-        if (nummer || !strasse) return { strasse, nummer, type: item.type || 'HOUSE' };
-
-        const postfach = strasse.match(/^postfach\s*(.*)$/i);
-        if (postfach) return { strasse: 'Postfach', nummer: postfach[1].trim(), type: 'POBOX' };
-
-        const split = splitStreetAndNumber(strasse);
-        return { strasse: split.street, nummer: split.number, type: item.type || 'HOUSE' };
-    };
 
     const getSearchSeed = (item, fallbackName = '') => {
         const directLastName = String(item?.nachname || '').trim();
@@ -946,41 +674,23 @@ export default function PostVersandManager() {
     };
 
     const downloadCSV = (label, records) => {
-        // SORTIEREN: Mehrfachempfänger nach ganz oben
-        const sorted = [...records].sort((a, b) => ((b.hQty||0)+(b.pQty||0)) - ((a.hQty||0)+(a.pQty||0)));
-        const limit = 99;
+        const batches = splitIntoBatches(records);
+        const safeLabel = label.replace(/\s/g, '_').replace(/[()]/g, '');
         let downloadNr = 0; // staffelt alle Downloads dieses Aufrufs (B8)
 
-        for (let i = 0; i < sorted.length; i += limit) {
-            const batch = sorted.slice(i, i + limit);
-            const partStr = sorted.length > limit ? `_Teil_${(i/limit)+1}` : '';
-            const safeLabel = label.replace(/\s/g, '_').replace(/[()]/g, '');
+        batches.forEach((batch, idx) => {
+            const partStr = batches.length > 1 ? `_Teil_${idx + 1}` : '';
 
-            // 1. CSV GENERIEREN
-            const content = ["NAME;ZUSATZ;STRASSE;NUMMER;PLZ;STADT;LAND;ADRESS_TYP", SENDER_ROW,
-                ...batch.map(r => `${toCsvCell(r.name)};${toCsvCell(r.zusatz)};${toCsvCell(r.strasse)};${toCsvCell(r.nummer)};${toCsvCell(formatPLZ(r.plz, r.landCode))};${toCsvCell(r.ort)};${toCsvCell(r.landCode)};${toCsvCell(r.type || 'HOUSE')}`)
-            ].join('\r\n') + '\r\n';
-            const blobCSV = new Blob([encodeWindows1252(content)], { type: 'text/csv;charset=windows-1252;' });
+            const csvBytes = encodeWindows1252(buildRhaetiaCsv(batch));
+            const blobCSV = new Blob([csvBytes], { type: 'text/csv;charset=windows-1252;' });
             downloadBlobFile(`Rhaetia_${safeLabel}${partStr}.csv`, blobCSV, { delayMs: downloadNr++ * 400 });
 
-            // 2. BEGLEITLISTE GENERIEREN (nur wenn nötig)
-            // Für die Begleitliste zählt nur die Reihenfolge der Empfänger im Batch.
-            // Der Absender steht im CSV zwar an Position 1, wird in der Begleitliste aber nicht mitgezählt.
-            // Also ist Index 0 im Batch = Pos. 1 auf dem Etikettenblatt.
-            const begleitRecords = batch.map((r, idx) => ({ ...r, labelIndex: idx + 1 }))
-                                        .filter(r => r.hQty > 1 || r.pQty > 1);
-
-            if (begleitRecords.length > 0) {
-                const begleitLines = [`BEGLEITLISTE - ${label}${partStr}\n\n`];
-                begleitRecords.forEach(r => {
-                    const page = Math.floor((r.labelIndex - 1) / 12) + 1;
-                    const pos = ((r.labelIndex - 1) % 12) + 1;
-                    begleitLines.push(`S. ${page}, Pos. ${pos} | ${r.name} | ${r.plz} ${r.ort} | ${r.hQty}x Herold, ${r.pQty}x Prog | ${r.totalWeight}g`);
-                });
-                const blobTXT = new Blob([begleitLines.join('\r\n')], { type: 'text/plain;charset=utf-8;' });
+            const begleit = buildBegleitliste(`${label}${partStr}`, batch);
+            if (begleit) {
+                const blobTXT = new Blob([begleit], { type: 'text/plain;charset=utf-8;' });
                 downloadBlobFile(`Begleitliste_${safeLabel}${partStr}.txt`, blobTXT, { delayMs: downloadNr++ * 400 });
             }
-        }
+        });
     };
 
     const filteredPreview = useMemo(() => {
@@ -1135,6 +845,20 @@ export default function PostVersandManager() {
         return { fields, score, mismatches };
     };
 
+    // Match-Bewertung einmal pro Zeile statt dreimal pro Render (Filter,
+    // Zeile und Leer-Hinweis riefen getMatchInsights jeweils neu auf).
+    const matchedRows = useMemo(() => {
+        const list = preMatchResults?.matchedList || [];
+        return list.filter((m) => m.fromDB).map((record) => ({ record, insights: getMatchInsights(record) }));
+        // getMatchInsights hängt nur von `mapping` ab, das in den Deps steht.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [preMatchResults, mapping]);
+
+    const visibleMatchedRows = useMemo(
+        () => (showOnlyMismatches ? matchedRows.filter((row) => row.insights.mismatches.length > 0) : matchedRows),
+        [matchedRows, showOnlyMismatches],
+    );
+
     const getStatusClass = (status) => {
         if (status === 'exact') return 'text-emerald-700 bg-emerald-100 border-emerald-200';
         if (status === 'similar') return 'text-amber-700 bg-amber-100 border-amber-200';
@@ -1220,7 +944,7 @@ export default function PostVersandManager() {
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-10">
                                         {Object.keys(mapping).map(k => (
                                             <div key={k} className="flex flex-col gap-1">
-                                                <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">{k}</label>
+                                                <label className="text-[9px] font-black text-[#8e014d] uppercase tracking-tighter">{MAPPING_LABELS[k] || k}</label>
                                                 <select value={mapping[k]} onChange={e => setMapping({...mapping, [k]: e.target.value})} className="bg-slate-800 border-none text-white text-[10px] rounded-lg p-3 outline-none focus:ring-2 ring-[#8e014d]">
                                                     <option value="">- ignorieren -</option>
                                                     {headers.map(h => <option key={h} value={h}>{h}</option>)}
@@ -1239,7 +963,7 @@ export default function PostVersandManager() {
                             <div className="grid grid-cols-1 gap-6">
                                 {Object.keys(weights).map(k => (
                                     <div key={k} className="pb-2">
-                                        <label className="text-[9px] font-black text-slate-500 dark:text-gray-400 uppercase tracking-widest">{k}</label>
+                                        <label className="text-[9px] font-black text-slate-500 dark:text-gray-400 uppercase tracking-widest">{WEIGHT_LABELS[k] || k}</label>
                                         <input
                                             type="number"
                                             value={weights[k]}
@@ -1312,17 +1036,10 @@ export default function PostVersandManager() {
                                         <tr><th className="p-5">Quelle (Excel)</th><th className="p-5">Gefunden in Datenbank</th><th className="p-5">Match-Check & Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                        {preMatchResults.matchedList
-                                            .filter(m => m.fromDB)
-                                            .filter((r) => {
-                                                if (!showOnlyMismatches) return true;
-                                                return getMatchInsights(r).mismatches.length > 0;
-                                            })
-                                            .map((r, i) => {
-                                                const insights = getMatchInsights(r);
+                                        {visibleMatchedRows.map(({ record: r, insights }) => {
                                                 const isExpanded = !!expandedMatchRows[r.id];
                                                 return (
-                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-gray-800 align-top">
+                                            <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-gray-800 align-top">
                                                 <td className="p-5">
                                                     <div className="space-y-2">
                                                         {insights.fields.map((f) => (
@@ -1399,8 +1116,8 @@ export default function PostVersandManager() {
                                                 </td>
                                             </tr>
                                         )})}
-                                        {preMatchResults.matchedList.filter(m=>m.fromDB).length === 0 && <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Keine automatischen Treffer.</td></tr>}
-                                        {preMatchResults.matchedList.filter(m=>m.fromDB).length > 0 && preMatchResults.matchedList.filter(m=>m.fromDB).filter((r) => !showOnlyMismatches || getMatchInsights(r).mismatches.length > 0).length === 0 && (
+                                        {matchedRows.length === 0 && <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Keine automatischen Treffer.</td></tr>}
+                                        {matchedRows.length > 0 && visibleMatchedRows.length === 0 && (
                                             <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Aktuell keine Abweichungen in den gematchten Datensätzen.</td></tr>
                                         )}
                                     </tbody>
@@ -1416,8 +1133,8 @@ export default function PostVersandManager() {
                                         <tr><th className="p-5">Quelle (Excel)</th><th className="p-5">Status</th><th className="p-5 text-right">Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                        {preMatchResults.unmatchedList.map((r, i) => (
-                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-gray-800">
+                                        {preMatchResults.unmatchedList.map((r) => (
+                                            <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-gray-800">
                                                 <td className="p-5">
                                                     <div className="font-bold text-slate-800 dark:text-gray-100">
                                                         {r.name || [r.anrede, r.titel, r.akad, r.vorname, r.nachname].filter(Boolean).join(' ')}
@@ -1609,8 +1326,8 @@ export default function PostVersandManager() {
                                         <tr><th className="p-5">Name (Z.1)</th><th className="p-5">Zusatz (Z.2)</th><th className="p-5">Adresse / Land</th><th className="p-5 text-right">Versand / Porto</th><th className="p-5 text-right">Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                        {filteredPreview.map((r, i) => (
-                                            <tr key={i} className={`${r.excluded ? 'bg-slate-100 text-slate-500' : r.errorMsg ? 'bg-red-300 text-red-950 border-y-2 border-red-500' : r.label === 'Kein Versand' ? 'bg-red-100 text-red-900 opacity-70' : ''}`}>
+                                        {filteredPreview.map((r) => (
+                                            <tr key={r.id} className={`${r.excluded ? 'bg-slate-100 text-slate-500' : r.errorMsg ? 'bg-red-300 text-red-950 border-y-2 border-red-500' : r.label === 'Kein Versand' ? 'bg-red-100 text-red-900 opacity-70' : ''}`}>
                                                 <td className="p-5 font-bold">{r.fromDB && <Database size={10} className="inline text-emerald-500 mr-2" />}{r.name}</td>
                                                 <td className="p-5 opacity-60 italic">{r.zusatz || '-'}</td>
                                                 <td className="p-5"><div className="font-semibold">{`${r.strasse || ''} ${r.nummer || ''}`.trim()}</div><div className="text-[10px] uppercase mt-1">{`${r.plz || ''} ${r.ort || ''}`.trim()} ({r.landCode || ''})</div></td>

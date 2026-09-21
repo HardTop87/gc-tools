@@ -16,7 +16,7 @@ import {
     normalizeSearchText, isStrictCountryCode, looksLikeMojibake, normalizeRow,
     autoDetectMapping, getVersandArt, parsePlzAndLand, resolveAddressFields,
     buildRhaetiaCsv, buildBegleitliste, splitIntoBatches, stripSenderRows,
-    mergeIntoDatabase, buildDatabaseCsv,
+    mergeIntoDatabase, buildDatabaseCsv, matchNameTokens,
 } from '../utils/postVersand';
 
 // --- KONFIGURATION ---
@@ -54,6 +54,11 @@ const formatSavedAt = (iso) => {
         ? d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
         : 'unbekannt';
 };
+
+// Filter der Clearing Station
+const DEFAULT_MATCH_FILTERS = { score: 'all', field: 'all', sort: 'source' };
+const MATCH_FIELD_LABELS = ['Name', 'Zusatz', 'Straße/Nr', 'PLZ/Ort', 'Land', 'Typ'];
+const FILTER_SELECT_CLASS = 'bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-700 text-slate-700 dark:text-gray-200 text-[10px] font-bold uppercase tracking-wider rounded-lg px-2.5 py-2 outline-none focus:border-[#8e014d]';
 
 const WEIGHTS_STORAGE_KEY = 'gc_post_weights';
 const loadStoredWeights = () => {
@@ -175,7 +180,15 @@ export default function PostVersandManager() {
         source: '',
         db: storedDb ? `Gespeichert: ${formatSavedAt(storedDb.savedAt)}` : '',
     }));
-    const [showOnlyMismatches, setShowOnlyMismatches] = useState(false);
+    // Filter der Clearing Station (große Tabellen schneller durcharbeiten).
+    const [matchFilters, setMatchFilters] = useState(DEFAULT_MATCH_FILTERS);
+    const [clearingSearch, setClearingSearch] = useState('');
+    const [unmatchedHintFilter, setUnmatchedHintFilter] = useState('all');
+    const resetClearingFilters = () => {
+        setMatchFilters(DEFAULT_MATCH_FILTERS);
+        setClearingSearch('');
+        setUnmatchedHintFilter('all');
+    };
     const [expandedMatchRows, setExpandedMatchRows] = useState({});
 
     // Escape schließt den Editor (wie das X: ungespeicherte Feldänderungen verfallen).
@@ -342,8 +355,9 @@ export default function PostVersandManager() {
                 else score -= 8;
             }
 
-            const tokenMatches = sourceTokens.filter((token) => dbNameTokens.includes(token)).length;
-            const tokenRatio = sourceTokens.length > 0 ? tokenMatches / sourceTokens.length : 0;
+            // Token-Abdeckung statt Anteil an den Quell-Token: Titel/Berufe in
+            // der Quelle sind schon herausgefiltert, Reihenfolge ist egal.
+            const tokenRatio = matchNameTokens(sourceTokens, dbNameTokens).coverage;
             score += Math.round(tokenRatio * 20);
 
             if (sourceCloud && dbNameClean && (sourceCloud.includes(dbNameClean) || dbNameClean.includes(sourceCloud))) {
@@ -391,7 +405,7 @@ export default function PostVersandManager() {
         // Alter Vorschau-/CSV-Stand wäre ab jetzt veraltet.
         setResults(null);
         setExpandedMatchRows({});
-        setShowOnlyMismatches(false);
+        resetClearingFilters();
         setSearchTerm('');
 
         const matchedList = []; const unmatchedList = [];
@@ -896,7 +910,7 @@ export default function PostVersandManager() {
         setMatchModalOpen(false);
         setCurrentItemToMatch(null);
         setExpandedMatchRows({});
-        setShowOnlyMismatches(false);
+        resetClearingFilters();
         setSearchTerm('');
         setActiveTab('matched');
     };
@@ -968,9 +982,18 @@ export default function PostVersandManager() {
         const plzStatus = compareValues(sourcePlz, targetPlz, false);
         const ortStatus = compareValues(sourceOrt, targetOrt, true);
 
+        // Name: Token-Vergleich ohne Anrede/Titel/Beruf — „Herr Dr. Max Mustermann,
+        // Rechtsanwalt" gegen „Max Mustermann" ist exakt, nicht nur „ähnlich".
+        const nameStatus = matchNameTokens(tokenizeName(sourceName), tokenizeName(targetName)).status;
+        // Zusatz: fehlt er nur auf einer Seite (Datenbank führt ihn selten),
+        // ist das ein Hinweis, keine Abweichung.
+        const zusatzRaw = compareValues(sourceZusatz, targetZusatz, true);
+        const zusatzOneSided = Boolean(sourceZusatz?.toString().trim()) !== Boolean(targetZusatz?.toString().trim());
+        const zusatzStatus = zusatzRaw === 'mismatch' && zusatzOneSided ? 'similar' : zusatzRaw;
+
         const fields = [
-            { key: 'name', label: 'Name', source: sourceName, target: targetName, status: compareValues(sourceName, targetName, true) },
-            { key: 'zusatz', label: 'Zusatz', source: sourceZusatz, target: targetZusatz, status: compareValues(sourceZusatz, targetZusatz, true) },
+            { key: 'name', label: 'Name', source: sourceName, target: targetName, status: nameStatus },
+            { key: 'zusatz', label: 'Zusatz', source: sourceZusatz, target: targetZusatz, status: zusatzStatus },
             { key: 'adresse', label: 'Straße/Nr', source: sourceStreet, target: targetStreet, status: compareValues(sourceStreet, targetStreet, true) },
             { key: 'plzOrt', label: 'PLZ/Ort', source: `${sourcePlz} ${sourceOrt}`.trim(), target: `${targetPlz} ${targetOrt}`.trim(), status: plzStatus === 'exact' && (ortStatus === 'exact' || ortStatus === 'similar') ? 'exact' : (plzStatus === 'exact' && ortStatus === 'mismatch' ? 'similar' : 'mismatch') },
             { key: 'land', label: 'Land', source: sourceLand, target: targetLand, status: compareValues(sourceLand, targetLand, false) },
@@ -997,10 +1020,48 @@ export default function PostVersandManager() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [preMatchResults, mapping]);
 
-    const visibleMatchedRows = useMemo(
-        () => (showOnlyMismatches ? matchedRows.filter((row) => row.insights.mismatches.length > 0) : matchedRows),
-        [matchedRows, showOnlyMismatches],
-    );
+    const clearingNeedle = normalizeSearchText(clearingSearch);
+
+    const visibleMatchedRows = useMemo(() => {
+        const maxScore = { all: 101, lt100: 100, lt85: 85, lt60: 60 }[matchFilters.score] ?? 101;
+        const rows = matchedRows.filter(({ record, insights }) => {
+            if (insights.score >= maxScore) return false;
+            if (matchFilters.field === 'any' && insights.mismatches.length === 0) return false;
+            if (matchFilters.field !== 'all' && matchFilters.field !== 'any' && !insights.mismatches.includes(matchFilters.field)) return false;
+            if (clearingNeedle) {
+                const haystack = normalizeSearchText(
+                    insights.fields.map((f) => `${f.source} ${f.target}`).join(' ') + ` ${record.plz} ${record.hQty}x`,
+                );
+                if (!haystack.includes(clearingNeedle)) return false;
+            }
+            return true;
+        });
+        if (matchFilters.sort === 'scoreAsc') return [...rows].sort((a, b) => a.insights.score - b.insights.score || a.record.id - b.record.id);
+        if (matchFilters.sort === 'scoreDesc') return [...rows].sort((a, b) => b.insights.score - a.insights.score || a.record.id - b.record.id);
+        if (matchFilters.sort === 'name') return [...rows].sort((a, b) => cellStr(a.record.name).localeCompare(cellStr(b.record.name), 'de'));
+        return rows;
+    }, [matchedRows, matchFilters, clearingNeedle]);
+
+    const visibleUnmatchedRows = useMemo(() => {
+        const list = preMatchResults?.unmatchedList || [];
+        return list.filter((r) => {
+            const hint = String(r.matchHint || '').toLowerCase();
+            if (unmatchedHintFilter === 'mehrdeutig' && !hint.includes('mehrdeutig')) return false;
+            if (unmatchedHintFilter === 'unsicher' && !hint.includes('unsicher')) return false;
+            if (unmatchedHintFilter === 'keine' && !hint.includes('keine')) return false;
+            if (unmatchedHintFilter === 'getrennt' && !hint.includes('getrennt')) return false;
+            if (unmatchedHintFilter === 'bearbeitet' && !r.manualEdited) return false;
+            if (unmatchedHintFilter === 'offen' && (r.manualEdited || r.isFrozen)) return false;
+            if (clearingNeedle) {
+                const haystack = normalizeSearchText(joinParts(r.name, r.anrede, r.titel, r.vorname, r.nachname, r.zusatz, r.strasse, r.nummer, r.plz, r.ort));
+                if (!haystack.includes(clearingNeedle)) return false;
+            }
+            return true;
+        });
+    }, [preMatchResults, unmatchedHintFilter, clearingNeedle]);
+
+    const filtersActive = clearingSearch || unmatchedHintFilter !== 'all'
+        || matchFilters.score !== 'all' || matchFilters.field !== 'all' || matchFilters.sort !== 'source';
 
     const getStatusClass = (status) => {
         if (status === 'exact') return 'text-emerald-700 bg-emerald-100 border-emerald-200';
@@ -1182,8 +1243,21 @@ export default function PostVersandManager() {
                                 <CheckCircle size={16} /> Automatisch gematcht ({preMatchResults.matchedList.filter(m=>m.fromDB).length})
                             </button>
                             <button onClick={() => setActiveTab('unmatched')} className={`px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 ${activeTab === 'unmatched' ? 'bg-amber-100 text-amber-800 border-2 border-amber-200' : 'bg-white dark:bg-gray-900 text-slate-400 dark:text-gray-500 hover:bg-slate-50 dark:hover:bg-gray-800'}`}>
-                                <AlertTriangle size={16} /> KI benötigt / Manuell ({preMatchResults.unmatchedList.length})
+                                <AlertTriangle size={16} /> Manuell prüfen ({preMatchResults.unmatchedList.length})
                             </button>
+                            <div className="relative ml-auto w-72">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input
+                                    type="text"
+                                    value={clearingSearch}
+                                    onChange={(e) => setClearingSearch(e.target.value)}
+                                    placeholder="Name, Straße, PLZ, Ort suchen…"
+                                    className="w-full pl-9 pr-8 py-2.5 rounded-xl border-2 border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-slate-800 dark:text-gray-100 text-xs font-semibold outline-none focus:border-[#8e014d]"
+                                />
+                                {clearingSearch && (
+                                    <button type="button" onClick={() => setClearingSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700" title="Suche leeren"><XCircle size={14} /></button>
+                                )}
+                            </div>
                         </div>
 
                         {/* --- TAB 1: ERWEITERTE MATCHED ANSICHT --- */}
@@ -1192,16 +1266,30 @@ export default function PostVersandManager() {
                                 <div className="p-5 border-b border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 flex flex-wrap items-center justify-between gap-4">
                                     <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-gray-400">
                                         Direktvergleich Quelle vs Datenbank
+                                        <span className="ml-2 normal-case tracking-normal font-semibold text-slate-400">{visibleMatchedRows.length} von {matchedRows.length}</span>
                                     </div>
-                                    <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-gray-300 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={showOnlyMismatches}
-                                            onChange={(e) => setShowOnlyMismatches(e.target.checked)}
-                                            className="h-4 w-4 rounded border-slate-300 text-[#8e014d] focus:ring-[#8e014d]"
-                                        />
-                                        Nur Abweichungen zeigen
-                                    </label>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <select value={matchFilters.score} onChange={(e) => setMatchFilters((f) => ({ ...f, score: e.target.value }))} className={FILTER_SELECT_CLASS} title="Nach Übereinstimmung filtern">
+                                            <option value="all">Übereinstimmung: alle</option>
+                                            <option value="lt100">unter 100 %</option>
+                                            <option value="lt85">unter 85 %</option>
+                                            <option value="lt60">unter 60 %</option>
+                                        </select>
+                                        <select value={matchFilters.field} onChange={(e) => setMatchFilters((f) => ({ ...f, field: e.target.value }))} className={FILTER_SELECT_CLASS} title="Nach abweichendem Feld filtern">
+                                            <option value="all">Abweichung: egal</option>
+                                            <option value="any">irgendeine Abweichung</option>
+                                            {MATCH_FIELD_LABELS.map((label) => <option key={label} value={label}>Abweichung: {label}</option>)}
+                                        </select>
+                                        <select value={matchFilters.sort} onChange={(e) => setMatchFilters((f) => ({ ...f, sort: e.target.value }))} className={FILTER_SELECT_CLASS} title="Sortierung">
+                                            <option value="source">Reihenfolge: Quelldatei</option>
+                                            <option value="scoreAsc">schlechteste zuerst</option>
+                                            <option value="scoreDesc">beste zuerst</option>
+                                            <option value="name">Name A–Z</option>
+                                        </select>
+                                        {filtersActive && (
+                                            <button type="button" onClick={resetClearingFilters} className="text-[10px] font-black uppercase tracking-widest text-[#8e014d] hover:underline px-1">Filter zurücksetzen</button>
+                                        )}
+                                    </div>
                                 </div>
                                 <table className="w-full text-left">
                                     <thead className="bg-slate-50 dark:bg-gray-800 border-b-2 text-[10px] uppercase font-black text-slate-400 dark:text-gray-500">
@@ -1290,7 +1378,7 @@ export default function PostVersandManager() {
                                         )})}
                                         {matchedRows.length === 0 && <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Keine automatischen Treffer.</td></tr>}
                                         {matchedRows.length > 0 && visibleMatchedRows.length === 0 && (
-                                            <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Aktuell keine Abweichungen in den gematchten Datensätzen.</td></tr>
+                                            <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">Kein Treffer passt zu den Filtern.</td></tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -1300,12 +1388,35 @@ export default function PostVersandManager() {
                         {/* --- TAB 2: UNMATCHED MIT EDIT-FUNKTION --- */}
                         {activeTab === 'unmatched' && (
                             <div className="bg-white dark:bg-gray-900 border-2 border-slate-200 dark:border-gray-700 rounded-[2.5rem] overflow-hidden shadow-xl">
+                                <div className="p-5 border-b border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 flex flex-wrap items-center justify-between gap-4">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-gray-400">
+                                        Ohne eindeutigen Treffer
+                                        <span className="ml-2 normal-case tracking-normal font-semibold text-slate-400">{visibleUnmatchedRows.length} von {preMatchResults.unmatchedList.length}</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <select value={unmatchedHintFilter} onChange={(e) => setUnmatchedHintFilter(e.target.value)} className={FILTER_SELECT_CLASS} title="Nach Grund filtern">
+                                            <option value="all">Grund: alle</option>
+                                            <option value="mehrdeutig">Mehrdeutiger Treffer</option>
+                                            <option value="unsicher">Treffer zu unsicher</option>
+                                            <option value="keine">Keine Adresse mit PLZ/Land</option>
+                                            <option value="getrennt">Manuell getrennt</option>
+                                            <option value="offen">Noch nicht bearbeitet</option>
+                                            <option value="bearbeitet">Im Editor bearbeitet</option>
+                                        </select>
+                                        {filtersActive && (
+                                            <button type="button" onClick={resetClearingFilters} className="text-[10px] font-black uppercase tracking-widest text-[#8e014d] hover:underline px-1">Filter zurücksetzen</button>
+                                        )}
+                                    </div>
+                                </div>
                                 <table className="w-full text-left">
                                     <thead className="bg-slate-50 dark:bg-gray-800 border-b-2 text-[10px] uppercase font-black text-slate-400 dark:text-gray-500">
                                         <tr><th className="p-5">Quelle (Excel)</th><th className="p-5">Status</th><th className="p-5 text-right">Aktion</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                                        {preMatchResults.unmatchedList.map((r) => (
+                                        {visibleUnmatchedRows.length === 0 && (
+                                            <tr><td colSpan="3" className="p-10 text-center text-slate-400 dark:text-gray-500 italic">{preMatchResults.unmatchedList.length === 0 ? 'Alle Adressen sind zugeordnet.' : 'Kein Eintrag passt zu den Filtern.'}</td></tr>
+                                        )}
+                                        {visibleUnmatchedRows.map((r) => (
                                             <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-gray-800">
                                                 <td className="p-5">
                                                     <div className="font-bold text-slate-800 dark:text-gray-100">

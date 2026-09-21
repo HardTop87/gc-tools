@@ -173,15 +173,51 @@ export const extractNumbers = (str) => {
     return matches ? matches.join("") : "";
 };
 
+// Wörter, die in Quelldateien um den Namen herumstehen, in der Datenbank
+// aber fehlen: Anreden, Titel, akademische Grade, Berufe, Floskeln. Sie
+// zählen beim Namensvergleich nicht mit — sonst wich fast jeder Name ab.
+export const NAME_NOISE_TOKENS = new Set([
+    'an', 'die', 'das', 'den', 'zhd', 'hd', 'zh', 'herr', 'herrn', 'frau', 'hr', 'fr', 'familie', 'fam',
+    'ehepaar', 'eheleute', 'und', 'u',
+    'dr', 'prof', 'professor', 'dipl', 'ing', 'med', 'dent', 'vet', 'jur', 'rer', 'nat', 'pol', 'phil',
+    'oec', 'habil', 'mag', 'mult', 'hc', 'ma', 'ba', 'msc', 'bsc', 'mba', 'llm', 'phd', 'dres',
+    'rechtsanwalt', 'rechtsanwältin', 'ra', 'notar', 'notarin', 'pfarrer', 'pater', 'diakon', 'pfr',
+    'stud', 'cand', 'senior', 'junior', 'sen', 'jun', 'em', 'emeritus', 'ehem', 'ir', 'sc', 'techn',
+]);
+
 export const tokenizeName = (str) => {
     if (!str) return [];
     return String(str)
         .toLowerCase()
-        .replace(/an die|an das|z\.hd\.|herr|frau|dr\.|prof\.|dipl\.|dipl-ing|ing\.|-bibliothek/g, ' ')
         .replace(/[^a-z0-9äöüß\s-]/g, ' ')
         .split(/[\s-]+/)
         .map((t) => t.trim())
-        .filter((t) => t.length >= 2);
+        .filter((t) => t.length >= 2 && !NAME_NOISE_TOKENS.has(t));
+};
+
+// Zwei Namens-Token gelten als gleich, wenn sie identisch sind oder einer den
+// anderen fortsetzt („max" ↔ „maximilian", „müller" ↔ „müller-lüdenscheidt").
+export const nameTokensEqual = (a, b) =>
+    a === b || (Math.min(a.length, b.length) >= 3 && (a.startsWith(b) || b.startsWith(a)));
+
+// Namensvergleich Quelle ↔ Datenbank ohne Reihenfolge und ohne Beiwerk:
+// coverage = Anteil der kürzeren Token-Liste, der in der anderen vorkommt.
+// „Herr Dr. Max Mustermann, Rechtsanwalt" ↔ „Max Mustermann" → exact.
+export const matchNameTokens = (sourceTokens, targetTokens) => {
+    const src = sourceTokens || [];
+    const tgt = targetTokens || [];
+    if (src.length === 0 && tgt.length === 0) return { matched: 0, coverage: 0, status: 'empty' };
+    if (src.length === 0 || tgt.length === 0) return { matched: 0, coverage: 0, status: 'mismatch' };
+    const [shorter, longer] = src.length <= tgt.length ? [src, tgt] : [tgt, src];
+    const used = new Set();
+    let matched = 0;
+    shorter.forEach((token) => {
+        const idx = longer.findIndex((other, i) => !used.has(i) && nameTokensEqual(token, other));
+        if (idx !== -1) { used.add(idx); matched += 1; }
+    });
+    const coverage = matched / shorter.length;
+    const status = coverage === 1 ? 'exact' : coverage >= 0.5 ? 'similar' : 'mismatch';
+    return { matched, coverage, status };
 };
 
 export const normalizeStreet = (str) => {

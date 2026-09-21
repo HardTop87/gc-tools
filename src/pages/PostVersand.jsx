@@ -454,9 +454,27 @@ export default function PostVersandManager() {
                 totalWeight: itemToUnmatch.totalWeight, originalRow: itemToUnmatch.originalRow,
                 matchHint: 'Manuell getrennt',
                 isFrozen: false,
+                // Für „Rückgängig": den Treffer samt Position aufheben.
+                previousMatch: itemToUnmatch,
+                previousIndex: prev.matchedList.findIndex(m => m.id === id),
             };
             return { matchedList: newMatched, unmatchedList: [...prev.unmatchedList, resetItem] };
         });
+    };
+
+    // „Trennen" zurücknehmen: der Datenbank-Treffer kommt an seine alte Stelle
+    // zurück, Änderungen aus dem Editor an dieser Zeile verfallen dabei.
+    const restoreMatch = (id) => {
+        setResults(null);
+        setPreMatchResults((prev) => {
+            const item = prev.unmatchedList.find((u) => u.id === id);
+            if (!item?.previousMatch) return prev;
+            const matched = [...prev.matchedList];
+            const at = Math.min(Math.max(item.previousIndex ?? matched.length, 0), matched.length);
+            matched.splice(at, 0, item.previousMatch);
+            return { matchedList: matched, unmatchedList: prev.unmatchedList.filter((u) => u.id !== id) };
+        });
+        setCurrentItemToMatch((prev) => (prev?.id === id ? null : prev));
     };
 
 
@@ -1315,6 +1333,16 @@ export default function PostVersandManager() {
                                                         <button onClick={() => openManualEditor(r)} className="text-slate-600 dark:text-gray-300 hover:text-white bg-slate-100 dark:bg-gray-800 hover:bg-slate-900 dark:hover:bg-gray-700 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-[10px] font-bold uppercase border border-slate-200 dark:border-gray-700">
                                                             <CheckSquare size={14}/> Editor öffnen
                                                         </button>
+                                                        {r.previousMatch && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => restoreMatch(r.id)}
+                                                                title={`Datenbank-Treffer „${r.previousMatch.name}" wiederherstellen`}
+                                                                className="text-emerald-700 hover:text-white bg-emerald-50 hover:bg-emerald-600 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-[10px] font-bold uppercase border border-emerald-200"
+                                                            >
+                                                                <RotateCcw size={14}/> Trennen rückgängig
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -1470,7 +1498,31 @@ export default function PostVersandManager() {
                                 <div className="text-center"><p className="text-3xl font-black text-emerald-600">{procStats.db}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Aus Datenbank</p></div>
                                 <div className="text-center"><p className="text-3xl font-black text-[#8e014d]">{procStats.manuell}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Manuell geprüft</p></div>
                                 <div className="text-center"><p className="text-3xl font-black text-slate-800 dark:text-gray-100">{previewShipmentCount}</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Sendungen gesamt</p></div>
+                                {results && (
+                                    <div className="text-center"><p className="text-3xl font-black text-slate-800 dark:text-gray-100 tabular-nums">{results.totalCost.toFixed(2)} €</p><p className="text-[10px] font-bold uppercase text-slate-400 dark:text-gray-500">Briefporto (ohne Pakete)</p></div>
+                                )}
                             </div>
+                            {results && Object.keys(results.groups).length > 0 && (
+                                <table className="text-xs">
+                                    <thead className="text-[9px] uppercase font-black text-slate-400 dark:text-gray-500">
+                                        <tr><th className="text-left pr-6 pb-1">Gruppe</th><th className="text-right pr-6 pb-1">Sendungen</th><th className="text-right pr-6 pb-1">je</th><th className="text-right pb-1">Summe</th></tr>
+                                    </thead>
+                                    <tbody className="tabular-nums font-semibold text-slate-700 dark:text-gray-200">
+                                        {Object.entries(results.groups).map(([label, records]) => {
+                                            const isLetter = isLetterPostLabel(label);
+                                            const sum = records.reduce((acc, r) => acc + (r.price || 0), 0);
+                                            return (
+                                                <tr key={label} className={isLetter ? '' : 'text-slate-400 dark:text-gray-500'}>
+                                                    <td className="pr-6 py-0.5">{label}{!isLetter && <span className="ml-2 text-[9px] uppercase">nicht in Summe</span>}</td>
+                                                    <td className="text-right pr-6 py-0.5">{records.length}</td>
+                                                    <td className="text-right pr-6 py-0.5">{(records[0]?.price || 0).toFixed(2)} €</td>
+                                                    <td className="text-right py-0.5">{sum.toFixed(2)} €</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
                         {exportHinweisBanner}
                         {results && (

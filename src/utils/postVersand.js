@@ -362,3 +362,61 @@ export const splitIntoBatches = (records, limit = 99) => {
     for (let i = 0; i < sorted.length; i += limit) batches.push(sorted.slice(i, i + limit));
     return batches;
 };
+
+// --- DATENBANK FÜR DEN NÄCHSTEN VERSAND ---
+// Die fertige Versandliste wird mit der geladenen Datenbank zusammengeführt
+// und im Browser gespeichert; beim nächsten Versand ist sie sofort da.
+export const DB_FIELDS = ['NAME', 'ZUSATZ', 'STRASSE', 'NUMMER', 'PLZ', 'STADT', 'LAND', 'ADRESS_TYP'];
+
+// Datenbankzeile auf das Rhaetia-Schema bringen (Aliasse aus älteren Dateien
+// wie ORT/plz/landCode werden mitgenommen).
+export const normalizeDbRow = (row) => {
+    const land = normalizeCountryCode(row?.LAND || row?.landCode || row?.land || 'DEU') || 'DEU';
+    return {
+        NAME: cellStr(row?.NAME ?? row?.name),
+        ZUSATZ: cellStr(row?.ZUSATZ ?? row?.zusatz),
+        STRASSE: cellStr(row?.STRASSE ?? row?.strasse),
+        NUMMER: cellStr(row?.NUMMER ?? row?.nummer),
+        PLZ: formatPLZ(row?.PLZ ?? row?.plz, land),
+        STADT: cellStr(row?.STADT ?? row?.ORT ?? row?.stadt ?? row?.ort),
+        LAND: land,
+        ADRESS_TYP: cellStr(row?.ADRESS_TYP ?? row?.type) || 'HOUSE',
+    };
+};
+
+// Vorschau-Datensatz (Export-Form) → Datenbankzeile.
+export const recordToDbRow = (r) => normalizeDbRow({
+    NAME: r.name,
+    ZUSATZ: cellStr(r.zusatz) === '-' ? '' : r.zusatz,
+    STRASSE: r.strasse,
+    NUMMER: r.nummer,
+    PLZ: r.plz,
+    STADT: r.ort,
+    LAND: r.landCode,
+    ADRESS_TYP: r.type,
+});
+
+// Schlüssel für Dubletten: Name (ohne Anreden/Sonderzeichen) + PLZ.
+export const dbRowKey = (row) => `${cleanForMatch(row.NAME)}|${formatPLZ(row.PLZ, row.LAND)}`;
+
+// Alte Datenbank + aktuelle Versandliste. Aktuelle Adressen gewinnen (sie sind
+// geprüft und frischer), alte Adressen ohne Gegenstück bleiben erhalten.
+export const mergeIntoDatabase = (dbRows, records) => {
+    const merged = new Map();
+    (dbRows || []).forEach((row) => {
+        const norm = normalizeDbRow(row);
+        if (norm.NAME) merged.set(dbRowKey(norm), norm);
+    });
+    (records || [])
+        .filter((r) => !r.excluded && !isNoShippingRecord(r) && cellStr(r.name))
+        .forEach((r) => {
+            const row = recordToDbRow(r);
+            merged.set(dbRowKey(row), row);
+        });
+    return stripSenderRows([...merged.values()]);
+};
+
+// Datenbank als CSV (Rhaetia-Schema, ohne Absender) — als Sicherung oder um
+// sie auf einem anderen Rechner wieder einzulesen.
+export const buildDatabaseCsv = (rows) =>
+    [RHAETIA_CSV_HEADER, ...rows.map((row) => DB_FIELDS.map((f) => toCsvCell(row[f])).join(';'))].join('\r\n') + '\r\n';

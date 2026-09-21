@@ -22,6 +22,7 @@ import {
   buildDatabaseCsv,
   toCsvCell,
   tokenizeName,
+  matchNameTokens,
 } from './postVersand';
 
 const decode1252 = (bytes) => new TextDecoder('windows-1252').decode(bytes);
@@ -207,5 +208,24 @@ describe('Post-Manager: Datenbank für den nächsten Versand', () => {
     expect(lines).toHaveLength(4);
     expect(lines.some((l) => l.startsWith('K.B.St.V. Rhaetia'))).toBe(false);
     expect(lines).toContain('Neu Dabei;Bibliothek;Weg;2;10115;Berlin;DEU;HOUSE');
+  });
+});
+
+describe('Post-Manager: Namensvergleich ohne Beiwerk', () => {
+  it('tokenizeName wirft Anreden, Titel und Berufe raus, lässt Namen ganz', () => {
+    expect(tokenizeName('Herrn Prof. Dr. med. Max Mustermann, Rechtsanwalt')).toEqual(['max', 'mustermann']);
+    expect(tokenizeName('Frau Dipl.-Ing. Erika Herrmann')).toEqual(['erika', 'herrmann']);
+    expect(tokenizeName('Universitätsbibliothek Regensburg')).toEqual(['universitätsbibliothek', 'regensburg']);
+  });
+
+  it('matchNameTokens: Quelle mit Titeln gegen Datenbank mit Vor-/Nachname ist exakt', () => {
+    const src = tokenizeName('Herr Dr. Max Mustermann, Rechtsanwalt');
+    expect(matchNameTokens(src, tokenizeName('Max Mustermann')).status).toBe('exact');
+    expect(matchNameTokens(src, tokenizeName('Mustermann, Max')).status).toBe('exact');
+    expect(matchNameTokens(tokenizeName('Maximilian Mustermann'), tokenizeName('Max Mustermann')).status).toBe('exact');
+    expect(matchNameTokens(tokenizeName('Erika Mustermann'), tokenizeName('Max Mustermann')).status).toBe('similar');
+    expect(matchNameTokens(tokenizeName('Erika Beispiel'), tokenizeName('Max Mustermann')).status).toBe('mismatch');
+    expect(matchNameTokens([], []).status).toBe('empty');
+    expect(matchNameTokens(tokenizeName('Max'), []).status).toBe('mismatch');
   });
 });

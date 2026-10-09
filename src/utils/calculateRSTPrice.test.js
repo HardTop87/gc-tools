@@ -148,19 +148,41 @@ describe('Kleinmengen-Kassen-Anker GC (Guido 12.08.2026, Preisbasis 2.6.0)', () 
       .toBeLessThan(gc(baseForm({ ...referenz, auflage: '2', seiten: '20' })).gesamt);
   });
 
-  it('blendet im Rhythmus der Preiskurve aus: Anteil = (Preis(10) − Preis(A)) / (Preis(10) − Preis(1)), null ab kleinmengenBisAuflage', () => {
-    const a1 = gc(baseForm({ ...referenz, auflage: '1', seiten: '40' })).kleinmengenAnker;
-    expect(a1).toBeCloseTo(30 - 37.2, 1); // Kasse 30 € gegen heutige 37,20 € → negativer Anker
+  it('läuft auf einer geraden Linie vom Kassenpreis (1 Ex.) zum Normalpreis bei kleinmengenBisAuflage', () => {
     const aus = getDefaultPricingConfig();
     aus.settings.kleinmengenBisAuflage = 0;
     const normal = (auflage) =>
       routeResult(calculateRSTPrice(baseForm({ ...referenz, auflage, seiten: '40' }), aus), 'gc_horizon').gesamt;
-    const anteil4 = (normal('10') - normal('4')) / (normal('10') - normal('1'));
-    expect(gc(baseForm({ ...referenz, auflage: '4', seiten: '40' })).kleinmengenAnker).toBeCloseTo(a1 * anteil4, 8);
+    const preis = (auflage) => gc(baseForm({ ...referenz, auflage, seiten: '40' })).gesamt;
+    expect(preis('1')).toBeCloseTo(30, 8);
+    expect(preis('4')).toBeCloseTo(30 + ((normal('10') - 30) * 3) / 9, 8);
+    expect(preis('10')).toBeCloseTo(normal('10'), 8);
     expect(gc(baseForm({ ...referenz, auflage: '10', seiten: '40' })).kleinmengenAnker).toBe(0);
     expect(gc(baseForm({ ...referenz, auflage: '11', seiten: '40' })).kleinmengenAnker).toBe(0);
-    expect(gc(baseForm({ ...referenz, auflage: '10', seiten: '40' })).gesamt).toBeCloseTo(normal('10'), 8);
-    expect(normal('1')).toBeCloseTo(37.2, 1);
+    expect(normal('1')).toBeCloseTo(37.2, 1); // ohne Anker wie bisher
+  });
+
+  it('deckelt den Kassenpreis auf den Normalpreis bei BisAuflage (sonst würden mehr Exemplare billiger)', () => {
+    const teuer = getDefaultPricingConfig();
+    teuer.settings.kleinmengenKasseBisGrenzeOhne = 200;
+    teuer.settings.kleinmengenKasseAbGrenzeOhne = 200;
+    teuer.settings.kleinmengenKasseBisGrenzeMit = 200;
+    teuer.settings.kleinmengenKasseAbGrenzeMit = 200;
+    const form = (auflage) => baseForm({ ...referenz, formatKey: 'A6_Hoch', dInhaltKey: '1c', pInhaltId: 'CC_100', auflage, seiten: '8' });
+    const preis = (auflage) => routeResult(calculateRSTPrice(form(auflage), teuer), 'gc_horizon').gesamt;
+    for (let a = 2; a <= 11; a += 1) expect(preis(String(a))).toBeGreaterThanOrEqual(preis(String(a - 1)) - 1e-9);
+    expect(preis('1')).toBeCloseTo(preis('10'), 8);
+  });
+
+  it('Aus-Schalter (BisAuflage 0, Umschlag-Zuschlag ab 11) rechnet exakt wie Preisbasis 2.5.0', () => {
+    const aus = getDefaultPricingConfig();
+    aus.settings.kleinmengenBisAuflage = 0;
+    aus.settings.gcUmschlagAbAuflage = 11;
+    const gcAus = (form) => routeResult(calculateRSTPrice(form, aus), 'gc_horizon').gesamt;
+    // Referenzwerte aus 2.5.0 (main), A4 N_80 4/4, 1 Ex.
+    expect(gcAus(baseForm({ ...referenz, auflage: '1', seiten: '36' }))).toBeCloseTo(36.46, 2);
+    expect(gcAus(baseForm({ ...referenz, ...mitU, auflage: '1', seiten: '32' }))).toBeCloseTo(37.71, 2);
+    expect(gcAus(baseForm({ ...referenz, ...mitU, auflage: '10', seiten: '20' }))).toBeCloseTo(68.79, 2);
   });
 
   it('erzeugt keinen Preisrückgang bei +1 Exemplar und keinen Sprung bei 11 (1–12 Ex., alle Seiten, ohne/mit)', () => {
@@ -650,6 +672,24 @@ describe('pricingConfig: Schema-Migration beim Laden', () => {
     const migriert = migratePricingConfig(kaputt);
     expect(migriert.settings.setupKosten).toBe('12');
     expect(validatePricingConfig(migriert).ok).toBe(false);
+  });
+});
+
+describe('pricingConfig: Validierung Kassen-Anker (2.6.0)', () => {
+  const mit = (overrides) => {
+    const c = getDefaultPricingConfig();
+    Object.assign(c.settings, overrides);
+    return validatePricingConfig(c);
+  };
+  it('erlaubt 0 (aus) und ganze Zahlen 2–20 als Grenzauflage', () => {
+    for (const bis of [0, 2, 10, 20]) expect(mit({ kleinmengenBisAuflage: bis }).ok).toBe(true);
+    for (const bis of [1, 5.5, 21, 501]) expect(mit({ kleinmengenBisAuflage: bis }).ok).toBe(false);
+  });
+  it('verlangt Kassenpreise > 0, große Klasse ≥ kleine, mit Umschlag ≥ ohne', () => {
+    expect(mit({ kleinmengenKasseBisGrenzeOhne: 0 }).ok).toBe(false);
+    expect(mit({ kleinmengenKasseAbGrenzeOhne: 20 }).ok).toBe(false);
+    expect(mit({ kleinmengenKasseBisGrenzeMit: 20 }).ok).toBe(false);
+    expect(mit({ kleinmengenKasseBisGrenzeOhne: 20, kleinmengenKasseBisGrenzeMit: 22 }).ok).toBe(true);
   });
 });
 

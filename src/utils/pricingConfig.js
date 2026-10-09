@@ -29,6 +29,28 @@ export function validatePricingConfig(config) {
     else if (value < 0) errors.push(`settings.${key} darf nicht negativ sein.`);
   }
 
+  // Kassen-Anker (2.6.0): 0 = aus, sonst ganze Zahl 2–20. Über 20 gemessen
+  // Preisrückgänge bei mehr Seiten (Ausblendung über zu viele Staffeln), über
+  // 500 wäre der Anker still aus (GC-Höchstauflage). Kassenpreise > 0 und in
+  // sich steigend (große Klasse ≥ kleine, mit Umschlag ≥ ohne).
+  const s = config.settings ?? {};
+  if (Number.isFinite(s.kleinmengenBisAuflage)) {
+    const bis = s.kleinmengenBisAuflage;
+    if (!(bis === 0 || (Number.isInteger(bis) && bis >= 2 && bis <= 20))) {
+      errors.push('settings.kleinmengenBisAuflage muss 0 (aus) oder eine ganze Zahl von 2 bis 20 sein.');
+    }
+  }
+  const kasse = ['kleinmengenKasseBisGrenzeOhne', 'kleinmengenKasseBisGrenzeMit', 'kleinmengenKasseAbGrenzeOhne', 'kleinmengenKasseAbGrenzeMit'];
+  if (kasse.every((key) => Number.isFinite(s[key]))) {
+    if (kasse.some((key) => !(s[key] > 0))) errors.push('Kassenpreise (Kleinmengen) müssen größer als 0 sein.');
+    if (s.kleinmengenKasseAbGrenzeOhne < s.kleinmengenKasseBisGrenzeOhne || s.kleinmengenKasseAbGrenzeMit < s.kleinmengenKasseBisGrenzeMit) {
+      errors.push('Kassenpreise (Kleinmengen): die große Seitenklasse darf nicht billiger sein als die kleine.');
+    }
+    if (s.kleinmengenKasseBisGrenzeMit < s.kleinmengenKasseBisGrenzeOhne || s.kleinmengenKasseAbGrenzeMit < s.kleinmengenKasseAbGrenzeOhne) {
+      errors.push('Kassenpreise (Kleinmengen): mit Umschlag darf nicht billiger sein als ohne.');
+    }
+  }
+
   if (!(config.papiere?.length >= 1)) errors.push('papiere: mindestens ein Papier erforderlich.');
   if (!(config.formate?.length >= 1)) errors.push('formate: mindestens ein Format erforderlich.');
   if (!(config.routen?.length >= 1)) errors.push('routen: mindestens eine Route erforderlich.');

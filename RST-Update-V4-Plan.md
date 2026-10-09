@@ -642,7 +642,7 @@ damit der Effekt bei künftigen Prüfungen nicht als neuer Fund auftaucht.
 
 ---
 
-## 7. P6 Kleinmengen: Kassen-Anker (Preisbasis 2.6.0, Branch `kleinmengen-kassenanker`, 10.10.2026 — wartet auf Guidos Freigabe)
+## 7. P6 Kleinmengen: Kassen-Anker (Preisbasis 2.6.0, PR #17, 10.10.2026 — wartet auf Guidos Freigabe)
 
 **Guidos Antwort vom 12.08. zu den Kleinmengen** („zwei Fixpunkte: Einzelstück an der Kasse und
 der errechnete 100er-Wert", Zielwerte 4/4: 20 S. = 25/30 €, 40 S. = 30/35 € ohne/mit Umschlag,
@@ -654,24 +654,36 @@ vom 10.08. erzeugt zudem eine Preisumkehr (28 S. teurer als 32 S.). Entscheidung
 
 **Mechanik (nur GC, Route-Flag `kleinmengenAnker`):** Bei 1 Ex. gilt exakt der Kassenpreis
 (Settings `kleinmengenKasse{Bis,Ab}Grenze{Ohne,Mit}`, Klassengrenze `kleinmengenGrenzeSeiten` = 20
-Inhaltsseiten inklusiv) — unabhängig von Papier/Farbe, wie an der Kasse; Cello und Express kommen
-obendrauf. Die Differenz Kassenpreis − Normalpreis(1 Ex.) wird bis `kleinmengenBisAuflage` (10)
-im Rhythmus der eigenen Preiskurve ausgeblendet: Anteil = (P(10) − P(A)) / (P(10) − P(1)). Bei 10
-gilt die normale Rechnung → kein Sprung bei 11. Dazu `gcUmschlagAbAuflage` 11 → 1 (Umschlag-
-Zuschlag 5 € + 0,05 €/Ex. ab dem ersten Exemplar), sonst bliebe der heutige 9-€-Sprung bei 11.
-Zwei Zellen der 1er-Spalte geglättet (BT 9: 15 → 14, BT 11: 20 → 19,50), weil ein Schritt der
-1er-Spalte, der größer ist als der der 2er-Spalte, bei A5/A6 und 2 Ex. Preisrückgänge um Cent
-bei +4 Seiten erzeugte; die 1er-Spalte ist durch den Anker überdeckt.
+Inhaltsseiten inklusiv), unabhängig von Papier/Farbe wie an der Kasse; Cello und Express kommen
+obendrauf. Von 1 bis `kleinmengenBisAuflage` (10) gerade Linie vom Kassenpreis zum Normalpreis
+bei 10 Ex. (gleiche Konfiguration) — Guidos wörtliche Regel „linear zwischen 1 und 10". Kasse ist
+auf Normal(10) gedeckelt. Dazu `gcUmschlagAbAuflage` 11 → 1 (Umschlag-Zuschlag ab dem ersten
+Exemplar), sonst bliebe der heutige 9-€-Sprung bei 11. Verarbeitungstabelle unverändert.
 
-**Gemessen (alle 4.532 GC-Kombinationen × 1–12 Ex. = 54.384 Zellen):** 0 Preisrückgänge bei
-+1 Ex., 0 bei +4 Seiten, 0 Empfehlungswechsel gegenüber heute (34.980 Kombis bis 50 Ex.).
-Größte Erhöhung +8,82 € (A4 4 S. + Umschlag, 1 Ex.: 21,18 → 30 €), größte Senkung −14,63 €
-(A4 BD_150 4/4 44 S. ohne U, 1 Ex.: 44,63 → 30 €) — beides Folge der Kassenpreise selbst.
-Schritt 10 → 11 Ex. maximal 5,60 € (= normaler Exemplarschritt). Ab 11 Ex. unverändert.
-Tabelle für Guido: `Kleinmengen-Kassenanker-Preise-bis-12-Ex.xlsx` (gitignoriert).
+**Warum die gerade Linie (Bughunt 10.10.):** Zwei frühere Varianten (Differenz linear bzw. im
+Rhythmus der Preiskurve 1–10 ausgeblendet) erzeugten bei geänderten Einstellungen Preisrückgänge:
+bei Kassenpreis > Normal(10) und bei kleiner Grenzauflage über die Auflage, bei Kassenpreisen
+unter 24 € über die Seiten (Schwelle direkt neben Guidos 25 €). Die Linie ist beweisbar monoton:
+über die Auflage, weil sie steigt; über die Seiten, weil Kasse innerhalb der Klasse konstant ist
+und Normal(10) mit den Seiten wächst. Gemessen in 11 Einstell-Szenarien × 99.704 Zellen: 0
+Rückgänge. Validierung: Grenzauflage 0 oder 2–20, Kassenpreise > 0, große Klasse ≥ kleine,
+mit U ≥ ohne. Leadprint: Summe der Einzelaufschläge bei 1–10 Ex. exakt (150.468 Kombis).
+
+**Preisfolge, die Guido kennen muss:** Seine Live-Tabelle folgt der Linearregel NICHT (Spalten
+2–5 ≈ 47/60/73/87 % der 10er-Spalte). Mit der Linie werden dicke Broschüren bei 2–9 Ex.
+günstiger als heute, max −19,28 € (A4 BD_150 4/4 44 S. ohne U, 5 Ex.: 85,90 → 66,62 €); im
+Referenzbeispiel A4 N_80 40 S. ohne U, 5 Ex.: 75,14 → 59,98 €. Dünne Broschüren mit Umschlag
+werden teurer (max +8,82 €). Alle 4.532 Kombis × 1–12 Ex.: 25.161 Zellen teurer, 19.144 günstiger,
+ab 11 Ex. unverändert, 0 Empfehlungswechsel (34.980 Kombis bis 50 Ex.).
 
 **Zurück zum heutigen Stand:** `kleinmengenBisAuflage` = 0 und `gcUmschlagAbAuflage` = 11 in der
-Verwaltung (bzw. Verlauf → rev 16 wiederherstellen); Code per Revert des PR.
+Verwaltung rechnet exakt wie 2.5.0 (Test), alternativ Verlauf → rev 16; Code per Revert.
+Rollout-Hinweis: Ältere geteilte Stände bekommen die Settings per Migration, aber nicht das
+Route-Flag → die Verwaltung zeigt dann „noch nicht aktiv", bis „Auf Standard zurücksetzen".
 
-**Offen bei Guido:** Freigabe; ob A5/A6 dieselben Kassenpreise wie A4 bekommen (aktuell ja);
-ob die Senkung dicker Broschüren im Einzelstück gewollt ist (folgt aus seinem 40-S.-Ziel).
+**Vorschau trennt sich von der Produktion** (api/config.mjs): Nur `VERCEL_ENV=production` nutzt
+`pricing-config/`, Vorschauen `pricing-config-preview/` — vorher hätte „Auf Standard zurücksetzen"
+in einer PR-Vorschau den neuen Stand live veröffentlicht.
+
+**Offen bei Guido:** Freigabe; A5/A6 dieselben Kassenpreise wie A4?; Senkung dicker Broschüren
+bei 1–9 Ex. gewollt?

@@ -1,8 +1,8 @@
 {
   "meta": {
-    "version": "2.5.0",
-    "stand": "2026-08-12",
-    "kommentar": "V3-Update lt. Mail Guido 30.07.2026 (RST GC-AR-V3.xlsx, Preise gc.xlsx): 30 neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle, R_90-Preis final (41,20), Banner-Natur neu (N_80_BAN/N_120_BAN statt N_100_BAN, nicht lieferbar), R_300 nicht mehr als A5-Hoch-Umschlag (Breitbahn). Seitenlimits weiterhin per Dickenformel, Familienregel unveraendert (Entscheidung Armin 30.07.). 2.1.1: ILDA maxAuflage 500. 2.3.0 (Mail Guido 05.08.2026): Makulatur ist ein Prozentsatz auf die gedruckten Bogen des Gesamtauftrags (Kurve aus Makulatur.xlsx), bisher als absolute Bogenzahl je Komponente gerechnet — Kleinstauflagen minimal guenstiger, ab ca. 50 Ex. 3-4 % teurer. Kopp maxAuflage 1000 laut Guidos Produktionsmatrix (Bug-Hunt B1). 2.4.0 (Guidos Rueckmeldung 10.08.2026): GC-Dickenaufschlag (Buchdicke mm - 1) x (Auflage - 80) x 5 EUR fuer den weichen Uebergang zum Partner; umschlagAusnahmen R_90 -> CC_250/N_250 (einziges Recycling-Inhaltspapier ohne R-Umschlag); 4 Seiten Inhalt mit Umschlag zugelassen."
+    "version": "2.6.0",
+    "stand": "2026-10-10",
+    "kommentar": "V3-Update lt. Mail Guido 30.07.2026 (RST GC-AR-V3.xlsx, Preise gc.xlsx): 30 neue Papierpreise 07/2026, neue GC-Verarbeitungstabelle, R_90-Preis final (41,20), Banner-Natur neu (N_80_BAN/N_120_BAN statt N_100_BAN, nicht lieferbar), R_300 nicht mehr als A5-Hoch-Umschlag (Breitbahn). Seitenlimits weiterhin per Dickenformel, Familienregel unveraendert (Entscheidung Armin 30.07.). 2.1.1: ILDA maxAuflage 500. 2.3.0 (Mail Guido 05.08.2026): Makulatur ist ein Prozentsatz auf die gedruckten Bogen des Gesamtauftrags (Kurve aus Makulatur.xlsx), bisher als absolute Bogenzahl je Komponente gerechnet — Kleinstauflagen minimal guenstiger, ab ca. 50 Ex. 3-4 % teurer. Kopp maxAuflage 1000 laut Guidos Produktionsmatrix (Bug-Hunt B1). 2.4.0 (Guidos Rueckmeldung 10.08.2026): GC-Dickenaufschlag (Buchdicke mm - 1) x (Auflage - 80) x 5 EUR fuer den weichen Uebergang zum Partner; umschlagAusnahmen R_90 -> CC_250/N_250 (einziges Recycling-Inhaltspapier ohne R-Umschlag); 4 Seiten Inhalt mit Umschlag zugelassen. 2.6.0 (Guidos Mail 12.08.2026, Kleinmengen): Kassen-Anker fuer GC bei 1-10 Ex. - bei 1 Ex. gilt exakt der Kassenpreis (bis 20 Seiten 25/30 EUR, ab 24 Seiten 30/35 EUR ohne/mit Umschlag, unabhaengig von Papier/Farbe), bis 10 Ex. blendet die Differenz zur normalen Rechnung linear aus; GC-Umschlag-Zuschlag greift ab 1 Ex. statt ab 11 (kein Sprung mehr bei 11). Abschalten: kleinmengenBisAuflage 0 und gcUmschlagAbAuflage 11. Spalte 1 der GC-Tabelle bei BT 9 (15 -> 14) und BT 11 (20 -> 19,50) geglaettet, damit kein Schritt der 1er-Spalte groesser ist als der der 2er-Spalte (sonst Preisrueckgang um Cent bei +4 Seiten und 2 Ex. in A5/A6); die 1er-Spalte selbst ist durch den Kassen-Anker ueberdeckt."
   },
   "settings": {
     "baseGrundpreis1c": 0.015,
@@ -16,12 +16,18 @@
     "expressFaktor": 0.1,
     "gcUmschlagGrundkosten": 5,
     "gcUmschlagStueckpreis": 0.05,
-    "gcUmschlagAbAuflage": 11,
+    "gcUmschlagAbAuflage": 1,
     "maxDickeGC": 1500,
     "maxDickePartner": 2500,
     "gcDickenAufschlagAbMm": 1,
     "gcDickenAufschlagAbAuflage": 80,
-    "gcDickenAufschlagFaktor": 5
+    "gcDickenAufschlagFaktor": 5,
+    "kleinmengenBisAuflage": 10,
+    "kleinmengenGrenzeSeiten": 20,
+    "kleinmengenKasseBisGrenzeOhne": 25,
+    "kleinmengenKasseBisGrenzeMit": 30,
+    "kleinmengenKasseAbGrenzeOhne": 30,
+    "kleinmengenKasseAbGrenzeMit": 35
   },
   "umschlagAusnahmen": {
     "R_90": [
@@ -697,7 +703,8 @@
       "dickenAufschlag": true,
       "maxDickeRef": "maxDickeGC",
       "nutzenRef": "nutzenGC",
-      "preferDeltaRef": "preferInternDelta"
+      "preferDeltaRef": "preferInternDelta",
+      "kleinmengenAnker": true
     },
     {
       "key": "kopp",
@@ -854,7 +861,7 @@
         "500": 110
       },
       "9": {
-        "1": 15,
+        "1": 14,
         "2": 20,
         "3": 26,
         "4": 31,
@@ -884,7 +891,7 @@
         "500": 132
       },
       "11": {
-        "1": 20,
+        "1": 19.5,
         "2": 26,
         "3": 32,
         "4": 38,

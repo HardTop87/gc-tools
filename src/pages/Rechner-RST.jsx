@@ -202,6 +202,7 @@ export default function RechnerRST() {
     const valid = results.filter((r) => !r.error);
     const anyZuschlag = valid.some((r) => r.umschlagZuschlag > 0);
     const anyDickenAufschlag = valid.some((r) => r.dickenAufschlag > 0);
+    const anyKleinmengenAnker = valid.some((r) => Math.abs(r.kleinmengenAnker ?? 0) > 0.005);
     const anyExpress = valid.some((r) => r.expressSurcharge > 0);
 
     const out = [];
@@ -285,6 +286,13 @@ export default function RechnerRST() {
       row(
         'Dickenaufschlag (Buchdicke × Auflage)',
         (r) => ({ v: eur(r.dickenAufschlag), n: r.dickenAufschlag }),
+        { diff: true },
+      );
+    }
+    if (anyKleinmengenAnker) {
+      row(
+        'Kleinmengen-Anker (Kassenpreis, ausgeblendet bis Auflage)',
+        (r) => ({ v: eur(r.kleinmengenAnker ?? 0), n: r.kleinmengenAnker ?? 0 }),
         { diff: true },
       );
     }

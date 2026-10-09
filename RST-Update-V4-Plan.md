@@ -639,3 +639,39 @@ ausnutzbar und für den Kunden unsichtbar. Ein Fix müsste die Makulatur gesamth
 und auf die Komponenten verteilen, was die Rechnung verkompliziert, ohne die Ursache
 (unterschiedlich teures Inhalts- und Umschlagpapier) zu beseitigen. Hier festgehalten,
 damit der Effekt bei künftigen Prüfungen nicht als neuer Fund auftaucht.
+
+---
+
+## 7. P6 Kleinmengen: Kassen-Anker (Preisbasis 2.6.0, Branch `kleinmengen-kassenanker`, 10.10.2026 — wartet auf Guidos Freigabe)
+
+**Guidos Antwort vom 12.08. zu den Kleinmengen** („zwei Fixpunkte: Einzelstück an der Kasse und
+der errechnete 100er-Wert", Zielwerte 4/4: 20 S. = 25/30 €, 40 S. = 30/35 € ohne/mit Umschlag,
+„für 8–48 Seiten muss noch ein Preis gefunden werden") lässt sich mit der Verarbeitungstabelle
+allein nicht erfüllen: Eine Tabellenzelle bedient „S Seiten ohne U" **und** „S−4 Seiten mit U",
+der echte Umschlag-Mehrpreis bei 1 Ex. ist ~0,80 €, Guido will 5 €. Der Drei-Zellen-Vorschlag
+vom 10.08. erzeugt zudem eine Preisumkehr (28 S. teurer als 32 S.). Entscheidung Armin 10.10.:
+**Modell statt Tabelle.**
+
+**Mechanik (nur GC, Route-Flag `kleinmengenAnker`):** Bei 1 Ex. gilt exakt der Kassenpreis
+(Settings `kleinmengenKasse{Bis,Ab}Grenze{Ohne,Mit}`, Klassengrenze `kleinmengenGrenzeSeiten` = 20
+Inhaltsseiten inklusiv) — unabhängig von Papier/Farbe, wie an der Kasse; Cello und Express kommen
+obendrauf. Die Differenz Kassenpreis − Normalpreis(1 Ex.) wird bis `kleinmengenBisAuflage` (10)
+im Rhythmus der eigenen Preiskurve ausgeblendet: Anteil = (P(10) − P(A)) / (P(10) − P(1)). Bei 10
+gilt die normale Rechnung → kein Sprung bei 11. Dazu `gcUmschlagAbAuflage` 11 → 1 (Umschlag-
+Zuschlag 5 € + 0,05 €/Ex. ab dem ersten Exemplar), sonst bliebe der heutige 9-€-Sprung bei 11.
+Zwei Zellen der 1er-Spalte geglättet (BT 9: 15 → 14, BT 11: 20 → 19,50), weil ein Schritt der
+1er-Spalte, der größer ist als der der 2er-Spalte, bei A5/A6 und 2 Ex. Preisrückgänge um Cent
+bei +4 Seiten erzeugte; die 1er-Spalte ist durch den Anker überdeckt.
+
+**Gemessen (alle 4.532 GC-Kombinationen × 1–12 Ex. = 54.384 Zellen):** 0 Preisrückgänge bei
++1 Ex., 0 bei +4 Seiten, 0 Empfehlungswechsel gegenüber heute (34.980 Kombis bis 50 Ex.).
+Größte Erhöhung +8,82 € (A4 4 S. + Umschlag, 1 Ex.: 21,18 → 30 €), größte Senkung −14,63 €
+(A4 BD_150 4/4 44 S. ohne U, 1 Ex.: 44,63 → 30 €) — beides Folge der Kassenpreise selbst.
+Schritt 10 → 11 Ex. maximal 5,60 € (= normaler Exemplarschritt). Ab 11 Ex. unverändert.
+Tabelle für Guido: `Kleinmengen-Kassenanker-Preise-bis-12-Ex.xlsx` (gitignoriert).
+
+**Zurück zum heutigen Stand:** `kleinmengenBisAuflage` = 0 und `gcUmschlagAbAuflage` = 11 in der
+Verwaltung (bzw. Verlauf → rev 16 wiederherstellen); Code per Revert des PR.
+
+**Offen bei Guido:** Freigabe; ob A5/A6 dieselben Kassenpreise wie A4 bekommen (aktuell ja);
+ob die Senkung dicker Broschüren im Einzelstück gewollt ist (folgt aus seinem 40-S.-Ziel).

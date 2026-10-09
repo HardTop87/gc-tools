@@ -43,6 +43,12 @@ const SETTINGS_META = {
   gcDickenAufschlagAbMm: { label: 'GC Dickenaufschlag ab Buchdicke', einheit: 'mm', step: 0.05, hinweis: 'darunter kein Aufschlag' },
   gcDickenAufschlagAbAuflage: { label: 'GC Dickenaufschlag ab Auflage', einheit: 'Ex.', step: 5, min: 1, hinweis: 'A0 — zugleich Nullpunkt der Formel' },
   gcDickenAufschlagFaktor: { label: 'GC Dickenaufschlag: Faktor X', einheit: '€', step: 0.5, hinweis: 'pro mm über der Grenze und Exemplar über A0' },
+  kleinmengenBisAuflage: { label: 'Kassen-Anker bis Auflage', einheit: 'Ex.', step: 1, hinweis: 'bei 1 Ex. gilt der Kassenpreis, bis hier wird ausgeblendet; 0 = aus' },
+  kleinmengenGrenzeSeiten: { label: 'Kassen-Anker: Seitengrenze', einheit: 'Seiten', step: 4, min: 4, hinweis: 'bis einschließlich = kleine Klasse (Inhaltsseiten)' },
+  kleinmengenKasseBisGrenzeOhne: { label: 'Kassenpreis kleine Klasse ohne Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
+  kleinmengenKasseBisGrenzeMit: { label: 'Kassenpreis kleine Klasse mit Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
+  kleinmengenKasseAbGrenzeOhne: { label: 'Kassenpreis große Klasse ohne Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
+  kleinmengenKasseAbGrenzeMit: { label: 'Kassenpreis große Klasse mit Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
 };
 
 const WV_VARIANT_LABELS = {
@@ -90,6 +96,7 @@ const SETTINGS_GROUPS = {
   faktoren: [
     { title: 'GC Umschlag-Zuschlag', keys: ['gcUmschlagGrundkosten', 'gcUmschlagStueckpreis', 'gcUmschlagAbAuflage'] },
     { title: 'GC Dickenaufschlag (weicher Übergang zum Partner)', keys: ['gcDickenAufschlagAbMm', 'gcDickenAufschlagAbAuflage', 'gcDickenAufschlagFaktor'] },
+    { title: 'GC Kleinmengen: Kassen-Anker (1 Ex. = Kassenpreis, Ausblendung bis Auflage)', keys: ['kleinmengenBisAuflage', 'kleinmengenGrenzeSeiten', 'kleinmengenKasseBisGrenzeOhne', 'kleinmengenKasseBisGrenzeMit', 'kleinmengenKasseAbGrenzeOhne', 'kleinmengenKasseAbGrenzeMit'] },
     { title: 'Seitenlimits (Broschürendicke)', keys: ['maxDickeGC', 'maxDickePartner'] },
     { title: 'Empfehlung der Route', keys: ['preferInternDelta', 'preferKoppDelta'] },
   ],

@@ -32,6 +32,9 @@ function preis(config, inputs) {
 //     begrenzt durch die Empfehlungs-Toleranzen (preferInternDelta/preferKoppDelta).
 // In keinem gemessenen Fall liegt die Summe UNTER dem echten Preis — die Abweichung
 // geht immer zugunsten des Betriebs (siehe Test).
+// Kassen-Anker (2.6.0, 1–10 Ex.): Der Preis ist dort linear in Kassenpreis und
+// Normalpreis bei 10 Ex.; die Summe der Einzelaufschläge bleibt exakt (150.468
+// Umschlag-Kombinationen bei 1–10 Ex. gemessen, Abweichung 0).
 // Stützstellen ohne mögliche Route liefern bewusst `null`; im Shop müssen daraus
 // LEERE Zellen werden (Leadprint blendet Optionen ohne Preis aus), niemals 0.
 export function computeInhaltZeile({ config, formatKey, farbigkeit, pInhaltId, auflage, seitenListe = SEITEN_STUETZSTELLEN }) {

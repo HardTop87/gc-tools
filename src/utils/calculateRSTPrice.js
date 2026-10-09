@@ -235,7 +235,7 @@ function calcCelloCosts({ config, settings, hasUmschlag, coverPaper, celloType, 
   };
 }
 
-function calcSingleRoute(route, inputs, config, settings) {
+function calcSingleRoute(route, inputs, config, settings, opts = {}) {
   const { key, name, typ } = route;
   const {
     formatKey,
@@ -439,9 +439,28 @@ function calcSingleRoute(route, inputs, config, settings) {
     return { key, name, typ, error: `Auflage/Umfang bei ${name} nicht in Preistabelle hinterlegt.` };
   }
 
-  const gesamtBase =
+  const gesamtBaseOhneAnker =
     kostenDruckUndPapier + wvKosten + celloKostenGesamt + umschlagZuschlag +
     dickenAufschlag + settings.setupKosten;
+
+  // Kleinmengen-Kassen-Anker GC (Guido 12.08.2026, Preisbasis 2.6.0): Bei
+  // 1 Exemplar gilt exakt Guidos Kassenpreis (zwei Seitenklassen, je ohne/mit
+  // Umschlag) — wie an der Kasse unabhängig von Papier und Farbigkeit. Die
+  // Von 1 bis kleinmengenBisAuflage läuft der Preis auf einer GERADEN LINIE vom
+  // Kassenpreis zum Normalpreis bei BisAuflage (gleiche Konfiguration) — Guidos
+  // eigene Regel „linear verteilt zwischen 1 und 10 Stück". Ab BisAuflage gilt
+  // die normale Rechnung, es gibt keinen Sprung zur nächsten Auflage.
+  // Garantiert ohne Preisrückgang: über die Auflage, weil die Linie steigt
+  // (Kasse ist auf Normal(Bis) gedeckelt); über die Seiten, weil der
+  // Kassenpreis innerhalb einer Klasse konstant ist und Normal(Bis) mit den
+  // Seiten wächst. (Zwei frühere Varianten, die an der Preiskurve 1–10 hingen,
+  // erzeugten bei geänderten Einstellungen Cent-Rückgänge — gemessen 10.10.)
+  // Cello und Express kommen obendrauf (Linie ohne Cello, Standard).
+  // kleinmengenBisAuflage ≤ 1 = aus.
+  const kleinmengenAnker = opts.ohneAnker
+    ? 0
+    : berechneKleinmengenAnker(route, inputs, config, settings, hasUmschlag, gesamtBaseOhneAnker - celloKostenGesamt);
+  const gesamtBase = gesamtBaseOhneAnker + kleinmengenAnker;
   const isExpress = produktionszeit === 'express';
   const expressSurcharge = isExpress ? gesamtBase * settings.expressFaktor : 0;
   const gesamt = gesamtBase + expressSurcharge;
@@ -487,11 +506,39 @@ function calcSingleRoute(route, inputs, config, settings) {
     celloType: celloTypeEffektiv,
     umschlagZuschlag,
     dickenAufschlag,
+    kleinmengenAnker,
     setupKosten: settings.setupKosten,
     wvKosten,
     weightPerCopyG,
     weightTotalKg,
   };
+}
+
+function berechneKleinmengenAnker(route, inputs, config, settings, hasUmschlag, normalpreisAktuell) {
+  const bis = settings.kleinmengenBisAuflage;
+  if (!route.kleinmengenAnker || !(bis > 1) || inputs.auflage >= bis) return 0;
+
+  const refBis = calcSingleRoute(
+    route,
+    { ...inputs, auflage: bis, celloUmschlag: 'ohne', produktionszeit: 'standard' },
+    config,
+    settings,
+    { ohneAnker: true },
+  );
+  if (refBis.error) return 0;
+
+  const bisGrenze = inputs.seiten <= settings.kleinmengenGrenzeSeiten;
+  const kasse = bisGrenze
+    ? (hasUmschlag ? settings.kleinmengenKasseBisGrenzeMit : settings.kleinmengenKasseBisGrenzeOhne)
+    : (hasUmschlag ? settings.kleinmengenKasseAbGrenzeMit : settings.kleinmengenKasseAbGrenzeOhne);
+  // Deckel: Ein Kassenpreis über dem Normalpreis bei BisAuflage würde mehr
+  // Exemplare billiger machen (Preis fällt von Kasse auf Normal(Bis)). Dann gilt
+  // bei 1 Ex. höchstens Normal(Bis) — mit den Standardwerten nie aktiv
+  // (kleinster Normalpreis bei 10 Ex. = 31,17 € gegen Kasse 25 €).
+  const kasseWirksam = Math.min(kasse, refBis.gesamt);
+  const fortschritt = (inputs.auflage - 1) / (bis - 1);
+  const linienpreis = kasseWirksam + (refBis.gesamt - kasseWirksam) * fortschritt;
+  return linienpreis - normalpreisAktuell;
 }
 
 // Prioritätsreihenfolge = Reihenfolge der Routen in der Config. Eine Route

@@ -43,6 +43,12 @@ const SETTINGS_META = {
   gcDickenAufschlagAbMm: { label: 'GC Dickenaufschlag ab Buchdicke', einheit: 'mm', step: 0.05, hinweis: 'darunter kein Aufschlag' },
   gcDickenAufschlagAbAuflage: { label: 'GC Dickenaufschlag ab Auflage', einheit: 'Ex.', step: 5, min: 1, hinweis: 'A0 — zugleich Nullpunkt der Formel' },
   gcDickenAufschlagFaktor: { label: 'GC Dickenaufschlag: Faktor X', einheit: '€', step: 0.5, hinweis: 'pro mm über der Grenze und Exemplar über A0' },
+  kleinmengenBisAuflage: { label: 'Kassen-Anker bis Auflage', einheit: 'Ex.', step: 1, hinweis: 'bei 1 Ex. gilt der Kassenpreis, bis hier gerade Linie zum Normalpreis; 0 = aus, sonst 2–20' },
+  kleinmengenGrenzeSeiten: { label: 'Kassen-Anker: Seitengrenze', einheit: 'Seiten', step: 4, min: 4, hinweis: 'bis einschließlich = kleine Klasse (Inhaltsseiten)' },
+  kleinmengenKasseBisGrenzeOhne: { label: 'Kassenpreis kleine Klasse ohne Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
+  kleinmengenKasseBisGrenzeMit: { label: 'Kassenpreis kleine Klasse mit Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
+  kleinmengenKasseAbGrenzeOhne: { label: 'Kassenpreis große Klasse ohne Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
+  kleinmengenKasseAbGrenzeMit: { label: 'Kassenpreis große Klasse mit Umschlag', einheit: '€', step: 0.5, hinweis: '1 Exemplar, unabhängig von Papier und Farbigkeit' },
 };
 
 const WV_VARIANT_LABELS = {
@@ -90,6 +96,7 @@ const SETTINGS_GROUPS = {
   faktoren: [
     { title: 'GC Umschlag-Zuschlag', keys: ['gcUmschlagGrundkosten', 'gcUmschlagStueckpreis', 'gcUmschlagAbAuflage'] },
     { title: 'GC Dickenaufschlag (weicher Übergang zum Partner)', keys: ['gcDickenAufschlagAbMm', 'gcDickenAufschlagAbAuflage', 'gcDickenAufschlagFaktor'] },
+    { title: 'GC Kleinmengen: Kassen-Anker (1 Ex. = Kassenpreis, Ausblendung bis Auflage)', keys: ['kleinmengenBisAuflage', 'kleinmengenGrenzeSeiten', 'kleinmengenKasseBisGrenzeOhne', 'kleinmengenKasseBisGrenzeMit', 'kleinmengenKasseAbGrenzeOhne', 'kleinmengenKasseAbGrenzeMit'] },
     { title: 'Seitenlimits (Broschürendicke)', keys: ['maxDickeGC', 'maxDickePartner'] },
     { title: 'Empfehlung der Route', keys: ['preferInternDelta', 'preferKoppDelta'] },
   ],
@@ -187,12 +194,17 @@ function Chip({ label, active, disabled, onClick }) {
   );
 }
 
-function FieldCard({ title, fields }) {
+function FieldCard({ title, fields, note }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-[18px_20px_20px] shadow-card">
       <div className="mb-3.5 text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint">
         {title}
       </div>
+      {note && (
+        <div className="mb-3.5 rounded-lg border border-warn-bd bg-warn-soft px-3 py-2 text-[12px] text-warn">
+          {note}
+        </div>
+      )}
       <div className="flex flex-col gap-3.5">
         {fields.map((field) => (
           <label key={field.key} className="flex flex-col gap-[5px]">
@@ -633,10 +645,18 @@ export default function Verwaltung() {
       };
     };
 
+    // Ältere Preisstände (vor 2.6.0) bekommen die Kassen-Anker-Settings per
+    // Migration ergänzt, aber nicht das Route-Flag — die Felder wären sichtbar,
+    // aber wirkungslos. Deshalb ein Hinweis, bis der neue Standard veröffentlicht ist.
+    const ankerAktiv = (config.routen ?? []).some((route) => route.kleinmengenAnker);
     const groups = (SETTINGS_GROUPS[activeTab] ?? [])
       .map((group) => ({
         title: group.title,
         fields: group.keys.filter((key) => key in config.settings).map(settingField),
+        note:
+          group.keys.includes('kleinmengenBisAuflage') && !ankerAktiv
+            ? 'In diesem Preisstand noch nicht aktiv. „Auf Standard zurücksetzen" schaltet den Kassen-Anker ein.'
+            : null,
       }))
       .filter((group) => group.fields.length > 0);
 
@@ -1035,7 +1055,7 @@ export default function Verwaltung() {
           </p>
           <div className="grid items-start gap-3.5 md:grid-cols-2 xl:grid-cols-3">
             {fieldGroups.map((group) => (
-              <FieldCard key={group.title} title={group.title} fields={group.fields} />
+              <FieldCard key={group.title} title={group.title} fields={group.fields} note={group.note} />
             ))}
           </div>
         </div>

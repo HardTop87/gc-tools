@@ -12,10 +12,21 @@ import { BlobNotFoundError, del, get, head, list, put } from '@vercel/blob';
 // veraltet ausgeliefert werden, und das Anlegen mit allowOverwrite:false ist
 // ein atomarer Konfliktschutz: Wer dieselbe Revision als Zweiter schreibt,
 // scheitert am Storage selbst — kein Read-after-Write-Fenster mehr.
-const REV_PREFIX = 'pricing-config/rev-';
+//
+// PRODUKTION VS. VORSCHAU (10.10.2026): Vercel-Vorschau-Deployments (jeder PR)
+// teilen sich denselben Blob-Store mit der Produktion. Ohne Trennung zeigte eine
+// Vorschau den Produktions-Preisstand statt des neuen Repo-Standards, und ein
+// „Auf Standard zurücksetzen" in der Vorschau hätte den neuen Stand LIVE
+// veröffentlicht — an Code vorbei, der ihn noch gar nicht versteht. Deshalb
+// schreibt und liest nur die Produktion unter pricing-config/; alle anderen
+// Umgebungen (Vorschau, lokal) unter pricing-config-preview/. Eine leere
+// Vorschau liefert 204 → der Rechner nutzt den Repo-Standard des Branches.
+const IS_PRODUCTION = process.env.VERCEL_ENV === 'production';
+const REV_PREFIX = IS_PRODUCTION ? 'pricing-config/rev-' : 'pricing-config-preview/rev-';
 const REV_PATTERN = /rev-(\d+)\.json$/;
 // Alter Einzel-Blob — wird nur noch gelesen, solange keine Revisionsdatei existiert.
-const LEGACY_PATH = 'pricing-config.json';
+// Nur in der Produktion: Eine Vorschau soll nie auf den Produktions-Altbestand fallen.
+const LEGACY_PATH = IS_PRODUCTION ? 'pricing-config.json' : null;
 // So viele Revisionsdateien bleiben als Historie stehen; ältere werden nach
 // einem erfolgreichen Publish aufgeräumt (best effort). Die Historie ist über
 // GET ?history=1 sichtbar und über GET ?rev=N + erneutes Veröffentlichen
@@ -62,6 +73,7 @@ async function listRevisions() {
 // überschrieben wurde und daher veraltet gecacht sein kann. Nur relevant,
 // solange noch keine Revisionsdatei existiert.
 async function readLegacyConfig() {
+  if (!LEGACY_PATH) return null;
   try {
     const { url } = await head(LEGACY_PATH);
     const freshUrl = `${url}${url.includes('?') ? '&' : '?'}fresh=${Date.now()}`;

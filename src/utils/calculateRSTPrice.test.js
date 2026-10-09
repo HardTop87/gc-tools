@@ -80,7 +80,7 @@ describe('GC (Horizon)', () => {
     expect(routeResult(tooMany, 'gc_horizon').error).toContain('maximal 500');
   });
 
-  it('berechnet den Umschlag-Zuschlag: 10 → 0 €, 11 → 5,55 €, 100 → 10 €', () => {
+  it('berechnet den Umschlag-Zuschlag ab 1 Ex. (2.6.0): 1 → 5,05 €, 10 → 5,50 €, 11 → 5,55 €, 100 → 10 €', () => {
     const withCover = (auflage) =>
       routeResult(
         calculateRSTPrice(
@@ -90,7 +90,8 @@ describe('GC (Horizon)', () => {
         'gc_horizon',
       );
 
-    expect(withCover('10').umschlagZuschlag).toBe(0);
+    expect(withCover('1').umschlagZuschlag).toBeCloseTo(5.05, 10);
+    expect(withCover('10').umschlagZuschlag).toBeCloseTo(5.5, 10);
     expect(withCover('11').umschlagZuschlag).toBeCloseTo(5.55, 10);
     expect(withCover('100').umschlagZuschlag).toBeCloseTo(10, 10);
   });
@@ -118,26 +119,109 @@ describe('GC (Horizon)', () => {
     expect(routeResult(tooThick, 'gc_horizon').error).toContain('nicht in Preistabelle');
   });
 
-  // Guidos Kleinmengen-Zielpreise (25/30/30/35 € bei Auflage 1) wurden bis Preisbasis
-  // 2.2.0 durch die alte Absolut-Makulatur gepolstert: 5 Netto-Bogen bekamen dort 9
-  // Makulaturbogen. Mit dem Prozentmodell (2.3.0) fällt dieses Polster weg, die Preise
-  // liegen jetzt 2,5–7 € darunter. Guidos eigener Satz dazu lautet „Kompensation über
-  // den Verarbeitungspreis" — d. h. die WV-Tabelle müsste in den Kleinststaffeln
-  // angehoben werden. Das ist seine Entscheidung; bis dahin hält dieser Test den
-  // Ist-Stand fest, damit die Lücke nicht unbemerkt weiter wandert.
-  it('hält den Kleinmengen-Ist-Stand fest (Auflage 1) — Zielpreise offen bei Guido', () => {
-    const gcTotal = (form) => routeResult(calculateRSTPrice(form, config), 'gc_horizon').gesamt;
-    const cheap = { pInhaltId: 'N_80', dInhaltKey: '1c', dUmschlagKey: '1c', auflage: '1' };
+});
 
-    expect(gcTotal(baseForm({ ...cheap, seiten: '20' }))).toBeCloseTo(21.75, 2); // Ziel 25
+describe('Kleinmengen-Kassen-Anker GC (Guido 12.08.2026, Preisbasis 2.6.0)', () => {
+  const gc = (form) => routeResult(calculateRSTPrice(form, config), 'gc_horizon');
+  const referenz = { pInhaltId: 'N_80', dInhaltKey: '4c', dUmschlagKey: '4c' };
+  const mitU = { hasUmschlag: true, pUmschlagId: 'N_250' };
+
+  it('bei 1 Ex. gilt in der Referenzkonfiguration exakt der Kassenpreis (25/30 bzw. 30/35 €)', () => {
+    expect(gc(baseForm({ ...referenz, auflage: '1', seiten: '20' })).gesamt).toBeCloseTo(25, 8);
+    expect(gc(baseForm({ ...referenz, ...mitU, auflage: '1', seiten: '20' })).gesamt).toBeCloseTo(30, 8);
+    expect(gc(baseForm({ ...referenz, auflage: '1', seiten: '24' })).gesamt).toBeCloseTo(30, 8);
+    expect(gc(baseForm({ ...referenz, ...mitU, auflage: '1', seiten: '24' })).gesamt).toBeCloseTo(35, 8);
+    // Seitengrenze ist inklusiv: 8 Seiten = kleine Klasse, 48 = große Klasse
+    expect(gc(baseForm({ ...referenz, auflage: '1', seiten: '8' })).gesamt).toBeCloseTo(25, 8);
+    expect(gc(baseForm({ ...referenz, auflage: '1', seiten: '48' })).gesamt).toBeCloseTo(30, 8);
+  });
+
+  it('gilt wie an der Kasse für jedes Papier und jede Farbigkeit; Cello kommt obendrauf', () => {
+    expect(gc(baseForm({ ...referenz, dInhaltKey: '1c', auflage: '1', seiten: '20' })).gesamt).toBeCloseTo(25, 8);
+    expect(gc(baseForm({ ...referenz, pInhaltId: 'BD_170', auflage: '1', seiten: '20' })).gesamt).toBeCloseTo(25, 8);
+    expect(gc(baseForm({ pInhaltId: 'CC_120', dInhaltKey: '4c', dUmschlagKey: '4c', hasUmschlag: true, pUmschlagId: 'CC_300', auflage: '1', seiten: '20' })).gesamt).toBeCloseTo(30, 8);
+    const cello = gc(baseForm({ pInhaltId: 'CC_120', dInhaltKey: '4c', dUmschlagKey: '4c', hasUmschlag: true, pUmschlagId: 'CC_300', celloUmschlag: 'matt', auflage: '1', seiten: '20' }));
+    expect(cello.gesamt).toBeCloseTo(30 + cello.celloKosten, 8);
+    expect(cello.celloKosten).toBeGreaterThan(0);
+    // ab 2 Ex. werden Papier und Farbe wieder unterscheidbar (Anker fadet aus)
+    expect(gc(baseForm({ ...referenz, dInhaltKey: '1c', auflage: '2', seiten: '20' })).gesamt)
+      .toBeLessThan(gc(baseForm({ ...referenz, auflage: '2', seiten: '20' })).gesamt);
+  });
+
+  it('läuft auf einer geraden Linie vom Kassenpreis (1 Ex.) zum Normalpreis bei kleinmengenBisAuflage', () => {
+    const aus = getDefaultPricingConfig();
+    aus.settings.kleinmengenBisAuflage = 0;
+    const normal = (auflage) =>
+      routeResult(calculateRSTPrice(baseForm({ ...referenz, auflage, seiten: '40' }), aus), 'gc_horizon').gesamt;
+    const preis = (auflage) => gc(baseForm({ ...referenz, auflage, seiten: '40' })).gesamt;
+    expect(preis('1')).toBeCloseTo(30, 8);
+    expect(preis('4')).toBeCloseTo(30 + ((normal('10') - 30) * 3) / 9, 8);
+    expect(preis('10')).toBeCloseTo(normal('10'), 8);
+    expect(gc(baseForm({ ...referenz, auflage: '10', seiten: '40' })).kleinmengenAnker).toBe(0);
+    expect(gc(baseForm({ ...referenz, auflage: '11', seiten: '40' })).kleinmengenAnker).toBe(0);
+    expect(normal('1')).toBeCloseTo(37.2, 1); // ohne Anker wie bisher
+  });
+
+  it('deckelt den Kassenpreis auf den Normalpreis bei BisAuflage (sonst würden mehr Exemplare billiger)', () => {
+    const teuer = getDefaultPricingConfig();
+    teuer.settings.kleinmengenKasseBisGrenzeOhne = 200;
+    teuer.settings.kleinmengenKasseAbGrenzeOhne = 200;
+    teuer.settings.kleinmengenKasseBisGrenzeMit = 200;
+    teuer.settings.kleinmengenKasseAbGrenzeMit = 200;
+    const form = (auflage) => baseForm({ ...referenz, formatKey: 'A6_Hoch', dInhaltKey: '1c', pInhaltId: 'CC_100', auflage, seiten: '8' });
+    const preis = (auflage) => routeResult(calculateRSTPrice(form(auflage), teuer), 'gc_horizon').gesamt;
+    for (let a = 2; a <= 11; a += 1) expect(preis(String(a))).toBeGreaterThanOrEqual(preis(String(a - 1)) - 1e-9);
+    expect(preis('1')).toBeCloseTo(preis('10'), 8);
+  });
+
+  it('Aus-Schalter (BisAuflage 0, Umschlag-Zuschlag ab 11) rechnet exakt wie Preisbasis 2.5.0', () => {
+    const aus = getDefaultPricingConfig();
+    aus.settings.kleinmengenBisAuflage = 0;
+    aus.settings.gcUmschlagAbAuflage = 11;
+    const gcAus = (form) => routeResult(calculateRSTPrice(form, aus), 'gc_horizon').gesamt;
+    // Referenzwerte aus 2.5.0 (main), A4 N_80 4/4, 1 Ex.
+    expect(gcAus(baseForm({ ...referenz, auflage: '1', seiten: '36' }))).toBeCloseTo(36.46, 2);
+    expect(gcAus(baseForm({ ...referenz, ...mitU, auflage: '1', seiten: '32' }))).toBeCloseTo(37.71, 2);
+    expect(gcAus(baseForm({ ...referenz, ...mitU, auflage: '10', seiten: '20' }))).toBeCloseTo(68.79, 2);
+  });
+
+  it('erzeugt keinen Preisrückgang bei +1 Exemplar und keinen Sprung bei 11 (1–12 Ex., alle Seiten, ohne/mit)', () => {
+    for (const hasUmschlag of [false, true]) {
+      for (let seiten = 8; seiten <= (hasUmschlag ? 44 : 48); seiten += 4) {
+        let prev = null;
+        let step10to11 = 0;
+        let maxOtherStep = 0;
+        for (let auflage = 1; auflage <= 12; auflage += 1) {
+          const r = gc(baseForm({ ...referenz, ...(hasUmschlag ? mitU : {}), auflage: String(auflage), seiten: String(seiten) }));
+          expect(r.error).toBeNull();
+          if (prev !== null) {
+            expect(r.gesamt).toBeGreaterThanOrEqual(prev);
+            if (auflage === 11) step10to11 = r.gesamt - prev;
+            else if (auflage === 12) maxOtherStep = r.gesamt - prev;
+          }
+          prev = r.gesamt;
+        }
+        // Schritt 10→11 nicht größer als der normale Schritt 11→12 plus 1 €
+        expect(step10to11).toBeLessThanOrEqual(maxOtherStep + 1);
+      }
+    }
+  });
+
+  it('wirkt vor dem Express-Aufschlag, nur bei GC, und ohne Referenzpreis gar nicht', () => {
+    const std = gc(baseForm({ ...referenz, auflage: '1', seiten: '20' }));
+    const exp = gc(baseForm({ ...referenz, auflage: '1', seiten: '20', produktionszeit: 'express' }));
+    expect(exp.gesamt).toBeCloseTo(25 * 1.1, 8);
+    expect(exp.kleinmengenAnker).toBeCloseTo(std.kleinmengenAnker, 8);
+
+    const calc = calculateRSTPrice(baseForm({ ...referenz, auflage: '10', seiten: '20' }), config);
+    expect(routeResult(calc, 'kopp').error).toBeNull();
+    expect(routeResult(calc, 'kopp').kleinmengenAnker).toBe(0);
+
+    const ohneReferenz = getDefaultPricingConfig();
+    delete ohneReferenz.routen.find((r) => r.key === 'gc_horizon').kleinmengenAnker;
     expect(
-      gcTotal(baseForm({ ...cheap, seiten: '20', hasUmschlag: true, pUmschlagId: 'N_160' })),
-    ).toBeCloseTo(27.48, 2); // Ziel 30
-    expect(gcTotal(baseForm({ ...cheap, seiten: '24' }))).toBeCloseTo(27.11, 2); // Ziel 30
-    expect(
-      gcTotal(baseForm({ ...cheap, seiten: '24', hasUmschlag: true, pUmschlagId: 'N_160' })),
-    ).toBeCloseTo(27.83, 2); // Ziel 35 — größte Lücke, WV-Zeile BT 7 kostet bei Auflage 1
-    // genauso viel wie BT 6, der Umschlag schlägt daher fast nicht durch.
+      routeResult(calculateRSTPrice(baseForm({ ...referenz, auflage: '1', seiten: '20' }), ohneReferenz), 'gc_horizon').kleinmengenAnker,
+    ).toBe(0);
   });
 });
 
@@ -588,6 +672,24 @@ describe('pricingConfig: Schema-Migration beim Laden', () => {
     const migriert = migratePricingConfig(kaputt);
     expect(migriert.settings.setupKosten).toBe('12');
     expect(validatePricingConfig(migriert).ok).toBe(false);
+  });
+});
+
+describe('pricingConfig: Validierung Kassen-Anker (2.6.0)', () => {
+  const mit = (overrides) => {
+    const c = getDefaultPricingConfig();
+    Object.assign(c.settings, overrides);
+    return validatePricingConfig(c);
+  };
+  it('erlaubt 0 (aus) und ganze Zahlen 2–20 als Grenzauflage', () => {
+    for (const bis of [0, 2, 10, 20]) expect(mit({ kleinmengenBisAuflage: bis }).ok).toBe(true);
+    for (const bis of [1, 5.5, 21, 501]) expect(mit({ kleinmengenBisAuflage: bis }).ok).toBe(false);
+  });
+  it('verlangt Kassenpreise > 0, große Klasse ≥ kleine, mit Umschlag ≥ ohne', () => {
+    expect(mit({ kleinmengenKasseBisGrenzeOhne: 0 }).ok).toBe(false);
+    expect(mit({ kleinmengenKasseAbGrenzeOhne: 20 }).ok).toBe(false);
+    expect(mit({ kleinmengenKasseBisGrenzeMit: 20 }).ok).toBe(false);
+    expect(mit({ kleinmengenKasseBisGrenzeOhne: 20, kleinmengenKasseBisGrenzeMit: 22 }).ok).toBe(true);
   });
 });
 

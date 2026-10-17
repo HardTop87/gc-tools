@@ -62,6 +62,10 @@ describe('Redesign rendert', () => {
     expect(html).toContain('Rückstichheftung');
     expect(html).toContain('Papierpreise');
     expect(html).toContain('80g Natur');
+    // M4: Bis der geteilte Stand geladen ist, sind Eingaben sichtbar gesperrt
+    // (der erste Render steht immer auf sharedStatus 'loading').
+    expect(html).toContain('wird noch geladen');
+    expect(html).toContain('disabled=""');
   });
 
   it('PayPal Export', () => {

@@ -71,7 +71,7 @@ export default function RechnerRST() {
   const refreshSeqRef = useRef(0);
 
   const settings = config.settings;
-  const formatOptions = getFormatOptions(config);
+  const formatOptions = useMemo(() => getFormatOptions(config), [config]);
   const celloLabels = useMemo(() => getCelloLabels(config), [config]);
   const contentPaperOptions = getContentPaperOptions(config, form.formatKey);
   const coverPaperOptions = getCoverPaperOptions(config, form.formatKey, form.pInhaltId);
@@ -79,6 +79,16 @@ export default function RechnerRST() {
   const selectedContentPaper = contentPaperOptions.find((paper) => paper.id === form.pInhaltId);
   const selectedCoverPaper = coverPaperOptions.find((paper) => paper.id === form.pUmschlagId);
   const expressProzent = Math.round((settings.expressFaktor || 0) * 100);
+
+  // N9: Kennt der (nachgeladene) Stand das gewählte Format nicht mehr, auf das
+  // erste vorhandene zurückfallen — analog zu den Papier-/Cello-Korrekturen
+  // unten. Sonst bliebe ein leeres Select mit „keine Route" stehen.
+  useEffect(() => {
+    const formatStillValid = formatOptions.some((option) => option.value === form.formatKey);
+    if (!formatStillValid && formatOptions[0]) {
+      setForm((prev) => ({ ...prev, formatKey: formatOptions[0].value }));
+    }
+  }, [formatOptions, form.formatKey]);
 
   useEffect(() => {
     const contentStillValid = contentPaperOptions.some((paper) => paper.id === form.pInhaltId);
@@ -153,12 +163,15 @@ export default function RechnerRST() {
   );
 
   // Fallback-Button: holt den geteilten Stand nach; die Neuberechnung ergibt
-  // sich automatisch aus dem neuen config-State.
+  // sich automatisch aus dem neuen config-State. N10: läuft über dieselbe
+  // Sequenznummer wie der Visibility-Refresh, damit eine langsamere ältere
+  // Antwort (egal aus welcher Quelle) nie eine neuere überschreibt.
   async function handleCalculate() {
     setIsCalculating(true);
+    const seq = ++refreshSeqRef.current;
     try {
       const result = await fetchSharedConfig();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== refreshSeqRef.current) return;
       if (result.config) setConfig(result.config);
       setConfigWarnung(warnungFromSource(result.source));
     } finally {

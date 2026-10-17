@@ -15,16 +15,59 @@ export function bogenpreis(papier) {
   return (papier?.preisPro1000 ?? 0) / 1000;
 }
 
+const FAMILIEN = ['CC', 'N', 'BD', 'R'];
+
+function isObj(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isText(value) {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+// Zahl, die auch nach Typprüfung eine Zahl ist: '67' > 0 wäre per Koerzion
+// wahr, würde aber in der Engine String-Preise ("15" + 3 = "153") erzeugen.
+function numAbove(value, min) {
+  return Number.isFinite(value) && value > min;
+}
+
+function numAtLeast(value, min) {
+  return Number.isFinite(value) && value >= min;
+}
+
+// Objektschlüssel der WV-Tabellen (Bogenteile-Zeilen, Auflagenstaffeln) als
+// ganze Zahl ≥ 1. Muss verlustfrei zurück in den Schlüssel passen ("007" oder
+// "1.5" findet die Engine über row[Number] nicht wieder) → sonst NaN.
+function intKey(key) {
+  return /^[1-9]\d*$/.test(key) ? Number(key) : NaN;
+}
+
+// Validierung darf nie werfen (Bug-Hunt V5 N8): die Verwaltung ruft sie im
+// Publish-Pfad auf, und eine Exception dort ließe den In-Flight-Zustand hängen.
+// Alle Zugriffe auf möglicherweise fehlende/falsch getypte Teile sind unten
+// abgesichert; der try/catch ist nur das letzte Netz.
 export function validatePricingConfig(config) {
+  try {
+    const errors = collectConfigErrors(config);
+    return { ok: errors.length === 0, errors };
+  } catch (error) {
+    return { ok: false, errors: [`Config konnte nicht geprüft werden: ${error?.message ?? error}`] };
+  }
+}
+
+function collectConfigErrors(config) {
   const errors = [];
 
-  if (!config || typeof config !== 'object') {
-    return { ok: false, errors: ['Config ist kein Objekt.'] };
-  }
+  if (!isObj(config)) return ['Config ist kein Objekt.'];
   if (!config.meta?.version) errors.push('meta.version fehlt.');
 
+  const s = isObj(config.settings) ? config.settings : {};
   for (const key of REQUIRED_SETTINGS) {
-    const value = config.settings?.[key];
+    const value = s[key];
     if (!Number.isFinite(value)) errors.push(`settings.${key} fehlt oder ist keine Zahl.`);
     else if (value < 0) errors.push(`settings.${key} darf nicht negativ sein.`);
   }
@@ -33,7 +76,6 @@ export function validatePricingConfig(config) {
   // Preisrückgänge bei mehr Seiten (Ausblendung über zu viele Staffeln), über
   // 500 wäre der Anker still aus (GC-Höchstauflage). Kassenpreise > 0 und in
   // sich steigend (große Klasse ≥ kleine, mit Umschlag ≥ ohne).
-  const s = config.settings ?? {};
   if (Number.isFinite(s.kleinmengenBisAuflage)) {
     const bis = s.kleinmengenBisAuflage;
     if (!(bis === 0 || (Number.isInteger(bis) && bis >= 2 && bis <= 20))) {
@@ -51,49 +93,91 @@ export function validatePricingConfig(config) {
     }
   }
 
-  if (!(config.papiere?.length >= 1)) errors.push('papiere: mindestens ein Papier erforderlich.');
-  if (!(config.formate?.length >= 1)) errors.push('formate: mindestens ein Format erforderlich.');
-  if (!(config.routen?.length >= 1)) errors.push('routen: mindestens eine Route erforderlich.');
-  if (!(Object.keys(config.wvTabellen ?? {}).length >= 1)) {
-    errors.push('wvTabellen: mindestens eine Tabelle erforderlich.');
+  // Pflichtlisten (Bug-Hunt V5 M1): eine fehlende oder falsch getypte Liste
+  // kam bisher als `?? []` durch und ließ die Engine mit TypeError abstürzen —
+  // Rechner für alle Nutzer in der ErrorBoundary, bis jemand den Verlauf nutzt.
+  for (const [name, label] of [['papiere', 'ein Papier'], ['formate', 'ein Format'], ['routen', 'eine Route']]) {
+    if (!Array.isArray(config[name])) errors.push(`${name}: muss eine Liste sein.`);
+    else if (!config[name].length) errors.push(`${name}: mindestens ${label} erforderlich.`);
   }
+  if (!Array.isArray(config.gewichtszuschlaege)) {
+    errors.push('gewichtszuschlaege: muss eine Liste sein (darf leer sein).');
+  }
+  if (!isObj(config.wvTabellen)) errors.push('wvTabellen: muss ein Objekt mit Tabellen sein.');
+  else if (!Object.keys(config.wvTabellen).length) errors.push('wvTabellen: mindestens eine Tabelle erforderlich.');
+  if (config.umschlagAusnahmen != null && !isObj(config.umschlagAusnahmen)) {
+    errors.push('umschlagAusnahmen: muss ein Objekt (Inhaltspapier → Liste von Umschlag-IDs) sein.');
+  }
+  if (!isObj(config.cello)) errors.push('cello: fehlt oder ist kein Objekt.');
 
   const paperIds = new Set();
-  for (const [i, p] of (config.papiere ?? []).entries()) {
+  for (const [i, p] of asArray(config.papiere).entries()) {
     const where = `papiere[${i}] (${p?.id ?? '?'})`;
-    if (!p?.id) errors.push(`${where}: id fehlt.`);
+    if (!isObj(p)) {
+      errors.push(`${where}: kein Objekt.`);
+      continue;
+    }
+    if (!isText(p.id)) errors.push(`${where}: id fehlt.`);
     else if (paperIds.has(p.id)) errors.push(`${where}: id doppelt.`);
     else paperIds.add(p.id);
-    if (!p?.name) errors.push(`${where}: name fehlt.`);
-    if (!['CC', 'N', 'BD', 'R'].includes(p?.familie)) errors.push(`${where}: familie muss CC/N/BD/R sein.`);
-    if (!(p?.gsm > 0)) errors.push(`${where}: gsm muss > 0 sein.`);
-    if (!(p?.dickeUm > 0)) errors.push(`${where}: dickeUm muss > 0 sein.`);
-    if (!(p?.preisPro1000 > 0)) errors.push(`${where}: preisPro1000 muss > 0 sein.`);
-  }
-
-  let lastGsm = -Infinity;
-  for (const [i, s] of (config.gewichtszuschlaege ?? []).entries()) {
-    if (!(s?.abGsm > lastGsm)) errors.push(`gewichtszuschlaege[${i}]: abGsm nicht aufsteigend.`);
-    lastGsm = s?.abGsm ?? lastGsm;
-    if (!(s?.zuschlag >= 0)) errors.push(`gewichtszuschlaege[${i}]: zuschlag muss ≥ 0 sein.`);
-  }
-
-  const formatKeys = new Set();
-  for (const [i, f] of (config.formate ?? []).entries()) {
-    const where = `formate[${i}] (${f?.key ?? '?'})`;
-    if (!f?.key) errors.push(`${where}: key fehlt.`);
-    else formatKeys.add(f.key);
-    if (!(f?.offenB > 0) || !(f?.offenH > 0)) errors.push(`${where}: offenB/offenH müssen > 0 sein.`);
-    if (!(f?.nutzenGC >= 1) || !(f?.nutzenPartner >= 1)) errors.push(`${where}: nutzenGC/nutzenPartner müssen ≥ 1 sein.`);
-    for (const listName of ['papiereInhalt', 'papiereUmschlag']) {
-      for (const id of f?.[listName] ?? []) {
-        if (!paperIds.has(id)) errors.push(`${where}: ${listName} referenziert unbekanntes Papier "${id}".`);
-      }
+    if (!isText(p.name)) errors.push(`${where}: name fehlt.`);
+    if (!FAMILIEN.includes(p.familie)) errors.push(`${where}: familie muss CC/N/BD/R sein.`);
+    for (const field of ['gsm', 'dickeUm', 'preisPro1000']) {
+      if (!numAbove(p[field], 0)) errors.push(`${where}: ${field} muss eine Zahl > 0 sein.`);
     }
   }
 
-  // umschlagAusnahmen ist optional: Inhaltspapier-ID → zusätzlich erlaubte Umschlag-IDs
-  for (const [inhaltId, coverIds] of Object.entries(config.umschlagAusnahmen ?? {})) {
+  let lastGsm = -Infinity;
+  for (const [i, g] of asArray(config.gewichtszuschlaege).entries()) {
+    const where = `gewichtszuschlaege[${i}]`;
+    if (!isObj(g)) {
+      errors.push(`${where}: kein Objekt.`);
+      continue;
+    }
+    if (!numAtLeast(g.abGsm, 0)) errors.push(`${where}: abGsm muss eine Zahl ≥ 0 sein.`);
+    else if (!(g.abGsm > lastGsm)) errors.push(`${where}: abGsm nicht aufsteigend.`);
+    if (Number.isFinite(g.abGsm)) lastGsm = g.abGsm;
+    if (!numAtLeast(g.zuschlag, 0)) errors.push(`${where}: zuschlag muss eine Zahl ≥ 0 sein.`);
+  }
+
+  const formatKeys = new Set();
+  // Alle Papiere, die irgendein Format als Umschlag anbietet (für umschlagAusnahmen)
+  const umschlagIdsAllerFormate = new Set();
+  for (const [i, f] of asArray(config.formate).entries()) {
+    const where = `formate[${i}] (${f?.key ?? '?'})`;
+    if (!isObj(f)) {
+      errors.push(`${where}: kein Objekt.`);
+      continue;
+    }
+    if (!isText(f.key)) errors.push(`${where}: key fehlt.`);
+    else if (formatKeys.has(f.key)) errors.push(`${where}: key doppelt.`);
+    else formatKeys.add(f.key);
+    if (!isText(f.name)) errors.push(`${where}: name fehlt.`);
+    for (const field of ['offenB', 'offenH']) {
+      if (!numAbove(f[field], 0)) errors.push(`${where}: ${field} muss eine Zahl > 0 sein.`);
+    }
+    for (const field of ['nutzenGC', 'nutzenPartner']) {
+      if (!numAtLeast(f[field], 1)) errors.push(`${where}: ${field} muss eine Zahl ≥ 1 sein.`);
+    }
+    for (const listName of ['papiereInhalt', 'papiereUmschlag']) {
+      if (!Array.isArray(f[listName])) {
+        errors.push(`${where}: ${listName} muss eine Liste von Papier-IDs sein.`);
+        continue;
+      }
+      for (const id of f[listName]) {
+        if (!paperIds.has(id)) errors.push(`${where}: ${listName} referenziert unbekanntes Papier "${id}".`);
+        else if (listName === 'papiereUmschlag') umschlagIdsAllerFormate.add(id);
+      }
+    }
+    if (Array.isArray(f.papiereInhalt) && !f.papiereInhalt.length) {
+      errors.push(`${where}: papiereInhalt braucht mindestens ein Inhaltspapier.`);
+    }
+  }
+
+  // umschlagAusnahmen ist optional: Inhaltspapier-ID → zusätzlich erlaubte Umschlag-IDs.
+  // Ein Umschlag, den kein Format anbietet, wäre eine wirkungslose Ausnahme (N5).
+  const ausnahmen = isObj(config.umschlagAusnahmen) ? config.umschlagAusnahmen : {};
+  for (const [inhaltId, coverIds] of Object.entries(ausnahmen)) {
     const where = `umschlagAusnahmen.${inhaltId}`;
     if (!paperIds.has(inhaltId)) errors.push(`${where}: unbekanntes Inhaltspapier.`);
     if (!Array.isArray(coverIds)) {
@@ -102,55 +186,173 @@ export function validatePricingConfig(config) {
     }
     for (const id of coverIds) {
       if (!paperIds.has(id)) errors.push(`${where}: unbekanntes Umschlagpapier "${id}".`);
+      else if (!umschlagIdsAllerFormate.has(id)) {
+        errors.push(`${where}: Umschlagpapier "${id}" ist in keinem Format als Umschlag hinterlegt — die Ausnahme wäre wirkungslos.`);
+      }
     }
   }
 
-  const tableNames = Object.keys(config.wvTabellen ?? {});
+  // WV-Tabellen: Zeile = Bogenteile (lückenlos), Spalte = Auflagenstaffel.
+  // Gesamtpreise müssen mit der Auflage und mit den Bogenteilen steigen oder
+  // gleich bleiben (N2) — ein Tippfehler „1" statt „75" ließe den Preis mit der
+  // Auflage fallen. Je Tabelle wird die höchste Staffel gemerkt, die in ALLEN
+  // Zeilen vorkommt: bis dorthin ist der Preis belegt, darüber friert die
+  // Engine ihn ein (siehe maxAuflage-Prüfung bei den Routen, M3).
+  const tables = isObj(config.wvTabellen) ? config.wvTabellen : {};
+  const tableNames = Object.keys(tables);
+  const tableMaxStaffel = new Map();
   for (const name of tableNames) {
-    const table = config.wvTabellen[name];
-    const rows = Object.keys(table).map(Number).sort((a, b) => a - b);
+    const table = tables[name];
+    const where = `wvTabellen.${name}`;
+    if (!isObj(table)) {
+      errors.push(`${where}: Tabelle fehlt oder ist kein Objekt.`);
+      continue;
+    }
+    const rowKeys = Object.keys(table);
+    if (!rowKeys.length) {
+      errors.push(`${where}: Tabelle ist leer.`);
+      continue;
+    }
+    const rows = rowKeys.map(intKey);
+    if (rows.some((row) => !(row >= 1))) {
+      errors.push(`${where}: Bogenteile-Zeilen müssen ganze Zahlen ≥ 1 sein.`);
+      continue;
+    }
+    rows.sort((a, b) => a - b);
     for (let i = 1; i < rows.length; i += 1) {
       if (rows[i] !== rows[i - 1] + 1) {
-        errors.push(`wvTabellen.${name}: Bogenteile-Zeilen nicht lückenlos (${rows[i - 1]} → ${rows[i]}).`);
+        errors.push(`${where}: Bogenteile-Zeilen nicht lückenlos (${rows[i - 1]} → ${rows[i]}).`);
       }
     }
-    for (const row of rows) {
-      const staffeln = Object.keys(table[row]).map(Number).sort((a, b) => a - b);
-      let last = 0;
+
+    let tableOk = true;
+    let maxStaffel = Infinity;
+    let prevRow = null;
+    for (const r of rows) {
+      const row = table[r];
+      const rowWhere = `${where}[${r}]`;
+      const staffeln = isObj(row) ? Object.keys(row).map(intKey) : [];
+      if (!isObj(row)) errors.push(`${rowWhere}: Zeile fehlt oder ist kein Objekt.`);
+      else if (!staffeln.length) errors.push(`${rowWhere}: keine Auflagenstaffel hinterlegt.`);
+      else if (staffeln.some((st) => !(st >= 1))) errors.push(`${rowWhere}: Auflagenstaffeln müssen ganze Zahlen ≥ 1 sein.`);
+      if (!isObj(row) || !staffeln.length || staffeln.some((st) => !(st >= 1))) {
+        tableOk = false;
+        prevRow = null;
+        continue;
+      }
+      staffeln.sort((a, b) => a - b);
+
+      let rowOk = true;
+      let lastPreis = -Infinity;
       for (const st of staffeln) {
-        if (!(st > last)) errors.push(`wvTabellen.${name}[${row}]: Staffeln nicht aufsteigend.`);
-        last = st;
-        if (!(table[row][st] > 0)) errors.push(`wvTabellen.${name}[${row}][${st}]: Preis muss > 0 sein.`);
+        const preis = row[st];
+        if (!numAbove(preis, 0)) {
+          errors.push(`${rowWhere}[${st}]: Preis muss eine Zahl > 0 sein.`);
+          rowOk = false;
+          continue;
+        }
+        if (preis < lastPreis) {
+          errors.push(`${rowWhere}[${st}]: Preis ${preis} fällt gegenüber der kleineren Staffel (${lastPreis}).`);
+        }
+        lastPreis = preis;
       }
+      if (rowOk && prevRow) {
+        for (const st of staffeln) {
+          if (Number.isFinite(prevRow[st]) && row[st] < prevRow[st]) {
+            errors.push(`${rowWhere}[${st}]: Preis ${row[st]} liegt unter dem der vorherigen Zeile (${prevRow[st]}) — mehr Bogenteile dürfen nicht billiger sein.`);
+          }
+        }
+      }
+      if (!rowOk) tableOk = false;
+      prevRow = rowOk ? row : null;
+      maxStaffel = Math.min(maxStaffel, staffeln[staffeln.length - 1]);
     }
+    if (tableOk) tableMaxStaffel.set(name, maxStaffel);
   }
 
-  for (const [i, r] of (config.routen ?? []).entries()) {
+  for (const [i, r] of asArray(config.routen).entries()) {
     const where = `routen[${i}] (${r?.key ?? '?'})`;
-    if (!r?.key || !r?.name) errors.push(`${where}: key/name fehlt.`);
-    if (!['eigen', 'partner'].includes(r?.typ)) errors.push(`${where}: typ muss "eigen" oder "partner" sein.`);
-    for (const fk of r?.formate ?? []) {
-      if (!formatKeys.has(fk)) errors.push(`${where}: unbekanntes Format "${fk}".`);
+    if (!isObj(r)) {
+      errors.push(`${where}: kein Objekt.`);
+      continue;
     }
-    if (!(config.settings?.[r?.maxDickeRef] > 0)) {
+    if (!isText(r.key) || !isText(r.name)) errors.push(`${where}: key/name fehlt.`);
+    if (!['eigen', 'partner'].includes(r.typ)) errors.push(`${where}: typ muss "eigen" oder "partner" sein.`);
+    if (!Array.isArray(r.formate) || !r.formate.length) {
+      errors.push(`${where}: formate muss eine nicht leere Liste von Format-Keys sein.`);
+    } else {
+      for (const fk of r.formate) {
+        if (!formatKeys.has(fk)) errors.push(`${where}: unbekanntes Format "${fk}".`);
+      }
+    }
+    // Werktage (N1): ohne Zahl stünde im Ergebnis produktionszeitWT = undefined
+    for (const field of ['wtStandard', 'wtExpress']) {
+      if (!numAtLeast(r[field], 1)) errors.push(`${where}: ${field} muss eine Zahl ≥ 1 sein (Werktage).`);
+    }
+    // minAuflage: leer (null) = keine Untergrenze. maxAuflage ist Pflicht (M3):
+    // 0 oder leer wirkte in der Engine wie „unbegrenzt", und über der höchsten
+    // Staffel rechnet getPriceFromTable mit dem eingefrorenen Staffelpreis weiter
+    // (Bug-Hunt B1: 4.000 Ex. zum Verarbeitungspreis von 1.000).
+    if (r.minAuflage != null && !numAtLeast(r.minAuflage, 1)) {
+      errors.push(`${where}: minAuflage muss leer oder eine Zahl ≥ 1 sein.`);
+    }
+    const maxOk = numAtLeast(r.maxAuflage, 1);
+    if (!maxOk) errors.push(`${where}: maxAuflage muss eine Zahl ≥ 1 sein (0 oder leer gilt nicht als „unbegrenzt").`);
+    if (maxOk && Number.isFinite(r.minAuflage) && r.minAuflage > r.maxAuflage) {
+      errors.push(`${where}: minAuflage (${r.minAuflage}) liegt über maxAuflage (${r.maxAuflage}).`);
+    }
+    if (!numAbove(s[r.maxDickeRef], 0)) {
       errors.push(`${where}: maxDickeRef muss auf eine Einstellung > 0 verweisen.`);
     }
-    if (r?.preferDeltaRef != null && !Number.isFinite(config.settings?.[r.preferDeltaRef])) {
+    if (r.preferDeltaRef != null && !Number.isFinite(s[r.preferDeltaRef])) {
       errors.push(`${where}: preferDeltaRef "${r.preferDeltaRef}" existiert nicht in den Einstellungen.`);
     }
-    if (!['nutzenGC', 'nutzenPartner'].includes(r?.nutzenRef)) errors.push(`${where}: nutzenRef ungültig.`);
-    const refs = typeof r?.wvTabelleRef === 'string' ? [r.wvTabelleRef] : Object.values(r?.wvTabelleRef ?? {});
+    if (!['nutzenGC', 'nutzenPartner'].includes(r.nutzenRef)) errors.push(`${where}: nutzenRef ungültig.`);
+
+    let refs = [];
+    if (isText(r.wvTabelleRef)) refs = [r.wvTabelleRef];
+    else if (isObj(r.wvTabelleRef)) refs = Object.values(r.wvTabelleRef);
     if (!refs.length) errors.push(`${where}: wvTabelleRef fehlt.`);
     for (const ref of refs) {
-      if (!tableNames.includes(ref)) errors.push(`${where}: WV-Tabelle "${ref}" existiert nicht.`);
+      if (!tableNames.includes(ref)) {
+        errors.push(`${where}: WV-Tabelle "${ref}" existiert nicht.`);
+        continue;
+      }
+      const grenze = tableMaxStaffel.get(ref);
+      if (maxOk && grenze !== undefined && r.maxAuflage > grenze) {
+        errors.push(`${where}: maxAuflage (${r.maxAuflage}) liegt über der höchsten Staffel (${grenze}) der WV-Tabelle "${ref}" — darüber würde der Verarbeitungspreis eingefroren.`);
+      }
     }
   }
 
-  if (!(config.cello?.arten ?? []).some((a) => a.key === 'ohne')) {
-    errors.push('cello.arten: Art "ohne" fehlt.');
+  const cello = isObj(config.cello) ? config.cello : {};
+  if (!Array.isArray(cello.erlaubteFamilien)) {
+    errors.push('cello.erlaubteFamilien: muss eine Liste von Papierfamilien sein.');
+  } else {
+    for (const fam of cello.erlaubteFamilien) {
+      if (!FAMILIEN.includes(fam)) errors.push(`cello.erlaubteFamilien: unbekannte Familie "${fam}".`);
+    }
+  }
+  if (!Array.isArray(cello.arten)) {
+    errors.push('cello.arten: muss eine Liste sein.');
+  } else {
+    const artKeys = new Set();
+    for (const [i, a] of cello.arten.entries()) {
+      const where = `cello.arten[${i}] (${a?.key ?? '?'})`;
+      if (!isObj(a)) {
+        errors.push(`${where}: kein Objekt.`);
+        continue;
+      }
+      if (!isText(a.key)) errors.push(`${where}: key fehlt.`);
+      else if (artKeys.has(a.key)) errors.push(`${where}: key doppelt.`);
+      else artKeys.add(a.key);
+      if (!isText(a.name)) errors.push(`${where}: name fehlt.`);
+      if (!numAtLeast(a.stueckpreis, 0)) errors.push(`${where}: stueckpreis muss eine Zahl ≥ 0 sein.`);
+    }
+    if (!artKeys.has('ohne')) errors.push('cello.arten: Art "ohne" fehlt.');
   }
 
-  return { ok: errors.length === 0, errors };
+  return errors;
 }
 
 // Lädt die Config und meldet, woher sie stammt:
@@ -171,10 +373,52 @@ export function migratePricingConfig(config) {
   // der Validierung auf — sie still durch Defaults zu ersetzen würde mit
   // Zahlen rechnen, die niemand eingegeben hat.
   const missing = Object.keys(defaultConfig.settings).filter((key) => !(key in settings));
-  if (!missing.length) return config;
-  const filled = { ...settings };
-  for (const key of missing) filled[key] = defaultConfig.settings[key];
-  return { ...config, settings: filled };
+  let next = config;
+  if (missing.length) {
+    const filled = { ...settings };
+    for (const key of missing) filled[key] = defaultConfig.settings[key];
+    next = { ...next, settings: filled };
+  }
+
+  // Bug-Hunt V5 (M3-Folge): maxAuflage ist seit der gehärteten Validierung
+  // Pflicht. Stände vor 2.3.0 (vor dem B1-Fix) tragen bei Kopp noch
+  // `maxAuflage: null` = „unbegrenzt" — die Engine rechnete dort oberhalb der
+  // höchsten Staffel mit eingefrorenem Verarbeitungspreis (genau der B1-Bug).
+  // Damit solche Revisionen aus dem Verlauf weiter wiederherstellbar bleiben,
+  // wird null/fehlend auf die höchste Staffel aufgefüllt, die in allen Zeilen
+  // aller referenzierten Tabellen vorkommt. Kaputte Werte (0, Strings) bleiben
+  // stehen und fallen in der Validierung auf.
+  if (Array.isArray(next.routen)) {
+    const routen = next.routen.map((route) => {
+      if (!route || typeof route !== 'object' || route.maxAuflage != null) return route;
+      const grenze = hoechsteGemeinsameStaffel(next.wvTabellen, route.wvTabelleRef);
+      return grenze == null ? route : { ...route, maxAuflage: grenze };
+    });
+    if (routen.some((r, i) => r !== next.routen[i])) next = { ...next, routen };
+  }
+  return next;
+}
+
+// Höchste Auflagenstaffel, die in jeder Zeile jeder referenzierten WV-Tabelle
+// vorkommt; null, wenn eine Tabelle fehlt oder unbrauchbar ist.
+function hoechsteGemeinsameStaffel(wvTabellen, ref) {
+  if (!wvTabellen || typeof wvTabellen !== 'object') return null;
+  const namen = typeof ref === 'string' ? [ref] : ref && typeof ref === 'object' ? Object.values(ref) : [];
+  if (!namen.length) return null;
+  let grenze = Infinity;
+  for (const name of namen) {
+    const table = wvTabellen[name];
+    if (!table || typeof table !== 'object') return null;
+    const rows = Object.values(table);
+    if (!rows.length) return null;
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') return null;
+      const staffeln = Object.keys(row).map(Number).filter((n) => Number.isInteger(n) && n >= 1);
+      if (!staffeln.length) return null;
+      grenze = Math.min(grenze, Math.max(...staffeln));
+    }
+  }
+  return Number.isFinite(grenze) ? grenze : null;
 }
 
 export function loadPricingConfigResult() {
@@ -396,7 +640,9 @@ export function getPendingPublish() {
   try {
     const raw = localStorage.getItem(PENDING_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    // Wie beim geteilten Stand erst migrieren (M5): ein Pending aus einer
+    // älteren App-Version würde sonst nach dem Deploy still verworfen.
+    const parsed = migratePricingConfig(JSON.parse(raw));
     return validatePricingConfig(parsed).ok ? parsed : null;
   } catch {
     return null;

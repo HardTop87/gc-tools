@@ -17,8 +17,15 @@ function applyTheme(theme) {
 }
 
 export function ThemeProvider({ children }) {
+  // N14: localStorage kann gesperrt sein (Privatmodus, Policy) — dann gilt
+  // das Systemthema statt eines Absturzes außerhalb der ErrorBoundary.
   const [theme, setThemeState] = useState(() => {
-    const saved = localStorage.getItem('gc_theme') || 'system';
+    let saved = 'system';
+    try {
+      saved = localStorage.getItem('gc_theme') || 'system';
+    } catch {
+      // Standard behalten
+    }
     applyTheme(saved);
     return saved;
   });
@@ -34,7 +41,11 @@ export function ThemeProvider({ children }) {
   }, [theme]);
 
   function setTheme(value) {
-    localStorage.setItem('gc_theme', value);
+    try {
+      localStorage.setItem('gc_theme', value);
+    } catch {
+      // Auswahl gilt dann nur für diese Sitzung
+    }
     applyTheme(value);
     setThemeState(value);
   }

@@ -20,10 +20,19 @@ export const SEITEN_STUETZSTELLEN_MIT_UMSCHLAG = [4, ...SEITEN_STUETZSTELLEN];
 // Routen-Tag je Preiszeile (Entscheidung Armin 13.08.): wandert als Suffix in
 // articlePrices.artikelnummer (z. B. BRO-RST-A4H-44-GC), damit der
 // Enfocus-Switch-Flow den Produzenten aus der Auftrags-XML lesen kann.
-// Achtung Näherung: getaggt wird die Route der Basiskalkulation der Zeile —
-// in seltenen Eckfällen kann eine Option (Umschlag-Farbigkeit) die echte
-// Empfehlung kippen; die exakte Auskunft bleibt der RST-Rechner (später
-// Option 3: /api/route für Switch).
+//
+// ACHTUNG, keine seltene Abweichung (H2, Bug-Hunt V5, Stand 12.10.2026):
+// Getaggt wird die Route der 8-Seiten-BASISZELLE der Zeile (Papier × Auflage).
+// Die Seitenzahl-Zellen derselben Zeile können eine andere Engine-Route haben —
+// systematisch ab 48 Seiten bei Auflage ≥ 100 (GC-Seitenlimit → Partner).
+// Gemessen A4H: 1.174 von 4.305 bepreisten Zellen (27 %) tragen ein anderes
+// Tag als ihre Engine-Route (GC→KOPP 641, GC→ILDA 533), betroffen 117 von
+// 260 Zeilen. Ein Switch-Flow, der den Produzenten nur aus dem Tag liest,
+// leitet diese Aufträge falsch. Entscheidung Armin/Guido offen:
+//   (a) so dokumentieren („Basiszellen-Route", Rechner bleibt die Auskunft),
+//   (b) Tag „MIX" bei Zeilen mit gemischten Routen,
+//   (c) /api/route für Switch priorisieren (exakt je Auftrag).
+// Bis dahin: Logik unverändert, der Tag ist die Basiszellen-Route.
 export const ROUTE_TAGS = {
   'GC (Horizon)': 'GC',
   'Partner Kopp': 'KOPP',
@@ -38,7 +47,8 @@ function seitenListenwerte(mapping) {
 // Preiszeilen eines ohne-Umschlag-Artikels im Shop-Modell:
 //   je freigeschaltetem Inhaltspapier × Auflagenstaffel eine Zeile mit
 //   { sortenId, papierId, auflage, preis (Basis = kleinste Seitenoption),
-//     route, produktionszeitWT,
+//     route, produktionszeitWT (Basiszelle), liefertage (= längste
+//     Produktionszeit aller Zellen der Zeile — „Zeilenmaximum", 10.10.2026),
 //     aufschlaege: { <listenwertId>: betrag | null } }
 // Fehlende Shop-IDs werden gesammelt statt still übersprungen.
 export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
@@ -94,9 +104,14 @@ export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
       route: zeile.route,
       produktionszeitWT: zeile.produktionszeitWT,
       // Shop-Spalten (Option 2 + Bonus): Routen-Tag in der Artikelnummer,
-      // echte Produktionszeit der Zeile als Liefertage
+      // Liefertage = Zeilenmaximum: Die Zeile (Papier × Auflage) trägt im Shop
+      // nur einen Liefertermin, der für jede Seitenzahl-Zelle reichen muss.
+      // Gemessen (10.10.2026, 270.610 Zellen): 0 gebrochene Zusagen, 13 % der
+      // Zellen zeigen einen Tag länger als nötig — jede feldweite Alternative
+      // (Offset an den Seiten-Listenwerten) ist deutlich schlechter.
       artikelnummer: `${artikel.artikelnummer}-${routeTag}`,
-      liefertage: zeile.produktionszeitWT,
+      liefertage: zeile.produktionszeitWTMax,
+      routenSeiten: zeile.routenSeiten,
       aufschlaege,
     });
   }
@@ -146,9 +161,12 @@ export function pruefeMappingVollstaendigkeit(config, mapping) {
   }
 
   // 4. Jede Format×Farbigkeit×Umschlag-Kombination der Config braucht einen Artikel
-  // mit Artikelnummer (Basis des Routen-Tags in articlePrices.artikelnummer)
+  // mit Artikelnummer (Basis des Routen-Tags in articlePrices.artikelnummer) und
+  // Leadprint-ID (Ziel der Weiterleitungen in den .rai-Spalten; ohne ID bliebe
+  // die Option bei allen Zwillingen still leer — M9, Bug-Hunt V5)
   for (const a of mapping.artikel ?? []) {
     if (!a.artikelnummer) probleme.push(`Artikel ${a.key}: keine artikelnummer im Mapping.`);
+    if (!a.leadprintId) probleme.push(`Artikel ${a.key}: keine leadprintId im Mapping.`);
   }
   const artikelKeys = new Set((mapping.artikel ?? []).map((a) => a.key));
   for (const format of config.formate) {

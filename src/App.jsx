@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { TopBar } from './components/TopBar';
 import Dashboard from './pages/Dashboard';
 import RechnerRST from './pages/Rechner-RST';
@@ -92,15 +92,27 @@ function AppTopBar({ isAuthenticated }) {
 }
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    const persistedAuth = localStorage.getItem('gc_auth') === 'true';
-    setIsAuthenticated(persistedAuth);
-  }, []);
+  // M7: Den gemerkten Login synchron beim ersten Render lesen — per Effect
+  // hätte der erste Render `false`, die Routen leiten dann auf /login um und
+  // von dort weiter auf /, bevor der Effect greift: Deep-Link/Reload auf
+  // /verwaltung oder /rechner-rst (auch „Seite neu laden" der ErrorBoundary)
+  // landete so immer auf dem Dashboard.
+  // N14: localStorage kann gesperrt sein (Privatmodus, Policy) — dann gilt
+  // „nicht angemeldet" statt eines Absturzes außerhalb der ErrorBoundary.
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      return localStorage.getItem('gc_auth') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const handleLogin = () => {
-    localStorage.setItem('gc_auth', 'true');
+    try {
+      localStorage.setItem('gc_auth', 'true');
+    } catch {
+      // Login gilt dann nur für diese Sitzung
+    }
     setIsAuthenticated(true);
   };
 

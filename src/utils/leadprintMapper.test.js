@@ -179,6 +179,30 @@ describe('Leadprint-Mapper: Umschlag-Artikel', () => {
     expect(ohne.some((z) => z.pInhaltId === 'R_90')).toBe(true);
   });
 
+  it('Zeilenmaximum deckt auch Umschlag-Farbigkeit und Veredelungszellen ab (N13)', () => {
+    // Die Zeile trägt im Shop einen Liefertermin; keine wählbare Zelle darf länger brauchen.
+    for (const auflage of [10, 100, 500, 1000]) {
+      const zeile = computeUmschlagZeile({
+        config, formatKey: 'A4_Hoch', farbigkeit: '4c', pInhaltId: 'CC_120', pUmschlagId: 'CC_300', auflage,
+      });
+      expect(zeile.veredelungMoeglich).toBe(true);
+      const wt = (overrides) => {
+        const calc = calculateRSTPrice({
+          formatKey: 'A4_Hoch', auflage, seiten: 8, pInhaltId: 'CC_120', dInhaltKey: '4c',
+          hasUmschlag: true, pUmschlagId: 'CC_300', dUmschlagKey: '1c', celloUmschlag: 'ohne',
+          produktionszeit: 'standard', ...overrides,
+        }, config);
+        return calc.validResults.find((r) => r.name === calc.recommendedName).produktionszeitWT;
+      };
+      expect(zeile.produktionszeitWTMax).toBeGreaterThanOrEqual(zeile.produktionszeitWT);
+      expect(zeile.produktionszeitWTMax).toBeGreaterThanOrEqual(wt({ dUmschlagKey: '4c' }));
+      for (const art of config.cello.arten) {
+        if (art.key === 'ohne' || zeile.aufschlaegeVeredelung[art.key] === null) continue;
+        expect(zeile.produktionszeitWTMax, `${art.key} × ${auflage}`).toBeGreaterThanOrEqual(wt({ celloUmschlag: art.key }));
+      }
+    }
+  });
+
   it('Umschlag-Farbigkeit und Veredelung wachsen monoton mit der Auflage', () => {
     const auflagen = [1, 10, 100, 500, 1000];
     const zeilen = auflagen.map((auflage) => computeUmschlagZeile({

@@ -297,10 +297,13 @@ function calcSingleRoute(route, inputs, config, settings, opts = {}) {
     };
   }
 
-  if (route.minAuflage && auflage < route.minAuflage) {
+  // Grenzen explizit auf null prüfen, nicht auf truthy: maxAuflage 0 wirkte
+  // sonst wie „unbegrenzt" (Bug-Hunt V5 M3) — die Validierung lehnt 0 zwar ab,
+  // die Engine soll aber auch mit einem solchen Stand nicht still weiterrechnen.
+  if (route.minAuflage != null && auflage < route.minAuflage) {
     return { key, name, typ, error: `${name} ist erst ab ${route.minAuflage} Exemplaren möglich.` };
   }
-  if (route.maxAuflage && auflage > route.maxAuflage) {
+  if (route.maxAuflage != null && auflage > route.maxAuflage) {
     return { key, name, typ, error: `${name} ist auf maximal ${route.maxAuflage} Exemplare begrenzt.` };
   }
 
@@ -326,6 +329,12 @@ function calcSingleRoute(route, inputs, config, settings, opts = {}) {
   const nutzen = format[route.nutzenRef] ?? format.nutzenPartner;
   const isBanner = format.isBanner;
   const formatName = isBanner ? 'Banner' : 'SRA3';
+
+  // Unbekannte Farbigkeit (z. B. '2c') ergäbe NaN-Preise mit error: null (N3)
+  const farbigkeitBekannt = (value) => DRUCK_OPTIONS.some((o) => o.value === value);
+  if (!farbigkeitBekannt(dInhaltKey) || (hasUmschlag && !farbigkeitBekannt(dUmschlagKey))) {
+    return { key, name, typ, error: 'Unbekannte Farbigkeit (zulässig: 1c, 4c).' };
+  }
 
   const klickBasis = {
     '1c': settings.baseGrundpreis1c,

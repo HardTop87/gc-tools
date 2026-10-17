@@ -16,6 +16,7 @@ import {
   getDefaultPricingConfig,
   getPendingPublish,
   loadPricingConfigResult,
+  migratePricingConfig,
   normalizePaperPriceRows,
   parsePaperPriceCsv,
   saveSharedConfig,
@@ -105,6 +106,10 @@ const GROUPED_SETTINGS_KEYS = new Set(
   Object.values(SETTINGS_GROUPS).flatMap((groups) => groups.flatMap((group) => group.keys)),
 );
 
+// M4: Meldung, solange der geteilte Stand noch lädt und Eingaben gesperrt sind.
+const LADE_HINWEIS =
+  'Der geteilte Preisstand wird noch geladen — Änderungen sind erst danach möglich.';
+
 function fmtBogenpreis(preisPro1000) {
   return (preisPro1000 / 1000).toLocaleString('de-DE', {
     minimumFractionDigits: 4,
@@ -114,6 +119,14 @@ function fmtBogenpreis(preisPro1000) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// Config-Kopie mit gesetzter Revision (und optional Veröffentlichungszeitpunkt);
+// alles andere bleibt unangetastet.
+function withRev(config, rev, publishedAt) {
+  const meta = { ...config.meta, rev };
+  if (publishedAt !== undefined) meta.publishedAt = publishedAt;
+  return { ...config, meta };
 }
 
 // Zeitpunkt der letzten Veröffentlichung, z. B. "10.08.2026, 18:23 Uhr"
@@ -128,7 +141,7 @@ function fmtZeitpunkt(iso) {
 // Tastendruck) und nur Werte ≥ min — Zwischenzustände wie "0" auf dem Weg zu
 // "0,5" erreichen die Config nie. Ungültige Eingaben fallen auf den alten Wert
 // zurück, werden dabei aber kurz markiert statt still verworfen (B7).
-function NumberField({ value, onCommit, step = 1, className = '', min }) {
+function NumberField({ value, onCommit, step = 1, className = '', min, disabled = false }) {
   const [draft, setDraft] = useState(null);
   // Grund der letzten Ablehnung (roter Rand + Tooltip); verschwindet von selbst.
   const [rejected, setRejected] = useState(null);
@@ -164,6 +177,7 @@ function NumberField({ value, onCommit, step = 1, className = '', min }) {
       min={min}
       value={draft ?? value}
       title={rejected ?? undefined}
+      disabled={disabled}
       onChange={(event) => {
         setRejected(null);
         setDraft(event.target.value);
@@ -174,7 +188,7 @@ function NumberField({ value, onCommit, step = 1, className = '', min }) {
       }}
       className={`tok-field rounded-[10px] border bg-input px-2.5 text-sm text-ink tabular-nums ${
         rejected ? 'border-bad-bd ring-1 ring-bad-bd' : 'border-line2'
-      } ${className}`}
+      } ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${className}`}
     />
   );
 }
@@ -194,7 +208,7 @@ function Chip({ label, active, disabled, onClick }) {
   );
 }
 
-function FieldCard({ title, fields, note }) {
+function FieldCard({ title, fields, note, disabled = false }) {
   return (
     <div className="rounded-2xl border border-line bg-surface p-[18px_20px_20px] shadow-card">
       <div className="mb-3.5 text-[10.5px] font-bold uppercase tracking-[0.16em] text-faint">
@@ -217,6 +231,7 @@ function FieldCard({ title, fields, note }) {
               step={field.step ?? 0.01}
               min={field.min ?? 0}
               className="h-10 w-full"
+              disabled={disabled}
               onCommit={field.onCommit}
             />
             {field.hinweis && <span className="text-[11.5px] text-faint">{field.hinweis}</span>}
@@ -268,7 +283,12 @@ export default function Verwaltung() {
       if (!alive) return;
       if (result.config) {
         loadedRevRef.current = configRev(result.config);
-        setConfig(result.config);
+        // M4: Liegt bereits eine lokal gemachte Änderung zur Veröffentlichung an,
+        // darf der geladene Stand sie im UI nicht still überschreiben — die
+        // Revision wird trotzdem übernommen, damit der Publish die richtige
+        // Basis meldet. (Während des Ladens sind Eingaben gesperrt, der Fall
+        // ist also nur noch eine Absicherung.)
+        if (!pendingConfigRef.current) setConfig(result.config);
         setSharedStatus({ state: 'shared' });
       } else if (result.source === 'none') {
         loadedRevRef.current = 0;
@@ -322,6 +342,13 @@ export default function Verwaltung() {
       alive = false;
       if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
       if (savedResetRef.current) clearTimeout(savedResetRef.current);
+      // N7: Seitenwechsel innerhalb der Debounce-Zeit — die Veröffentlichung
+      // nicht bis zum nächsten Verwaltungsbesuch verschieben (der Rechner
+      // zeigte sonst den alten Preis), sondern sofort anstoßen. runPublish
+      // arbeitet nur auf Refs und Setter, die nach dem Unmount wirkungslos
+      // sind; der POST läuft im Browser weiter. Beim StrictMode-Doppelmount
+      // im Dev ist die Ref hier noch leer, es passiert also nichts.
+      if (pendingConfigRef.current) runPublish();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -351,8 +378,12 @@ export default function Verwaltung() {
   // wird zusätzlich als "pending" persistiert, damit sie bei Navigieren/Offline
   // nicht verloren geht.
   function schedulePublish(nextConfig, delay = 900) {
-    pendingConfigRef.current = nextConfig;
-    setPendingPublish(nextConfig);
+    // M6: Der gemerkte Stand trägt die Revision, auf der er basiert — nur so
+    // kann canAutoPublishPending beim nächsten Öffnen richtig entscheiden.
+    // Der Server vergibt rev/publishedAt beim Speichern ohnehin neu.
+    const pending = withRev(nextConfig, loadedRevRef.current);
+    pendingConfigRef.current = pending;
+    setPendingPublish(pending);
     setPublishState({ status: 'saving' });
     if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
     publishTimerRef.current = setTimeout(runPublish, delay);
@@ -365,12 +396,35 @@ export default function Verwaltung() {
     pendingConfigRef.current = null;
     inFlightRef.current = true;
 
-    const result = await saveSharedConfig(toPublish, loadedRevRef.current);
-    inFlightRef.current = false;
+    // N8: inFlight auch bei einer Exception freigeben (z. B. wirft die
+    // Validierung bei kaputten Strukturen) — sonst bliebe jede weitere
+    // Veröffentlichung für immer blockiert und der Kopf stünde auf „speichere …".
+    let result;
+    try {
+      result = await saveSharedConfig(toPublish, loadedRevRef.current);
+    } catch (error) {
+      // Eine Folgeänderung baut auf demselben kaputten Stand auf — nicht nachschieben.
+      pendingConfigRef.current = null;
+      setPublishState({ status: 'error' });
+      showMessage('error', `Veröffentlichen fehlgeschlagen:\n${error?.message ?? String(error)}`);
+      return;
+    } finally {
+      inFlightRef.current = false;
+    }
 
     if (result.ok) {
       loadedRevRef.current = result.rev;
       clearPendingPublish();
+      // M6: Der veröffentlichte Stand hat jetzt eine neue Revision und einen
+      // Zeitpunkt — Kopfzeile, JSON-Export und spätere Pending-Schreibungen
+      // müssen damit arbeiten, sonst meldet der nächste Besuch einen
+      // Schein-Konflikt gegen die eigene Veröffentlichung. Funktional, weil
+      // inzwischen weitere Änderungen im State liegen können.
+      setConfig((prev) => withRev(prev, result.rev, result.publishedAt));
+      if (pendingConfigRef.current) {
+        pendingConfigRef.current = withRev(pendingConfigRef.current, result.rev, result.publishedAt);
+        setPendingPublish(pendingConfigRef.current);
+      }
       setSharedStatus({ state: 'shared' });
       setPublishState({ status: 'saved' });
       if (savedResetRef.current) clearTimeout(savedResetRef.current);
@@ -382,17 +436,34 @@ export default function Verwaltung() {
       // Jemand anderes hat zwischenzeitlich veröffentlicht → aktuellen Stand
       // laden, damit man darauf weiterarbeitet; die eigene Änderung wurde NICHT
       // übernommen und muss erneut vorgenommen werden.
+      // H1: Auch eine Änderung, die WÄHREND des POST eingegeben wurde, fällt
+      // weg — sie wurde auf dem veralteten Stand gemacht und darf nicht mit
+      // der frisch übernommenen Revision nachgeschoben werden; das würde die
+      // fremde Veröffentlichung still überschreiben, während das UI sie zeigt.
+      pendingConfigRef.current = null;
       clearPendingPublish();
       setPublishState({ status: 'idle' });
       // Die Server-Revision aus der 409-Antwort ist die verlässlichste Basis —
       // auch wenn der frisch geladene Stand fehlt oder ungültig ist.
       if (Number.isFinite(result.currentRev)) loadedRevRef.current = result.currentRev;
+      // Solange der aktuelle Stand nachlädt, Eingaben sperren (gleiche Sperre
+      // wie beim Öffnen, M4): inFlight ist hier schon frei, eine Eingabe auf
+      // dem noch veralteten UI-Stand würde sonst mit der korrekten Revision
+      // erfolgreich veröffentlicht — und damit die fremde Änderung doch noch
+      // überschreiben.
+      setSharedStatus({ state: 'loading' });
       const fresh = await fetchSharedConfig();
       if (fresh.config) {
         loadedRevRef.current = configRev(fresh.config);
         setConfig(fresh.config);
-      } else if (fresh.source === 'invalid' && Number.isFinite(fresh.rev)) {
-        loadedRevRef.current = fresh.rev;
+        setSharedStatus({ state: 'shared' });
+      } else if (fresh.source === 'invalid') {
+        if (Number.isFinite(fresh.rev)) loadedRevRef.current = fresh.rev;
+        setSharedStatus({ state: 'invalid' });
+      } else if (fresh.source === 'none') {
+        setSharedStatus({ state: 'none' });
+      } else {
+        setSharedStatus({ state: 'offline' });
       }
       showMessage(
         'error',
@@ -408,26 +479,48 @@ export default function Verwaltung() {
       );
     } else {
       setPublishState({ status: 'error' });
+      // Eine währenddessen eingegebene Folgeänderung baut auf dem abgelehnten
+      // Stand auf — nicht nachschieben, der Nutzer sieht die Ablehnung.
+      pendingConfigRef.current = null;
       clearPendingPublish();
       showMessage('error', `Veröffentlichen abgelehnt:\n${result.errors.join('\n')}`);
     }
 
-    // Kamen während des Publish weitere Änderungen? Dann erneut anstoßen.
-    if (pendingConfigRef.current) {
+    // Kamen während des Publish weitere Änderungen? Dann erneut anstoßen —
+    // nur nach Erfolg oder Offline (H1): nach einem Konflikt bzw. einer
+    // Ablehnung ist die Ref oben bewusst geleert.
+    if ((result.ok || result.offline) && pendingConfigRef.current) {
       if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
       publishTimerRef.current = setTimeout(runPublish, 300);
     }
   }
 
+  // M4: Solange der geteilte Stand lädt (loadedRev noch 0), darf nichts
+  // geändert werden — ein Publish liefe sonst auf einer falschen Basis
+  // (Schein-409 mit Verlust der Eingabe oder Überschreiben fremder Änderungen).
+  const ladeSperre = sharedStatus.state === 'loading';
+
   // Übernimmt eine Änderung: sofort im UI (State), persistiert als "pending",
   // und stößt die Veröffentlichung an. Der lokale Cache (= letzter geteilter
   // Stand) wird bewusst NICHT hier geschrieben, sondern erst bei Publish-Erfolg.
   function applyChange(nextConfig) {
+    if (ladeSperre) {
+      showMessage('error', LADE_HINWEIS);
+      return;
+    }
+    // N6: Eine neue Änderung macht die liegengebliebene aus der früheren
+    // Sitzung gegenstandslos — schedulePublish überschreibt den gemerkten
+    // Stand ohnehin; die Konfliktbox würde sonst den alten Stand nachschieben.
+    setPendingConflict(null);
     setConfig(nextConfig);
     schedulePublish(nextConfig);
   }
 
   function updateConfig(mutator) {
+    if (ladeSperre) {
+      showMessage('error', LADE_HINWEIS);
+      return;
+    }
     const next = JSON.parse(JSON.stringify(config));
     mutator(next);
     next.meta.stand = todayIso();
@@ -458,6 +551,10 @@ export default function Verwaltung() {
   // Nichts wird überschrieben, der Verlauf bleibt linear — auch das
   // Wiederherstellen selbst lässt sich also wieder rückgängig machen.
   async function handleRestore(eintrag) {
+    if (ladeSperre) {
+      showMessage('error', LADE_HINWEIS);
+      return;
+    }
     if (
       !window.confirm(
         `Revision ${eintrag.rev} (${eintrag.version ?? '?'}, Stand ${eintrag.stand ?? '?'}) für ALLE ` +
@@ -478,6 +575,10 @@ export default function Verwaltung() {
   }
 
   function handleReset() {
+    if (ladeSperre) {
+      showMessage('error', LADE_HINWEIS);
+      return;
+    }
     if (
       !window.confirm(
         'Den geteilten Preisstand für ALLE auf den Repo-Standard zurücksetzen?\n\n' +
@@ -565,7 +666,10 @@ export default function Verwaltung() {
     if (!file) return;
 
     try {
-      const parsed = JSON.parse(await file.text());
+      // M5: Backups von vor einer Schema-Erweiterung (z. B. vor 2.6.0 ohne
+      // Kassen-Anker-Settings) erst migrieren, sonst lehnt die Validierung
+      // jedes ältere Backup ab — wie beim Laden aus Cache und Blob.
+      const parsed = migratePricingConfig(JSON.parse(await file.text()));
       const validation = validatePricingConfig(parsed);
       if (!validation.ok) {
         showMessage('error', `Config-Import abgelehnt:\n${validation.errors.join('\n')}`);
@@ -707,8 +811,11 @@ export default function Verwaltung() {
     }
 
     return groups.filter((group) => group.fields.length > 0);
+    // ladeSperre gehört in die Deps: die onCommit-Closures tragen updateConfig
+    // samt Sperrzustand — endet das Laden ohne Config-Änderung (source 'none'),
+    // blieben die Felder sonst dauerhaft gesperrt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, config]);
+  }, [activeTab, config, ladeSperre]);
 
   // Ausgewählte WV-Tabelle gegen die (ggf. importierte) Config abgleichen —
   // fehlt der Key, fällt die Anzeige auf die erste vorhandene Tabelle zurück.
@@ -763,6 +870,11 @@ export default function Verwaltung() {
       />
 
       <div className="mt-4 space-y-3">
+        {ladeSperre && (
+          <div className="rounded-xl border border-line2 bg-surface px-4 py-3 text-[13px] text-dim">
+            {LADE_HINWEIS}
+          </div>
+        )}
         {historie !== null && (
           <div className="rounded-xl border border-line2 bg-surface px-4 py-3">
             <p className="mb-2 text-[13px] font-semibold text-ink">
@@ -793,7 +905,8 @@ export default function Verwaltung() {
                       <button
                         type="button"
                         onClick={() => handleRestore(eintrag)}
-                        className="rounded-[8px] border border-line2 bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-dim transition-colors hover:text-ink"
+                        disabled={ladeSperre}
+                        className="rounded-[8px] border border-line2 bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-dim transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Wiederherstellen
                       </button>
@@ -894,7 +1007,8 @@ export default function Verwaltung() {
               <button
                 type="button"
                 onClick={applyPendingImport}
-                className="inline-flex h-9 items-center rounded-[10px] bg-brand px-4 text-xs font-semibold text-white transition-colors hover:bg-brand-dark"
+                disabled={ladeSperre}
+                className="inline-flex h-9 items-center rounded-[10px] bg-brand px-4 text-xs font-semibold text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Übernehmen
               </button>
@@ -1030,6 +1144,7 @@ export default function Verwaltung() {
                       step={0.5}
                       min={0.001}
                       className="h-8 w-[100px] text-right"
+                      disabled={ladeSperre}
                       onCommit={(value) =>
                         updateConfig((next) => {
                           next.papiere[index].preisPro1000 = value;
@@ -1055,7 +1170,13 @@ export default function Verwaltung() {
           </p>
           <div className="grid items-start gap-3.5 md:grid-cols-2 xl:grid-cols-3">
             {fieldGroups.map((group) => (
-              <FieldCard key={group.title} title={group.title} fields={group.fields} note={group.note} />
+              <FieldCard
+                key={group.title}
+                title={group.title}
+                fields={group.fields}
+                note={group.note}
+                disabled={ladeSperre}
+              />
             ))}
           </div>
         </div>
@@ -1118,6 +1239,7 @@ export default function Verwaltung() {
                         step={0.5}
                         min={0.001}
                         className="h-[30px] w-full rounded-[7px] border-line px-[7px] text-right text-[12.5px]"
+                        disabled={ladeSperre}
                         onCommit={(nextValue) =>
                           updateConfig((next) => {
                             next.wvTabellen[effectiveWvKey][row][col] = nextValue;

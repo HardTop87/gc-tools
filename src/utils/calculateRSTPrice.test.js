@@ -370,7 +370,9 @@ describe('Express & Empfehlung', () => {
 
   it('Empfehlungslogik ist datengetrieben: eine vierte, günstigere Route kann gewinnen', () => {
     const custom = getDefaultPricingConfig();
-    const cheapTable = JSON.parse(JSON.stringify(custom.wvTabellen.ilda_ohneUmschlag));
+    // Kopp-Tabelle (Staffeln bis 1000) halbiert; maxAuflage muss seit V5/M3 eine
+    // Zahl bis zur höchsten Staffel sein (null gilt nicht mehr als „unbegrenzt")
+    const cheapTable = JSON.parse(JSON.stringify(custom.wvTabellen.kopp));
     for (const row of Object.values(cheapTable)) {
       for (const staffel of Object.keys(row)) row[staffel] = row[staffel] / 2;
     }
@@ -383,7 +385,7 @@ describe('Express & Empfehlung', () => {
       wtExpress: 4,
       formate: ['A5_Hoch', 'A5_Quer', 'A4_Hoch'],
       minAuflage: null,
-      maxAuflage: null,
+      maxAuflage: 1000,
       wvTabelleRef: 'test_partner',
       umschlagZuschlag: false,
       maxDickeRef: 'maxDickePartner',
@@ -636,6 +638,44 @@ describe('Routengrenzen', () => {
     const calc = calculateRSTPrice(baseForm({ auflage: '2000' }), config);
     expect(calc.validResults).toHaveLength(0);
     expect(calc.recommendedName).toBeNull();
+  });
+});
+
+describe('Bug-Hunt V5: Engine-Härtung (M3, N3)', () => {
+  it('M3: maxAuflage 0 wirkt nicht mehr als „unbegrenzt" (explizite null-Prüfung)', () => {
+    // Die Validierung lehnt 0 ab; falls so ein Stand trotzdem zur Engine kommt,
+    // darf er nicht still über die höchste Staffel hinaus mit eingefrorenem
+    // Verarbeitungspreis weiterrechnen.
+    const null0 = getDefaultPricingConfig();
+    null0.routen.find((r) => r.key === 'kopp').maxAuflage = 0;
+    const kopp = routeResult(calculateRSTPrice(baseForm({ auflage: '4000' }), null0), 'kopp');
+    expect(kopp.error).toContain('maximal 0');
+    expect(kopp.gesamt).toBeUndefined();
+
+    // null bleibt „keine Grenze" (Engine-Semantik; die Validierung verlangt eine Zahl)
+    const ohne = getDefaultPricingConfig();
+    ohne.routen.find((r) => r.key === 'kopp').maxAuflage = null;
+    expect(routeResult(calculateRSTPrice(baseForm({ auflage: '1000' }), ohne), 'kopp').error).toBeNull();
+  });
+
+  it('N3: unbekannte Farbigkeit liefert ein Fehlerobjekt statt NaN mit error: null', () => {
+    const inhalt = calculateRSTPrice(baseForm({ dInhaltKey: '2c' }), config);
+    for (const r of inhalt.results) {
+      expect(r.error).toContain('Farbigkeit');
+      expect(r.gesamt).toBeUndefined();
+    }
+    expect(inhalt.validResults).toHaveLength(0);
+    expect(inhalt.recommendedName).toBeNull();
+
+    const umschlag = calculateRSTPrice(
+      baseForm({ hasUmschlag: true, pUmschlagId: 'CC_300', dUmschlagKey: 'bunt' }),
+      config,
+    );
+    expect(routeResult(umschlag, 'gc_horizon').error).toContain('Farbigkeit');
+
+    // ohne Umschlag ist die Umschlag-Farbigkeit egal (Formular hält sie immer vor)
+    const egal = calculateRSTPrice(baseForm({ hasUmschlag: false, dUmschlagKey: 'bunt' }), config);
+    expect(routeResult(egal, 'gc_horizon').error).toBeNull();
   });
 });
 

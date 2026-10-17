@@ -3,7 +3,7 @@
 Stand 12.10.2026 · Branch `leadprint-import-writer` (= main d6759f3 + uncommittete Writer-Arbeit) · 137 Tests grün, Lint sauber.
 Drei unabhängige Reviews (Engine, UI/Verwaltung/API, Leadprint-Import-Kette).
 
-**Fix-Stand 17.10.2026 (uncommittet auf `leadprint-import-writer`, 219 Tests grün, Lint und Build sauber):** gefixt sind H1, M1–M9, N1–N3, N5–N14 sowie der H2-Kommentar. **Offen** bleiben H2 (Entscheidung Routen-Tag), N4 (Route-Flags in der Migration; nur `maxAuflage: null` wird jetzt aufgefüllt), N15 (Hinweis) und U1–U4 (fachlich). Neue Dauertests: `pricingConfig.test.js` (Validierungs-Sweep) und `calculateRSTPrice.sweep.test.js` (Monotonie, Staffelgrenzen, Express), Zeitlimit 120 s wegen Systemlast.
+**Fix-Stand 17.10.2026 (uncommittet auf `leadprint-import-writer`, 219 Tests grün, Lint und Build sauber):** gefixt sind H1, M1–M9, N1–N3, N5–N14 sowie der H2-Kommentar. Gemerged als PR #18 (17.10.2026). **Entscheidungen Armin 17.10.:** N4 verworfen (so alte Revisionen stellt niemand wieder her), U2 geprüft und erledigt, U1 bleibt als **manueller Test im Shop** (Liefertage-Offset nach dem Testimport prüfen). **Offen:** H2, Armin will einen Marker, der für jede Seitenzahl die Route zeigt; Vorschlag: Routenwechsel in den Zeilen-Tag kodieren. U3/U4 nur Hinweise. Neue Dauertests: `pricingConfig.test.js` (Validierungs-Sweep) und `calculateRSTPrice.sweep.test.js` (Monotonie, Staffelgrenzen, Express), Zeitlimit 120 s wegen Systemlast.
 
 ## Kernergebnis
 

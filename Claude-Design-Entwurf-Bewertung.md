@@ -47,6 +47,10 @@ Empfehlung jeweils zuerst; wo Armin oder Guido entscheiden müssen, steht es dab
 
 Der Prototyp führt einen echten Entwurf ein (Änderungen sammeln, bewusst veröffentlichen). Heute veröffentlicht die Verwaltung jede Änderung nach 900 ms automatisch. Mit der Artikelebene und dem Geltungsbereich-Dialog wird Auto-Publish riskant (jede Zwischeneingabe wird sofort Produktionsstand). Empfehlung: **Entwurf/Veröffentlichen übernehmen**, Entwurf lokal (localStorage, wie das heutige Pending), Veröffentlichen explizit, Konflikt = neu laden und Entwurf erneut anwenden. Kein „Trotzdem veröffentlichen". Das ist eine Verhaltensänderung für Guido und sollte mit ihm abgestimmt werden.
 
+### 3.2 Entscheidungen Armin (17.10.2026)
+
+Alle zehn Empfehlungen aus der Zusammenfassung sind bestätigt: Entwurf mit bewusstem Veröffentlichen (**zusätzlich: Warnhinweis beim Verlassen der Seite, solange der Entwurf nicht veröffentlicht ist**, also `beforeunload` plus Abfrage beim Routenwechsel in der App), kein Force-Publish, Block B als Produkt-Vorlage mit Artikel-Überschreibung, WV-Faktor nur für GC, Rechner wendet Artikel-Überschreibungen an, Umschlag-Zuschlag beim Produkt, Upload-Bestätigung pro ZIP, Abweichungen nur markieren (10 %), Kassen-Anker als eigene Zeile, Reihenfolge P0 → P1/P3 → P2.
+
 ## 4. Umsetzungsplan in vier Paketen
 
 **P0 Datenmodell (Voraussetzung für alles, kein UI).**

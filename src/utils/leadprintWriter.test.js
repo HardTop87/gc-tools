@@ -56,7 +56,14 @@ describe('Leadprint-Writer: Datenschicht (ohne-Umschlag-Artikel)', () => {
     const gcZeile = zeilen.find((z) => z.papierId === 'CC_120' && z.auflage === 100);
     expect(gcZeile.route).toBe('GC (Horizon)');
     expect(gcZeile.artikelnummer).toBe('BRO-RST-A4H-44-GC');
-    expect(gcZeile.liefertage).toBe(gcZeile.produktionszeitWT);
+    // Zeilenmaximum: Sobald eine Seiten-Zelle der Zeile bei ILDA (4 WT) liegt,
+    // trägt die ganze Zeile 4 Liefertage — nie weniger als die Basiszelle.
+    for (const z of zeilen) {
+      expect(z.liefertage).toBeGreaterThanOrEqual(z.produktionszeitWT);
+      const hatIlda = Object.values(z.routenSeiten).includes('Partner ILDA');
+      expect(z.liefertage).toBe(hatIlda ? 4 : 3);
+    }
+    expect(zeilen.some((z) => z.liefertage === 4)).toBe(true);
     // Partner-Zelle: über GC-Maximum (500) muss ein Partner-Tag stehen
     const partnerZeile = zeilen.find((z) => z.papierId === 'CC_120' && z.auflage === 1000);
     expect(['KOPP', 'ILDA']).toContain(partnerZeile.artikelnummer.split('-').pop());
@@ -83,15 +90,15 @@ describe('Leadprint-Writer: Datenschicht (ohne-Umschlag-Artikel)', () => {
   });
 
   it('Vollständigkeits-Prüfung Config ↔ Mapping meldet Lücken statt still zu schweigen', () => {
-    const probleme = pruefeMappingVollstaendigkeit(config, mapping);
-    // Bekannte, dokumentierte Lücke: der Listenwert „4" (P3) ist im Backend
-    // angelegt, seine ID aber noch nicht im Mapping nachgetragen.
-    expect(probleme).toContain('Seitenanzahl 4: kein Listenwert im Mapping (Gruppe 5628).');
-    // Alles andere gehört gemeldet — dieser Test friert den bekannten Stand ein,
-    // damit neue Lücken (z. B. neue Papiere ohne Shop-ID) sofort auffallen.
-    const unerwartet = probleme.filter(
-      (p) => p !== 'Seitenanzahl 4: kein Listenwert im Mapping (Gruppe 5628).',
-    );
-    expect(unerwartet).toEqual([]);
+    // Seit 10.10.2026 vollständig (Listenwert „4 Seiten" = 52313 bestätigt).
+    // Dieser Test friert den Stand ein, damit neue Lücken (z. B. neue Papiere
+    // ohne Shop-ID) sofort auffallen.
+    expect(pruefeMappingVollstaendigkeit(config, mapping)).toEqual([]);
+  });
+
+  it('Vollständigkeits-Prüfung meldet Artikel ohne leadprintId (Ziel der Weiterleitungen, M9)', () => {
+    const ohneId = structuredClone(mapping);
+    ohneId.artikel.find((a) => a.key === 'A6_Hoch|4c|ohne').leadprintId = null;
+    expect(pruefeMappingVollstaendigkeit(config, ohneId)).toEqual(['Artikel A6_Hoch|4c|ohne: keine leadprintId im Mapping.']);
   });
 });

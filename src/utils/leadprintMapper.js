@@ -45,16 +45,29 @@ export function computeInhaltZeile({ config, formatKey, farbigkeit, pInhaltId, a
   });
   if (!basis) return null;
 
+  // Je Seiten-Stützstelle merken wir uns neben dem Aufschlag auch Route und
+  // Produktionszeit der Zelle: Die Preiszeile im Shop (Papier × Auflage) kann
+  // nur EINEN Liefertermin tragen, und der muss für jede Zelle der Zeile
+  // reichen → produktionszeitWTMax = längste Produktionszeit über alle Zellen
+  // (Entscheidung „Zeilenmaximum", 10.10.2026: ILDA-Zellen brauchen 4 WT).
   const aufschlaege = {};
+  const routenSeiten = { [basisSeiten]: basis.routeName };
+  let produktionszeitWTMax = basis.produktionszeitWT;
   for (const seiten of seitenListe.slice(1)) {
     const p = preis(config, {
       formatKey, auflage, seiten, pInhaltId, dInhaltKey: farbigkeit,
       hasUmschlag: false, pUmschlagId: '', dUmschlagKey: farbigkeit, celloUmschlag: 'ohne', produktionszeit: 'standard',
     });
     aufschlaege[seiten] = p ? p.gesamt - basis.gesamt : null;
+    routenSeiten[seiten] = p ? p.routeName : null;
+    if (p && p.produktionszeitWT > produktionszeitWTMax) produktionszeitWTMax = p.produktionszeitWT;
   }
 
-  return { pInhaltId, auflage, basisSeiten, basisPreis: basis.gesamt, route: basis.routeName, produktionszeitWT: basis.produktionszeitWT, aufschlaege };
+  return {
+    pInhaltId, auflage, basisSeiten, basisPreis: basis.gesamt,
+    route: basis.routeName, produktionszeitWT: basis.produktionszeitWT,
+    produktionszeitWTMax, routenSeiten, aufschlaege,
+  };
 }
 
 // Preiszeile für ein Inhaltspapier × Umschlagpapier × Auflage (mit Umschlag).
@@ -71,28 +84,39 @@ export function computeUmschlagZeile({ config, formatKey, farbigkeit, pInhaltId,
   if (!basis) return null;
 
   const aufschlaegeSeiten = {};
+  const routenSeiten = { [basisSeiten]: basis.routeName };
+  let produktionszeitWTMax = basis.produktionszeitWT;
   for (const seiten of seitenListe.slice(1)) {
     const p = preis(config, { ...gemeinsam, seiten });
     aufschlaegeSeiten[seiten] = p ? p.gesamt - basis.gesamt : null;
+    routenSeiten[seiten] = p ? p.routeName : null;
+    if (p && p.produktionszeitWT > produktionszeitWTMax) produktionszeitWTMax = p.produktionszeitWT;
   }
 
   const farbig = preis(config, { ...gemeinsam, seiten: basisSeiten, dUmschlagKey: '4c' });
   const aufschlagFarbigkeitUmschlag = farbig ? farbig.gesamt - basis.gesamt : null;
+  if (farbig && farbig.produktionszeitWT > produktionszeitWTMax) produktionszeitWTMax = farbig.produktionszeitWT;
 
   const coverPaper = paperById(config, pUmschlagId);
   const celloErlaubt = coverPaper && config.cello.erlaubteFamilien.includes(coverPaper.familie);
+  // Auch die Veredelungszellen zählen zum Zeilenmaximum (N13): Der eine
+  // Liefertermin der Zeile muss jede wählbare Zelle abdecken. Gemessen über
+  // 7.720 mit-U-Zeilen bisher 0 Fälle, in denen Cello die Route kippt — die
+  // Invariante soll aber nicht vom Zufall der aktuellen Preise abhängen.
   const aufschlaegeVeredelung = {};
   if (celloErlaubt) {
     for (const art of config.cello.arten) {
       if (art.key === 'ohne') { aufschlaegeVeredelung[art.key] = 0; continue; }
       const p = preis(config, { ...gemeinsam, seiten: basisSeiten, celloUmschlag: art.key });
       aufschlaegeVeredelung[art.key] = p ? p.gesamt - basis.gesamt : null;
+      if (p && p.produktionszeitWT > produktionszeitWTMax) produktionszeitWTMax = p.produktionszeitWT;
     }
   }
 
   return {
     pInhaltId, pUmschlagId, auflage, basisSeiten, basisPreis: basis.gesamt,
     route: basis.routeName, produktionszeitWT: basis.produktionszeitWT,
+    produktionszeitWTMax, routenSeiten,
     aufschlaegeSeiten, aufschlagFarbigkeitUmschlag,
     veredelungMoeglich: celloErlaubt, aufschlaegeVeredelung,
   };

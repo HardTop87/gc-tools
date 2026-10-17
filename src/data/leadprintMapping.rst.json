@@ -1,7 +1,7 @@
 {
   "meta": {
     "product": "rst",
-    "stand": "2026-07-07",
+    "stand": "2026-10-11",
     "shopId": 666,
     "quelle": "Leadprint-Mapping-ausgefüllt.xlsx",
     "hinweis": "IDs gelten für die RST-Optionsfelder dieses Shops. Andere Produkte nutzen eigene Felder/IDs → eigenes Mapping je Produkt.",
@@ -10,7 +10,8 @@
       99,
       501
     ],
-    "preisRouten": "alle (GC, Kopp, ILDA) — Empfehlungslogik der Engine; ILDA gewinnt nur in der Partner-Zone (Seiten über GC-Limit, ab 100 Ex.)"
+    "preisRouten": "alle (GC, Kopp, ILDA) — Empfehlungslogik der Engine; ILDA gewinnt nur in der Partner-Zone (Seiten über GC-Limit, ab 100 Ex.)",
+    "sichtbarkeit": "Nur Einstiegsartikel (einstieg=true: 4/4 ohne Umschlag je Format) sind in der Warengruppenliste sichtbar, alle anderen werden ausgeblendet (article.unsichtbar=1) und sind nur über Weiterleitungen erreichbar. Entscheidung Armin 11.10.2026."
   },
   "artikel": [
     {
@@ -18,72 +19,80 @@
       "format": "A4_Hoch",
       "farbigkeit": "1c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A4 Hoch 1/1",
+      "bezeichnung": "Rückstichheftung A4 Hoch 1/1 ohne Umschlag",
       "artikelnummer": "BRO-RST-A4H-11",
-      "leadprintId": 1112051233
+      "leadprintId": 1112051233,
+      "einstieg": false
     },
     {
       "key": "A4_Hoch|4c|ohne",
       "format": "A4_Hoch",
       "farbigkeit": "4c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A4 Hoch 4/4",
+      "bezeichnung": "Rückstichheftung A4 Hoch 4/4 ohne Umschlag",
       "artikelnummer": "BRO-RST-A4H-44",
-      "leadprintId": 1112051356
+      "leadprintId": 1112051356,
+      "einstieg": true
     },
     {
       "key": "A5_Hoch|1c|ohne",
       "format": "A5_Hoch",
       "farbigkeit": "1c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A5 Hoch 1/1",
+      "bezeichnung": "Rückstichheftung A5 Hoch 1/1 ohne Umschlag",
       "artikelnummer": "BRO-RST-A5H-11",
-      "leadprintId": 1112051377
+      "leadprintId": 1112127295,
+      "einstieg": false
     },
     {
       "key": "A5_Hoch|4c|ohne",
       "format": "A5_Hoch",
       "farbigkeit": "4c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A5 Hoch 4/4",
+      "bezeichnung": "Rückstichheftung A5 Hoch 4/4 ohne Umschlag",
       "artikelnummer": "BRO-RST-A5H-44",
-      "leadprintId": 1112051509
+      "leadprintId": 1112127296,
+      "einstieg": true
     },
     {
       "key": "A5_Quer|1c|ohne",
       "format": "A5_Quer",
       "farbigkeit": "1c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A5 Quer 1/1",
+      "bezeichnung": "Rückstichheftung A5 Quer 1/1 ohne Umschlag",
       "artikelnummer": "BRO-RST-A5Q-11",
-      "leadprintId": null
+      "leadprintId": 1112127297,
+      "einstieg": false
     },
     {
       "key": "A5_Quer|4c|ohne",
       "format": "A5_Quer",
       "farbigkeit": "4c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A5 Quer 4/4",
+      "bezeichnung": "Rückstichheftung A5 Quer 4/4 ohne Umschlag",
       "artikelnummer": "BRO-RST-A5Q-44",
-      "leadprintId": null
+      "leadprintId": 1112127298,
+      "einstieg": true
     },
     {
       "key": "A6_Hoch|1c|ohne",
       "format": "A6_Hoch",
       "farbigkeit": "1c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A6 Hoch 1/1",
+      "bezeichnung": "Rückstichheftung A6 Hoch 1/1 ohne Umschlag",
       "artikelnummer": "BRO-RST-A6H-11",
-      "leadprintId": null
+      "leadprintId": 1112127299,
+      "einstieg": false
     },
     {
       "key": "A6_Hoch|4c|ohne",
       "format": "A6_Hoch",
       "farbigkeit": "4c",
       "umschlag": "ohne",
-      "bezeichnung": "Rückstichheftung A6 Hoch 4/4",
+      "bezeichnung": "Rückstichheftung A6 Hoch 4/4 ohne Umschlag",
       "artikelnummer": "BRO-RST-A6H-44",
-      "leadprintId": null
+      "leadprintId": 1112127300,
+      "einstieg": true
     },
     {
       "key": "A4_Hoch|1c|mit",
@@ -92,7 +101,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A4 Hoch 1/1 mit Umschlag",
       "artikelnummer": "BRO-RST-A4H-11-U",
-      "leadprintId": null
+      "leadprintId": 1112127301,
+      "einstieg": false
     },
     {
       "key": "A4_Hoch|4c|mit",
@@ -101,7 +111,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A4 Hoch 4/4 mit Umschlag",
       "artikelnummer": "BRO-RST-A4H-44-U",
-      "leadprintId": null
+      "leadprintId": 1112127302,
+      "einstieg": false
     },
     {
       "key": "A5_Hoch|1c|mit",
@@ -110,7 +121,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A5 Hoch 1/1 mit Umschlag",
       "artikelnummer": "BRO-RST-A5H-11-U",
-      "leadprintId": null
+      "leadprintId": 1112127303,
+      "einstieg": false
     },
     {
       "key": "A5_Hoch|4c|mit",
@@ -119,7 +131,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A5 Hoch 4/4 mit Umschlag",
       "artikelnummer": "BRO-RST-A5H-44-U",
-      "leadprintId": null
+      "leadprintId": 1112127304,
+      "einstieg": false
     },
     {
       "key": "A5_Quer|1c|mit",
@@ -128,7 +141,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A5 Quer 1/1 mit Umschlag",
       "artikelnummer": "BRO-RST-A5Q-11-U",
-      "leadprintId": null
+      "leadprintId": 1112127305,
+      "einstieg": false
     },
     {
       "key": "A5_Quer|4c|mit",
@@ -137,7 +151,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A5 Quer 4/4 mit Umschlag",
       "artikelnummer": "BRO-RST-A5Q-44-U",
-      "leadprintId": null
+      "leadprintId": 1112127306,
+      "einstieg": false
     },
     {
       "key": "A6_Hoch|1c|mit",
@@ -146,7 +161,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A6 Hoch 1/1 mit Umschlag",
       "artikelnummer": "BRO-RST-A6H-11-U",
-      "leadprintId": null
+      "leadprintId": 1112127307,
+      "einstieg": false
     },
     {
       "key": "A6_Hoch|4c|mit",
@@ -155,7 +171,8 @@
       "umschlag": "mit",
       "bezeichnung": "Rückstichheftung A6 Hoch 4/4 mit Umschlag",
       "artikelnummer": "BRO-RST-A6H-44-U",
-      "leadprintId": null
+      "leadprintId": 1112127308,
+      "einstieg": false
     }
   ],
   "auflagen": [
@@ -418,6 +435,7 @@
       "optionstyp": "auflagenabhängig",
       "strategie": "computed (Aufschlag je Preiszeile aus der Engine)",
       "werte": {
+        "4": 52313,
         "8": 16360,
         "12": 16361,
         "16": 16362,
@@ -449,6 +467,12 @@
         "120": 16404
       },
       "listenwerte": [
+        {
+          "bezeichnung": "4 Seiten",
+          "id": 52313,
+          "schluessel": "4",
+          "hinweis": "P3: nur mit Umschlag wählbar; ohne-U-Artikel lassen die Zelle leer (bestätigt Armin 10.10.2026)"
+        },
         {
           "bezeichnung": "8 Seiten",
           "id": 16360,
@@ -649,11 +673,20 @@
       ]
     },
     "Papier Innenteil": {
-      "gruppenId": null,
-      "optionstyp": "—",
-      "strategie": "KEIN Optionsfeld — läuft über Sorten (Zeilenachse), siehe Blatt \"Papiere\"",
-      "werte": {},
-      "listenwerte": []
+      "gruppenId": 5560,
+      "optionstyp": "auflagenabhängig",
+      "strategie": "static (ein Listenwert \"siehe Sorte\", 0 EUR) - das Papier selbst läuft über die Sorten (Zeilenachse)",
+      "werte": {
+        "sorte": 53341
+      },
+      "listenwerte": [
+        {
+          "bezeichnung": "siehe Sorte",
+          "id": 53341,
+          "schluessel": "sorte",
+          "hinweis": "aus Export 10.10.2026"
+        }
+      ]
     },
     "Seitenanzahl Umschlag (RST)": {
       "gruppenId": 5563,
@@ -789,7 +822,7 @@
     "SquareFold": {
       "gruppenId": 5629,
       "optionstyp": "auflagenabhängig",
-      "strategie": "off (nicht im Rechner) — unbepreist lassen",
+      "strategie": "off - Feld am Artikel deaktiviert lassen (Armin 10.10.2026: voraussichtlich nicht mehr noetig); erscheint dann nicht in den Preiszeilen",
       "werte": {},
       "listenwerte": [
         {
@@ -807,18 +840,5 @@
       ]
     }
   },
-  "offen": [
-    "Artikel A5_Quer|1c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A5_Quer|4c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A6_Hoch|1c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A6_Hoch|4c|ohne: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A4_Hoch|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A4_Hoch|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A5_Hoch|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A5_Hoch|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A5_Quer|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A5_Quer|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A6_Hoch|1c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)",
-    "Artikel A6_Hoch|4c|mit: Leadprint-ID fehlt (wird nach Anlage nachgetragen)"
-  ]
+  "offen": []
 }

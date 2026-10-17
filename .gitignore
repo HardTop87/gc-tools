@@ -39,3 +39,6 @@ Leadprint_Export/
 # Der umgesetzte Stand ist der Code; die Referenz bleibt lokal.
 design_handoff_gc_tools_ui/
 .claude/
+
+# Vom Writer erzeugte Leadprint-Import-Dateien (Binaerdaten, jederzeit reproduzierbar)
+Leadprint_Import/

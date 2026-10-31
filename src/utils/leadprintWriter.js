@@ -5,11 +5,15 @@
 // Seitenzahl als additiver Aufschlag je Listenwert, leere Zellen = Option im
 // Shop nicht wählbar — niemals 0).
 //
-// Bewusst noch OHNE die mit-Umschlag-Artikel: Deren Zeilen-Basis (welches
-// Umschlagpapier trägt den Basispreis der Zeile?) wird erst mit dem neuen
-// Backend-Export festgelegt. Die ohne-Umschlag-Artikel sind vollständig.
+// Mit-Umschlag-Artikel (Umschlagartikel-Plan.md, 31.10.2026): Das Umschlag-
+// papier ist FEST im Artikel (mapping.artikel[].umschlagPapier), die Zeile ist
+// wieder Inhaltspapier × Auflage, Basis = 4 Seiten, Umschlag 1/1, ohne Cello;
+// Umschlag-Farbigkeit und Veredelung sind Aufschläge je Zeile. Die alten
+// mit-U-Artikel ohne umschlagPapier (8 Live-Artikel) kann der Writer nicht —
+// sie werden laut Plan zu Standard-Umschlag-Artikeln ihrer Kombination.
 
-import { computeArtikelOhneUmschlag, SEITEN_STUETZSTELLEN } from './leadprintMapper';
+import { getCoverPaperOptions } from './calculateRSTPrice';
+import { computeArtikelOhneUmschlag, computeUmschlagZeile, SEITEN_STUETZSTELLEN } from './leadprintMapper';
 
 // P3: 4 Seiten Inhalt gibt es nur mit Umschlag — die mit-Umschlag-Artikel
 // bekommen deshalb eine eigene Stützstellenliste mit der 4 am Anfang.
@@ -119,6 +123,120 @@ export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
   return { zeilen, probleme: [...new Set(probleme)] };
 }
 
+// Inhaltspapiere eines Formats, zu denen das Umschlagpapier passt (Familien-
+// regel + umschlagAusnahmen, z. B. R_90 → CC_250/N_250) — dieselbe Quelle wie
+// Rechner-Dropdown und Engine. Bestimmt für einen Umschlagartikel sowohl die
+// Preiszeilen als auch die Sorten-Flags.
+export function inhaltspapiereZuUmschlag(config, formatKey, pUmschlagId) {
+  const format = config.formate.find((f) => f.key === formatKey);
+  if (!format) return [];
+  return format.papiereInhalt.filter((pInhaltId) =>
+    getCoverPaperOptions(config, formatKey, pInhaltId).some((p) => p.id === pUmschlagId),
+  );
+}
+
+// Preiszeilen eines Umschlagartikels (umschlag = "mit" + umschlagPapier):
+//   je passendem Inhaltspapier × Auflagenstaffel eine Zeile mit
+//   { sortenId, papierId, umschlagPapier, auflage, preis (Basis = 4 Seiten,
+//     Umschlag 1/1, ohne Cello), route, produktionszeitWT, liefertage
+//     (Zeilenmaximum über Seiten-, Farbigkeits- UND Veredelungszellen),
+//     artikelnummer (mit Routen-Tag),
+//     aufschlaege: { <listenwertId 5628>: betrag | null },
+//     aufschlagFarbigkeitUmschlag: betrag | null (4/4 statt 1/1),
+//     veredelungMoeglich, aufschlaegeVeredelung: { ohne|glaenzend|matt|softtouch: betrag | null } }
+// Preisbasis ist die übergebene Config (heutige Staffeln, KEINE Sicherheitshülle
+// und keine dichteren Staffeln — Befund 1 des Plans ist noch nicht entschieden).
+export function buildPreiszeilenMitUmschlag({ config, mapping, artikelKey }) {
+  const artikel = (mapping.artikel ?? []).find((a) => a.key === artikelKey);
+  if (!artikel) return { zeilen: [], probleme: [`Artikel ${artikelKey} nicht im Mapping.`], hinweise: [] };
+  if (artikel.umschlag !== 'mit' || !artikel.umschlagPapier) {
+    return { zeilen: [], probleme: [`Artikel ${artikelKey} ist kein Umschlagartikel (umschlag „mit" + umschlagPapier).`], hinweise: [] };
+  }
+
+  const probleme = [];
+  const hinweise = [];
+  const format = config.formate.find((f) => f.key === artikel.format);
+  if (!format) probleme.push(`Format ${artikel.format} existiert nicht in der Config.`);
+  else if (!format.papiereUmschlag.includes(artikel.umschlagPapier)) {
+    probleme.push(`Umschlagpapier ${artikel.umschlagPapier} ist in Format ${artikel.format} nicht zugelassen.`);
+  }
+  if (!mapping.umschlagListenwerte?.[artikel.umschlagPapier]?.listenwertId) {
+    probleme.push(`Umschlagpapier ${artikel.umschlagPapier}: kein Listenwert im Mapping (Gruppe 5555).`);
+  }
+  if (!artikel.artikelnummer) probleme.push(`Artikel ${artikelKey}: keine artikelnummer im Mapping.`);
+  const listenwerte = seitenListenwerte(mapping);
+  for (const seiten of SEITEN_STUETZSTELLEN_MIT_UMSCHLAG) {
+    if (!listenwerte[String(seiten)] && !listenwerte[seiten]) {
+      probleme.push(`Seitenanzahl ${seiten}: kein Listenwert im Mapping (Gruppe 5628).`);
+    }
+  }
+  if (probleme.length) return { zeilen: [], probleme: [...new Set(probleme)], hinweise };
+
+  const zeilen = [];
+  for (const pInhaltId of inhaltspapiereZuUmschlag(config, artikel.format, artikel.umschlagPapier)) {
+    const sorte = mapping.sorten?.[pInhaltId];
+    if (!sorte?.sortenId) {
+      probleme.push(`Papier ${pInhaltId}: keine sortenId im Mapping.`);
+      continue;
+    }
+    for (const auflage of mapping.auflagen ?? []) {
+      const zeile = computeUmschlagZeile({
+        config, formatKey: artikel.format, farbigkeit: artikel.farbigkeit,
+        pInhaltId, pUmschlagId: artikel.umschlagPapier, auflage,
+        seitenListe: SEITEN_STUETZSTELLEN_MIT_UMSCHLAG,
+      });
+      if (!zeile) {
+        // Basiszelle (4 Seiten, 1/1) nicht kalkulierbar → die Zeile fehlt im
+        // Shop ganz; das darf nicht still passieren.
+        hinweise.push(`Zeile ${pInhaltId} × ${auflage}: Basiszelle nicht kalkulierbar — Zeile entfällt.`);
+        continue;
+      }
+      const routeTag = ROUTE_TAGS[zeile.route];
+      if (!routeTag) {
+        probleme.push(`Route „${zeile.route}" hat keinen Tag in ROUTE_TAGS.`);
+        continue;
+      }
+      const aufschlaege = {};
+      for (const seiten of SEITEN_STUETZSTELLEN_MIT_UMSCHLAG) {
+        const listenwertId = listenwerte[String(seiten)] ?? listenwerte[seiten];
+        aufschlaege[listenwertId] =
+          seiten === zeile.basisSeiten ? 0 : zeile.aufschlaegeSeiten[seiten] ?? null;
+      }
+      zeilen.push({
+        sortenId: sorte.sortenId,
+        papierId: pInhaltId,
+        umschlagPapier: artikel.umschlagPapier,
+        auflage,
+        preis: zeile.basisPreis,
+        route: zeile.route,
+        produktionszeitWT: zeile.produktionszeitWT,
+        artikelnummer: `${artikel.artikelnummer}-${routeTag}`,
+        liefertage: zeile.produktionszeitWTMax,
+        routenSeiten: zeile.routenSeiten,
+        aufschlaege,
+        aufschlagFarbigkeitUmschlag: zeile.aufschlagFarbigkeitUmschlag,
+        veredelungMoeglich: zeile.veredelungMoeglich,
+        aufschlaegeVeredelung: zeile.aufschlaegeVeredelung,
+      });
+    }
+  }
+
+  return { zeilen, probleme: [...new Set(probleme)], hinweise };
+}
+
+// Hinweise (keine Fehler) zum Mapping: Testartikel ohne Leadprint-ID sind in
+// Stufe 1 des Umschlagartikel-Tests der Normalfall — der Import legt sie neu
+// an, alle Weiterleitungen auf sie bleiben bis Stufe 2 leer.
+export function mappingHinweise(mapping) {
+  const hinweise = [];
+  for (const a of mapping.artikel ?? []) {
+    if (a.rolle === 'test' && !a.leadprintId) {
+      hinweise.push(`Testartikel ${a.key} ohne ID (Neuanlage; Weiterleitungen dorthin bleiben bis Stufe 2 leer).`);
+    }
+  }
+  return hinweise;
+}
+
 // Abgleich Config ↔ Mapping: Welche Shop-IDs fehlen, welche Mapping-Einträge
 // zeigen auf Papiere, die es in der Config nicht mehr gibt? Läuft vor jedem
 // Writer-Lauf und als Test — Preisdaten dürfen nie still unvollständig in den
@@ -164,9 +282,19 @@ export function pruefeMappingVollstaendigkeit(config, mapping) {
   // mit Artikelnummer (Basis des Routen-Tags in articlePrices.artikelnummer) und
   // Leadprint-ID (Ziel der Weiterleitungen in den .rai-Spalten; ohne ID bliebe
   // die Option bei allen Zwillingen still leer — M9, Bug-Hunt V5)
+  // Testartikel (rolle "test") dürfen ohne ID sein — das ist Stufe 1 des
+  // Umschlagartikel-Tests und nur ein Hinweis (mappingHinweise), kein Fehler.
   for (const a of mapping.artikel ?? []) {
     if (!a.artikelnummer) probleme.push(`Artikel ${a.key}: keine artikelnummer im Mapping.`);
-    if (!a.leadprintId) probleme.push(`Artikel ${a.key}: keine leadprintId im Mapping.`);
+    if (!a.leadprintId && a.rolle !== 'test') probleme.push(`Artikel ${a.key}: keine leadprintId im Mapping.`);
+    if (a.umschlag === 'mit' && a.umschlagPapier && !paperIds.has(a.umschlagPapier)) {
+      probleme.push(`Artikel ${a.key}: umschlagPapier ${a.umschlagPapier} existiert nicht in der Config.`);
+    }
+  }
+  for (const [familie, papierId] of Object.entries(mapping.standardUmschlag ?? {})) {
+    const papier = config.papiere.find((p) => p.id === papierId);
+    if (!papier) probleme.push(`standardUmschlag ${familie}: Papier ${papierId} existiert nicht in der Config.`);
+    else if (papier.familie !== familie) probleme.push(`standardUmschlag ${familie}: Papier ${papierId} gehört zur Familie ${papier.familie}.`);
   }
   const artikelKeys = new Set((mapping.artikel ?? []).map((a) => a.key));
   for (const format of config.formate) {

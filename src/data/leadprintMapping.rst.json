@@ -11,7 +11,9 @@
       501
     ],
     "preisRouten": "alle (GC, Kopp, ILDA) — Empfehlungslogik der Engine; ILDA gewinnt nur in der Partner-Zone (Seiten über GC-Limit, ab 100 Ex.)",
-    "sichtbarkeit": "Nur Einstiegsartikel (einstieg=true: 4/4 ohne Umschlag je Format) sind in der Warengruppenliste sichtbar, alle anderen werden ausgeblendet (article.unsichtbar=1) und sind nur über Weiterleitungen erreichbar. Entscheidung Armin 11.10.2026."
+    "sichtbarkeit": "Nur Einstiegsartikel (einstieg=true: 4/4 ohne Umschlag je Format) sind in der Warengruppenliste sichtbar, alle anderen werden ausgeblendet (article.unsichtbar=1) und sind nur über Weiterleitungen erreichbar. Entscheidung Armin 11.10.2026.",
+    "testartikel": "Artikel mit rolle=\"test\" sind Testkopien für den Umschlagartikel-Test (Umschlagartikel-Plan.md, Stufe 1/2). leadprintId null = noch nicht angelegt (Import als Neuanlage, Weiterleitungen dorthin bleiben leer); nach dem ersten Export die IDs eintragen und denselben Build erneut laufen lassen. Testartikel verweisen nur auf Testartikel, Live-Artikel nur auf Live-Artikel (rolle muss übereinstimmen).",
+    "umschlagPapier": "Umschlagartikel tragen umschlagPapier (Papier-Key der Config): der Umschlag ist fest im Artikel, die Preiszeile ist Inhaltspapier × Auflage, die Umschlagpapier-Listenwerte (5555) sind Weiterleitungen auf die Geschwister-Artikel."
   },
   "artikel": [
     {
@@ -173,6 +175,77 @@
       "artikelnummer": "BRO-RST-A6H-44-U",
       "leadprintId": 1112127308,
       "einstieg": false
+    },
+    {
+      "key": "A4_Hoch|4c|ohne|TEST",
+      "format": "A4_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "ohne",
+      "rolle": "test",
+      "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 ohne Umschlag",
+      "artikelnummer": "TEST-BRO-RST-A4H-44",
+      "leadprintId": null,
+      "einstieg": false
+    },
+    {
+      "key": "A4_Hoch|4c|mit|CC_160",
+      "format": "A4_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "umschlagPapier": "CC_160",
+      "rolle": "test",
+      "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 160g ColorCopy",
+      "artikelnummer": "TEST-BRO-RST-A4H-44-U-CC160",
+      "leadprintId": null,
+      "einstieg": false
+    },
+    {
+      "key": "A4_Hoch|4c|mit|CC_250",
+      "format": "A4_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "umschlagPapier": "CC_250",
+      "rolle": "test",
+      "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 250g ColorCopy",
+      "artikelnummer": "TEST-BRO-RST-A4H-44-U-CC250",
+      "leadprintId": null,
+      "einstieg": false
+    },
+    {
+      "key": "A4_Hoch|4c|mit|CC_350",
+      "format": "A4_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "umschlagPapier": "CC_350",
+      "rolle": "test",
+      "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 350g ColorCopy",
+      "artikelnummer": "TEST-BRO-RST-A4H-44-U-CC350",
+      "leadprintId": null,
+      "einstieg": false
+    },
+    {
+      "key": "A4_Hoch|4c|mit|N_250",
+      "format": "A4_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "umschlagPapier": "N_250",
+      "rolle": "test",
+      "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 250g Natur",
+      "artikelnummer": "TEST-BRO-RST-A4H-44-U-N250",
+      "leadprintId": null,
+      "einstieg": false
+    },
+    {
+      "key": "A5_Hoch|4c|mit|CC_250",
+      "format": "A5_Hoch",
+      "farbigkeit": "4c",
+      "umschlag": "mit",
+      "umschlagPapier": "CC_250",
+      "rolle": "test",
+      "bezeichnung": "TEST Rückstichheftung A5 Hoch 4/4 mit Umschlag 250g ColorCopy",
+      "artikelnummer": "TEST-BRO-RST-A5H-44-U-CC250",
+      "leadprintId": null,
+      "einstieg": false
     }
   ],
   "auflagen": [
@@ -197,6 +270,10 @@
     900,
     1000
   ],
+  "standardUmschlag": {
+    "CC": "CC_250",
+    "N": "N_250"
+  },
   "sorten": {
     "CC_100": {
       "sortenId": 1942,

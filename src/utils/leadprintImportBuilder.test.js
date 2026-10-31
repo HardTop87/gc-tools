@@ -145,8 +145,10 @@ describe('Leadprint-Import-Builder (ohne-Umschlag-Artikel)', () => {
     expect(z['dynopt_aa.5563.52314.rai']).toBeNull();
     expect(z['dynopt_aa.5563.16136']).toBe(0);
     expect(z['dynopt_aa.5563.16136.rai']).toBe(id('A4_Hoch|4c|mit'));
-    // Alle 16 Artikel haben IDs, also sind alle Weiterleitungen gesetzt
-    expect(mapping.artikel.every((a) => a.leadprintId)).toBe(true);
+    // Alle 16 Live-Artikel haben IDs, also sind alle Weiterleitungen gesetzt
+    // (Testartikel für den Umschlagartikel-Test dürfen ohne ID sein)
+    expect(mapping.artikel.filter((a) => a.rolle !== 'test').every((a) => a.leadprintId)).toBe(true);
+    expect(mapping.artikel.filter((a) => a.rolle !== 'test')).toHaveLength(16);
   });
 
   it('Zwilling ohne Leadprint-ID: Option bleibt leer UND wird im Bericht gemeldet — einmal je Ziel (M9)', () => {
@@ -252,7 +254,8 @@ describe('Leadprint-Import-Builder (ohne-Umschlag-Artikel)', () => {
     const f = buildImportModel({ templateMatrix: vorlage({ id: 1112051233 }), config, mapping, artikelKey: 'A4_Hoch|4c|ohne' }).bericht;
     expect(f.fehler.some((x) => x.includes('1112051233'))).toBe(true);
     const m = buildImportModel({ templateMatrix: vorlage(), config, mapping, artikelKey: 'A4_Hoch|4c|mit' }).bericht;
-    expect(m.fehler.some((x) => x.includes('ohne-Umschlag'))).toBe(true);
+    // alter mit-U-Artikel ohne festes Umschlagpapier: nicht baubar
+    expect(m.fehler.some((x) => x.includes('umschlagPapier'))).toBe(true);
   });
 });
 

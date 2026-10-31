@@ -111,7 +111,7 @@ for (const datei of dateien) {
   if (fehler.length) dateienMitFehlern += 1;
   zusammenfassung.push([path.basename(datei), id, artikel.key, fehler.length ? `${fehler.length} Fehler` : 'ok', hinweise.length ? `${hinweise.length} Hinweise` : '']);
 }
-const fehlen = mapping.artikel.filter((a) => !gefunden.has(a.key));
+const fehlen = mapping.artikel.filter((a) => a.rolle !== 'test' && !gefunden.has(a.key)); // Testartikel haben (noch) keinen Export
 console.log('\n== Zusammenfassung');
 for (const z of zusammenfassung) console.log('  ', z.join(' | '));
 if (fehlen.length) console.log(`   Keine Datei für: ${fehlen.map((a) => `${a.key} (${a.leadprintId})`).join(', ')}`);

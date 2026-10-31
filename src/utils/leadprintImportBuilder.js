@@ -18,6 +18,26 @@
 // und der komplette articlePrices-Block. Preiszeilen bekommen KEINE id → der
 // Import legt sie neu an und löscht alle alten (offizielle Doku: Staffeln, die
 // in der Datei fehlen, werden entfernt). Leere Zellen bleiben leer — nie 0.
+//
+// Zwei Artikeltypen (Umschlagartikel-Plan.md, 31.10.2026):
+//   ohne Umschlag   – Zeile = Inhaltspapier × Auflage, Basis 8 Seiten; die
+//                     Umschlag-Felder bleiben leer, „4 Seiten" (5563/16136)
+//                     springt in den Umschlagartikel mit dem Standard-Umschlag
+//                     der Papierfamilie (mapping.standardUmschlag), solange es
+//                     den nicht gibt, in den alten mit-U-Zwilling.
+//   Umschlagartikel – umschlag „mit" + umschlagPapier: Zeile = Inhaltspapier ×
+//                     Auflage (nur Papiere, zu denen der Umschlag passt), Basis
+//                     4 Seiten / Umschlag 1/1 / ohne Cello; Farbigkeit und
+//                     Veredelung des Umschlags sind Aufschläge; „Papier
+//                     Umschlag" (5555) sind Weiterleitungen auf die
+//                     Geschwister-Artikel mit anderem Umschlag.
+//
+// Neuanlage in zwei Stufen: Hat der Artikel im Mapping keine leadprintId, wird
+// die Vorlage eines fremden Artikels benutzt, article.id bleibt LEER (Doku:
+// „Ist diese Zelle leer, wird ein neuer Artikel angelegt") und alle
+// Weiterleitungen auf Artikel ohne ID bleiben leer. Sobald die IDs nach dem
+// ersten Export im Mapping stehen, erzeugt derselbe Build die Update-Datei mit
+// gesetzter ID und allen Weiterleitungen — ohne Codeänderung.
 
 import {
   blockToObjects,
@@ -26,7 +46,14 @@ import {
   parseLeadprintExport,
   serializeLeadprintExport,
 } from './leadprintExportFile';
-import { buildPreiszeilenOhneUmschlag, pruefeMappingVollstaendigkeit } from './leadprintWriter';
+import { getCoverPaperOptions } from './calculateRSTPrice';
+import {
+  buildPreiszeilenMitUmschlag,
+  buildPreiszeilenOhneUmschlag,
+  inhaltspapiereZuUmschlag,
+  mappingHinweise,
+  pruefeMappingVollstaendigkeit,
+} from './leadprintWriter';
 
 // Zielzustand der Feld-Flags je Artikel (Checkliste A4). SquareFold (5629)
 // darf aus sein — es ist ohnehin unbepreist.
@@ -38,8 +65,27 @@ export const FELD_PRODUKTIONSGESCHWINDIGKEIT = 13453;
 // (article.produktionszeit), Auswahlliste 0–10 Tage (Doku article_eximport).
 const LIEFERTAGE_OFFSET_MAX = 10;
 
+// Artikel-Felder, die bei einer Neuanlage (oder einem Update mit fremder
+// Vorlage) nicht aus der Vorlage stammen dürfen. cdate/mdate kennt die Doku
+// nicht als Importfeld → leer lassen, der Shop setzt sie selbst.
+const NEUANLAGE_FELDER = {
+  bezeichnung_url: null,
+  status: 'OK', // GESPERRT wäre im Frontend nicht erreichbar, also nicht testbar
+  global_in_allen_subhops_ausblenden_jn: 1,
+  glob_artikel_rabatt: 3,
+  cdate: null,
+  mdate: null,
+};
+
 function rundeCent(wert) {
   return Math.round(wert * 100) / 100;
+}
+
+// Basis und Zellpreis werden getrennt gerundet, damit Basis + Aufschlag genau
+// dem gerundeten Engine-Preis der Zelle entspricht (auf den Cent exakt).
+function centAufschlag(basis, aufschlag) {
+  if (aufschlag == null) return null;
+  return rundeCent(basis + aufschlag) - rundeCent(basis);
 }
 
 function gruppenIndex(mapping) {
@@ -59,29 +105,84 @@ function listenwertSchluessel(feld, listenwertId) {
   return null;
 }
 
-// Zwillingsartikel für Weiterleitungen: gleicher Artikel bis auf EINE Dimension.
-// Rückgabe: { wert: 0, rai: <leadprintId> } oder die leere Zelle, wenn es den
-// Zwilling nicht gibt. Ein Zwilling OHNE leadprintId (Tippfehler, Artikel noch
-// nicht angelegt) wird nicht still zur Leerzelle, sondern einmal je Ziel im
-// Bericht gemeldet (M9, Bug-Hunt V5) — die Option fehlt sonst unbemerkt im Shop.
-function weiterleitung({ mapping, artikel, aenderung, name, schluessel, bericht }) {
+// Umschlagpapier-Key zu einem Listenwert der Gruppe 5555 (mapping.umschlagListenwerte)
+function umschlagPapierZuListenwert(mapping, listenwertId) {
+  for (const [papierId, eintrag] of Object.entries(mapping.umschlagListenwerte ?? {})) {
+    if (String(eintrag.listenwertId) === String(listenwertId)) return papierId;
+  }
+  return null;
+}
+
+function papierFamilie(config, papierId) {
+  return config.papiere.find((p) => p.id === papierId)?.familie ?? null;
+}
+
+function istUmschlagartikel(artikel) {
+  return artikel.umschlag === 'mit' && Boolean(artikel.umschlagPapier);
+}
+
+// Artikel im Mapping, der genau zu `ziel` passt: Format, Farbigkeit, Umschlag,
+// Umschlagpapier (null = alter mit-U-Artikel ohne festes Papier) und Rolle.
+// Testartikel verweisen nur auf Testartikel, Live-Artikel nur auf Live-Artikel.
+function findeArtikel(mapping, ziel) {
+  return (mapping.artikel ?? []).find(
+    (a) => a.format === ziel.format
+      && a.farbigkeit === ziel.farbigkeit
+      && a.umschlag === ziel.umschlag
+      && (a.umschlagPapier ?? null) === (ziel.umschlagPapier ?? null)
+      && (a.rolle ?? null) === (ziel.rolle ?? null),
+  ) ?? null;
+}
+
+// Weiterleitung auf einen Zwillingsartikel: Rückgabe { wert: 0, rai: <leadprintId> }
+// oder die leere Zelle, wenn es den Zwilling nicht gibt. Ein Zwilling OHNE
+// leadprintId wird nicht still zur Leerzelle, sondern einmal je Ziel gemeldet:
+//   Live-Artikel → Warnung (Tippfehler, Artikel nicht angelegt — M9, Bug-Hunt V5),
+//   Testartikel  → Hinweis (Stufe 1: die ID gibt es erst nach dem ersten Export).
+function weiterleitungAuf({ zwilling, name, schluessel, bericht }) {
   const leer = { wert: null, rai: null };
-  const ziel = { format: artikel.format, farbigkeit: artikel.farbigkeit, umschlag: artikel.umschlag, ...aenderung };
-  const zwilling = (mapping.artikel ?? []).find(
-    (a) => a.format === ziel.format && a.farbigkeit === ziel.farbigkeit && a.umschlag === ziel.umschlag,
-  );
   if (!zwilling) return leer;
   if (!zwilling.leadprintId) {
-    const meldung = `Weiterleitung ${name}/${schluessel}: Zwilling ${zwilling.key} hat keine leadprintId — Option bleibt leer.`;
-    if (!bericht.warnungen.includes(meldung)) bericht.warnungen.push(meldung);
+    if (zwilling.rolle === 'test') {
+      const meldung = `Weiterleitung ${name}/${schluessel} → ${zwilling.key}: Testartikel ohne ID, Zelle bleibt bis Stufe 2 leer.`;
+      if (!bericht.hinweise.includes(meldung)) bericht.hinweise.push(meldung);
+    } else {
+      const meldung = `Weiterleitung ${name}/${schluessel}: Zwilling ${zwilling.key} hat keine leadprintId — Option bleibt leer.`;
+      if (!bericht.warnungen.includes(meldung)) bericht.warnungen.push(meldung);
+    }
     return leer;
   }
   return { wert: 0, rai: zwilling.leadprintId };
 }
 
+// Zwilling = gleicher Artikel bis auf die Dimensionen in `aenderung`.
+function weiterleitung({ mapping, artikel, aenderung, name, schluessel, bericht }) {
+  const ziel = {
+    format: artikel.format, farbigkeit: artikel.farbigkeit, umschlag: artikel.umschlag,
+    umschlagPapier: artikel.umschlagPapier ?? null, rolle: artikel.rolle ?? null,
+    ...aenderung,
+  };
+  return weiterleitungAuf({ zwilling: findeArtikel(mapping, ziel), name, schluessel, bericht });
+}
+
+// Sprung „mit Umschlag" aus einem ohne-U-Artikel, je Zeile: Ziel ist der
+// Umschlagartikel mit dem Standard-Umschlag der Papierfamilie des Inhalts-
+// papiers (mapping.standardUmschlag). Gibt es den (noch) nicht, bleibt es beim
+// alten mit-U-Zwilling ohne festes Umschlagpapier — so ändert sich für die
+// Live-Artikel nichts, bis die Umschlagartikel angelegt sind.
+function sprungMitUmschlag({ config, mapping, artikel, zeile, name, bericht }) {
+  const basis = { format: artikel.format, farbigkeit: artikel.farbigkeit, umschlag: 'mit', rolle: artikel.rolle ?? null };
+  const familie = papierFamilie(config, zeile.papierId);
+  const standard = familie ? mapping.standardUmschlag?.[familie] ?? null : null;
+  const umschlagartikel = standard ? findeArtikel(mapping, { ...basis, umschlagPapier: standard }) : null;
+  if (umschlagartikel) return weiterleitungAuf({ zwilling: umschlagartikel, name, schluessel: `mit (${familie} → ${standard})`, bericht });
+  return weiterleitungAuf({ zwilling: findeArtikel(mapping, { ...basis, umschlagPapier: null }), name, schluessel: 'mit', bericht });
+}
+
 // Prüft die Vorlage gegen den Zielzustand (Checkliste) und liefert die
 // Basis-Produktionszeit des Artikels. Fehler = Import nicht sinnvoll;
 // Warnungen = Import läuft, Armin sollte es aber im Backend ansehen.
+// Setzt bericht.neuanlage / bericht.vorlageFremd (siehe Kopfkommentar).
 function pruefeVorlage(model, artikel, bericht) {
   const articleBlock = findBlock(model, 'article.');
   if (!articleBlock || !articleBlock.rows.length) {
@@ -89,14 +190,22 @@ function pruefeVorlage(model, artikel, bericht) {
     return null;
   }
   const art = blockToObjects(articleBlock)[0];
-  if (String(art.id) !== String(artikel.leadprintId)) {
-    bericht.fehler.push(`Vorlage gehört zu Artikel ${art.id}, erwartet ${artikel.leadprintId} (${artikel.key}).`);
+  bericht.neuanlage = !artikel.leadprintId;
+  bericht.vorlageFremd = String(art.id) !== String(artikel.leadprintId);
+  if (bericht.vorlageFremd) {
+    if (bericht.neuanlage) {
+      bericht.hinweise.push(`Neuanlage: article.id bleibt leer, Artikel-Einstellungen kommen aus der Vorlage ${art.id} (${art.artikelnummer}).`);
+    } else if (artikel.rolle === 'test') {
+      bericht.warnungen.push(`Vorlage gehört zu Artikel ${art.id}, article.id wird auf ${artikel.leadprintId} gesetzt (Testartikel, Stufe 2 mit fremder Vorlage).`);
+    } else {
+      bericht.fehler.push(`Vorlage gehört zu Artikel ${art.id}, erwartet ${artikel.leadprintId} (${artikel.key}).`);
+    }
   }
   const basisWT = Number(art.produktionszeit);
   if (!Number.isFinite(basisWT)) {
     bericht.fehler.push('article.produktionszeit fehlt oder ist keine Zahl (Basis der Liefertage).');
   }
-  if (Number(art.glob_artikel_rabatt) !== 3) {
+  if (Number(art.glob_artikel_rabatt) !== 3 && !bericht.vorlageFremd) {
     bericht.warnungen.push(`Preismanipulation steht auf ${art.glob_artikel_rabatt} %, Ziel sind 3 % (PayPal).`);
   }
 
@@ -132,21 +241,35 @@ function pruefeVorlage(model, artikel, bericht) {
 // Bezeichnung mit „ohne/mit Umschlag", Artikelnummer, und die Sichtbarkeit in
 // der Warengruppenliste — nur Einstiegsartikel (4/4 ohne Umschlag je Format)
 // sind sichtbar, alle anderen erreicht der Kunde über die Weiterleitungen.
+// Bei Neuanlage / fremder Vorlage zusätzlich: article.id (leer bzw. eigene ID)
+// und die NEUANLAGE_FELDER, weil die Werte der Vorlage einem anderen Artikel
+// gehören.
 function schreibeArtikelFelder(model, artikel, bericht) {
   const block = findBlock(model, 'article.');
   if (!block || !block.rows.length) return;
   const setze = (feld, wert) => {
     const i = block.header.findIndex((h) => String(h) === `article.${feld}`);
     if (i < 0) { bericht.warnungen.push(`Vorlage ohne Spalte article.${feld} — bleibt wie im Backend.`); return; }
-    if (String(block.rows[0][i] ?? '') !== String(wert)) bericht.geaendert.push(`${feld}: „${block.rows[0][i] ?? ''}" → „${wert}"`);
+    if (String(block.rows[0][i] ?? '') !== String(wert ?? '')) bericht.geaendert.push(`${feld}: „${block.rows[0][i] ?? ''}" → „${wert ?? ''}"`);
     block.rows[0][i] = wert;
   };
+  if (bericht.vorlageFremd) {
+    setze('id', artikel.leadprintId ?? null);
+    for (const [feld, wert] of Object.entries(NEUANLAGE_FELDER)) setze(feld, wert);
+  }
   if (artikel.bezeichnung) setze('bezeichnung', artikel.bezeichnung);
   if (artikel.artikelnummer) setze('artikelnummer', artikel.artikelnummer);
   setze('unsichtbar', artikel.einstieg ? 0 : 1);
 }
 
-// Sorten-Flags: genau die Inhaltspapiere des Formats (laut Config) an, alles
+// Inhaltspapiere, die der Artikel im Shop anbietet: ohne Umschlag alle des
+// Formats, als Umschlagartikel nur die, zu denen das Umschlagpapier passt.
+function inhaltspapiereDesArtikels(config, artikel) {
+  if (istUmschlagartikel(artikel)) return inhaltspapiereZuUmschlag(config, artikel.format, artikel.umschlagPapier);
+  return config.formate.find((f) => f.key === artikel.format)?.papiereInhalt ?? [];
+}
+
+// Sorten-Flags: genau die Inhaltspapiere des Artikels (laut Config) an, alles
 // andere aus. Sorten ohne Spalte in der Vorlage können nicht geschaltet werden.
 function schreibeSortenFlags(model, config, mapping, artikel, bericht) {
   const block = findBlock(model, 'articleGlobalVariety');
@@ -154,9 +277,8 @@ function schreibeSortenFlags(model, config, mapping, artikel, bericht) {
     bericht.warnungen.push('Vorlage ohne articleGlobalVariety-Block — Sorten-Flags bleiben wie im Backend.');
     return;
   }
-  const format = config.formate.find((f) => f.key === artikel.format);
   const gewollt = new Map();
-  for (const papierId of format?.papiereInhalt ?? []) {
+  for (const papierId of inhaltspapiereDesArtikels(config, artikel)) {
     const sortenId = mapping.sorten?.[papierId]?.sortenId;
     if (sortenId) gewollt.set(String(sortenId), papierId);
   }
@@ -176,7 +298,7 @@ function schreibeSortenFlags(model, config, mapping, artikel, bericht) {
 
 // Wert einer dynopt-Spalte für eine Preiszeile eines ohne-Umschlag-Artikels.
 // Rückgabe: { wert, rai } — beides null = Zelle leer (Option ausgeblendet).
-function dynoptZelle({ listenwertId, istBp, istRai, feldInfo, zeile, artikel, mapping, bericht }) {
+function dynoptZelleOhneUmschlag({ listenwertId, istBp, istRai, feldInfo, zeile, artikel, config, mapping, bericht }) {
   const leer = { wert: null, rai: null };
   if (!feldInfo) return leer; // unbekannte Gruppe → leer, wird im Bericht gemeldet
   const { name, feld } = feldInfo;
@@ -188,9 +310,7 @@ function dynoptZelle({ listenwertId, istBp, istRai, feldInfo, zeile, artikel, ma
       if (schluessel === '4') return leer; // P3: 4 Seiten nur mit Umschlag
       const aufschlag = zeile.aufschlaege[listenwertId];
       if (aufschlag == null) return leer;
-      // Auf den Cent exakt: Basis und Zellpreis werden getrennt gerundet,
-      // damit Basis + Aufschlag genau dem gerundeten Engine-Preis entspricht.
-      return { wert: rundeCent(zeile.preis + aufschlag) - rundeCent(zeile.preis), rai: null };
+      return { wert: centAufschlag(zeile.preis, aufschlag), rai: null };
     }
     case 'Endformat': {
       const formatKey = listenwertSchluessel(feld, listenwertId);
@@ -204,8 +324,9 @@ function dynoptZelle({ listenwertId, istBp, istRai, feldInfo, zeile, artikel, ma
     }
     case 'Seitenanzahl Umschlag (RST)': {
       const schluessel = listenwertSchluessel(feld, listenwertId);
-      if (schluessel === artikel.umschlag) return { wert: 0, rai: null };
-      return springe({ umschlag: schluessel }, schluessel);
+      if (schluessel === 'ohne') return { wert: 0, rai: null };
+      if (schluessel === 'mit') return sprungMitUmschlag({ config, mapping, artikel, zeile, name, bericht });
+      return leer;
     }
     // Statische Felder (eine Option, 0 €): Nur der Listenwert, den das Mapping
     // unter `werte` kennt (Bindung: Drahtheftung 2-fach; Papier Innenteil:
@@ -227,6 +348,87 @@ function dynoptZelle({ listenwertId, istBp, istRai, feldInfo, zeile, artikel, ma
   }
 }
 
+// Wert einer dynopt-Spalte für eine Preiszeile eines Umschlagartikels.
+function dynoptZelleMitUmschlag({ listenwertId, istBp, istRai, feldInfo, zeile, artikel, config, mapping, bericht }) {
+  const leer = { wert: null, rai: null };
+  if (!feldInfo) return leer;
+  const { name, feld } = feldInfo;
+  const springe = (aenderung, schluessel) => weiterleitung({ mapping, artikel, aenderung, name, schluessel, bericht });
+  switch (name) {
+    // Basis der Zeile ist „4 Seiten" (P3: nur mit Umschlag) → 0, alle weiteren
+    // Stützstellen als Aufschlag, nicht kalkulierbare bleiben leer.
+    case 'Seitenanzahl Innenteil': {
+      if (istBp || istRai) return leer;
+      const aufschlag = zeile.aufschlaege[listenwertId];
+      if (aufschlag == null) return leer;
+      return { wert: centAufschlag(zeile.preis, aufschlag), rai: null };
+    }
+    // Umschlag 1/1 ist die Basis, 4/4 der Aufschlag aus der Engine.
+    case 'Farbigkeit Umschlag (RST)': {
+      if (istBp || istRai) return leer;
+      const schluessel = listenwertSchluessel(feld, listenwertId);
+      if (schluessel === '1c') return { wert: 0, rai: null };
+      if (schluessel === '4c') return { wert: centAufschlag(zeile.preis, zeile.aufschlagFarbigkeitUmschlag), rai: null };
+      return leer;
+    }
+    // Veredelung nur, wenn die Umschlag-Familie Cello erlaubt (CC/BD). Die
+    // bp-Spalte („Basispreis" der Gruppe) steht in jeder Vorlagenzeile auf 0.
+    case 'Veredelung Umschlag (RST)': {
+      if (istRai) return leer;
+      if (!zeile.veredelungMoeglich) return leer;
+      if (istBp) return { wert: 0, rai: null };
+      const schluessel = listenwertSchluessel(feld, listenwertId);
+      if (!schluessel) return leer;
+      if (schluessel === 'ohne') return { wert: 0, rai: null };
+      return { wert: centAufschlag(zeile.preis, zeile.aufschlaegeVeredelung?.[schluessel]), rai: null };
+    }
+    // Eigenes Umschlagpapier 0 ohne Ziel; andere Umschlagpapiere springen in
+    // den Geschwister-Artikel, wenn sie zum Inhaltspapier der Zeile passen
+    // (Familienregel + Ausnahmen) UND es den Artikel im Mapping gibt.
+    case 'Papier Umschlag (RST)': {
+      if (istBp) return leer;
+      const papierId = umschlagPapierZuListenwert(mapping, listenwertId);
+      if (!papierId) return leer;
+      if (papierId === artikel.umschlagPapier) return { wert: 0, rai: null };
+      const passt = getCoverPaperOptions(config, artikel.format, zeile.papierId).some((p) => p.id === papierId);
+      if (!passt) return leer;
+      return springe({ umschlagPapier: papierId }, papierId);
+    }
+    // „4 Seiten" ist der eigene Zustand; „ohne Umschlag" springt zurück in
+    // den ohne-U-Artikel gleicher Format/Farbigkeit.
+    case 'Seitenanzahl Umschlag (RST)': {
+      const schluessel = listenwertSchluessel(feld, listenwertId);
+      if (schluessel === 'mit') return { wert: 0, rai: null };
+      if (schluessel === 'ohne') return springe({ umschlag: 'ohne', umschlagPapier: null }, 'ohne');
+      return leer;
+    }
+    // Format- und Druckwechsel: Artikel mit demselben Umschlagpapier.
+    case 'Endformat': {
+      const formatKey = listenwertSchluessel(feld, listenwertId);
+      if (formatKey === artikel.format) return { wert: 0, rai: null };
+      return springe({ format: formatKey }, formatKey);
+    }
+    case 'Farbigkeit Innenteil': {
+      const farbigkeit = listenwertSchluessel(feld, listenwertId);
+      if (farbigkeit === artikel.farbigkeit) return { wert: 0, rai: null };
+      return springe({ farbigkeit }, farbigkeit);
+    }
+    case 'Bindung':
+    case 'Papier Innenteil':
+      if (istBp || istRai) return leer;
+      return listenwertSchluessel(feld, listenwertId) ? { wert: 0, rai: null } : leer;
+    case 'SquareFold':
+    default:
+      return leer;
+  }
+}
+
+// Verteiler nach Artikeltyp. Jede Spalte (Wert wie .rai) rechnet ihre Zelle
+// selbst und nimmt sich aus { wert, rai } das passende Feld.
+function dynoptZelle(args) {
+  return istUmschlagartikel(args.artikel) ? dynoptZelleMitUmschlag(args) : dynoptZelleOhneUmschlag(args);
+}
+
 // Reduziert das Modell auf die Blöcke, die der Import wirklich braucht:
 // article (nur die id als Anker), articleGlobalVariety, articlePrices. Alles
 // andere (Artikel-Einstellungen, Feld-Flags) bleibt dann im Backend, wie es
@@ -246,10 +448,14 @@ export function reduziereAufPreisbloecke(model) {
   return { blocks, trailingGap: 0 };
 }
 
-// Baut das Modell der Import-Datei für einen ohne-Umschlag-Artikel.
-// nurPreisbloecke: siehe reduziereAufPreisbloecke.
+// Baut das Modell der Import-Datei für einen Artikel (ohne Umschlag oder
+// Umschlagartikel). nurPreisbloecke: siehe reduziereAufPreisbloecke — nur für
+// bestehende Artikel sinnvoll (eine Neuanlage braucht den ganzen article-Block).
 export function buildImportModel({ templateMatrix, config, mapping, artikelKey, nurPreisbloecke = false }) {
   const ergebnis = buildVollesModell({ templateMatrix, config, mapping, artikelKey });
+  if (nurPreisbloecke && ergebnis.bericht.neuanlage) {
+    ergebnis.bericht.fehler.push('Minimaldatei nicht möglich: Neuanlage braucht den vollständigen article-Block.');
+  }
   if (nurPreisbloecke && !ergebnis.bericht.fehler.length) {
     ergebnis.model = reduziereAufPreisbloecke(ergebnis.model);
     // Die Minimaldatei trägt nur article.id — Bezeichnung, Artikelnummer und
@@ -261,7 +467,10 @@ export function buildImportModel({ templateMatrix, config, mapping, artikelKey, 
 }
 
 function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
-  const bericht = { artikelKey, fehler: [], warnungen: [], geaendert: [], zeilen: 0, leereZellen: 0, zellen: 0, sortenAn: [], sortenAus: [], unbekannteGruppen: [], referenzzeile: null };
+  const bericht = {
+    artikelKey, fehler: [], warnungen: [], hinweise: [], geaendert: [], zeilen: 0, leereZellen: 0, zellen: 0,
+    sortenAn: [], sortenAus: [], unbekannteGruppen: [], referenzzeile: null, neuanlage: false, vorlageFremd: false,
+  };
   const model = parseLeadprintExport(templateMatrix);
 
   const artikel = (mapping.artikel ?? []).find((a) => a.key === artikelKey);
@@ -269,11 +478,12 @@ function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
     bericht.fehler.push(`Artikel ${artikelKey} nicht im Mapping.`);
     return { model, bericht };
   }
-  if (artikel.umschlag !== 'ohne') {
-    bericht.fehler.push('Der Import-Builder kann bisher nur ohne-Umschlag-Artikel.');
+  if (artikel.umschlag !== 'ohne' && !istUmschlagartikel(artikel)) {
+    bericht.fehler.push('Der Import-Builder kann mit-Umschlag-Artikel nur mit festem Umschlagpapier (umschlagPapier im Mapping) — die alten mit-U-Artikel nicht.');
     return { model, bericht };
   }
   for (const p of pruefeMappingVollstaendigkeit(config, mapping)) bericht.warnungen.push(`Mapping: ${p}`);
+  for (const h of mappingHinweise(mapping)) bericht.hinweise.push(`Mapping: ${h}`);
 
   const basisWT = pruefeVorlage(model, artikel, bericht);
   schreibeArtikelFelder(model, artikel, bericht);
@@ -284,8 +494,12 @@ function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
     bericht.fehler.push('Vorlage ohne articlePrices-Block.');
     return { model, bericht };
   }
-  const { zeilen, probleme } = buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey });
+  const writer = istUmschlagartikel(artikel)
+    ? buildPreiszeilenMitUmschlag({ config, mapping, artikelKey })
+    : buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey });
+  const { zeilen, probleme } = writer;
   for (const p of probleme) bericht.fehler.push(`Writer: ${p}`);
+  for (const h of writer.hinweise ?? []) bericht.hinweise.push(`Writer: ${h}`);
   if (bericht.fehler.length) return { model, bericht };
 
   // Referenzzeile: Nicht-Preis-Spalten (Pakete, Gewicht, …) werden von der
@@ -312,10 +526,25 @@ function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
     });
   const seitenFeld = mapping.optionsfelder['Seitenanzahl Innenteil'];
   for (const [seiten, lwId] of Object.entries(seitenFeld.werte)) {
-    if (seiten === '4') continue;
+    if (seiten === '4' && !istUmschlagartikel(artikel)) continue;
     if (!dynSpalten.some((s) => s.gruppe === String(seitenFeld.gruppenId) && s.listenwertId === String(lwId))) {
       bericht.warnungen.push(`Vorlage hat keine Spalte für Seitenanzahl ${seiten} (Listenwert ${lwId}) — der Aufschlag kann nicht geschrieben werden.`);
     }
+  }
+  if (istUmschlagartikel(artikel)) {
+    // Ohne diese Spalten wären Umschlag-Farbigkeit, Veredelung oder der
+    // Umschlagwechsel im Shop stumm — die Vorlage muss ein mit-U-Export sein.
+    for (const gruppenName of ['Farbigkeit Umschlag (RST)', 'Veredelung Umschlag (RST)', 'Papier Umschlag (RST)']) {
+      const gruppenId = String(mapping.optionsfelder[gruppenName]?.gruppenId ?? '');
+      if (!dynSpalten.some((s) => s.gruppe === gruppenId)) {
+        bericht.fehler.push(`Vorlage hat keine Spalten der Gruppe ${gruppenId} (${gruppenName}) — für einen Umschlagartikel ungeeignet.`);
+      }
+    }
+    const eigenerLw = mapping.umschlagListenwerte?.[artikel.umschlagPapier]?.listenwertId;
+    if (!dynSpalten.some((s) => s.listenwertId === String(eigenerLw))) {
+      bericht.fehler.push(`Vorlage hat keine Spalte für das eigene Umschlagpapier ${artikel.umschlagPapier} (Listenwert ${eigenerLw}).`);
+    }
+    if (bericht.fehler.length) return { model, bericht };
   }
 
   const neu = [];
@@ -334,7 +563,7 @@ function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
     }
     obj.liefertage = Math.min(Math.max(offset, 0), LIEFERTAGE_OFFSET_MAX);
     for (const spalte of dynSpalten) {
-      const zelle = dynoptZelle({ ...spalte, zeile, artikel, mapping, bericht });
+      const zelle = dynoptZelle({ ...spalte, zeile, artikel, config, mapping, bericht });
       let wert = spalte.istRai ? zelle.rai : zelle.wert;
       if (typeof wert === 'number' && !spalte.istRai) wert = rundeCent(wert);
       obj[spalte.feld] = wert;
@@ -360,5 +589,5 @@ export function artikelKeyAusVorlage(templateMatrix, mapping) {
   const block = findBlock(model, 'article.');
   if (!block) return null;
   const id = String(blockToObjects(block)[0]?.id ?? '');
-  return (mapping.artikel ?? []).find((a) => String(a.leadprintId) === id)?.key ?? null;
+  return (mapping.artikel ?? []).find((a) => a.leadprintId != null && String(a.leadprintId) === id)?.key ?? null;
 }

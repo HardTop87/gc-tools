@@ -124,6 +124,9 @@ export function pruefeKatalogGegenMapping(katalog, mapping) {
     }
   }
   for (const a of mapping.artikel ?? []) {
+    // Testartikel (Umschlagartikel-Test) stehen bewusst nicht im Katalog —
+    // sie existieren erst nach dem Testimport und werden danach gesperrt.
+    if (a.rolle === 'test') continue;
     const k = artikelById(katalog, a.leadprintId);
     if (!k) probleme.push(`Mapping-Artikel ${a.key}: ID ${a.leadprintId} nicht im Katalog.`);
     else if (k.artikelnummer !== a.artikelnummer) probleme.push(`Artikel ${a.leadprintId}: Katalog ${k.artikelnummer}, Mapping ${a.artikelnummer}.`);

@@ -14,6 +14,8 @@
 //     --config <preisstand.json> Preisbasis statt pricingConfig.default.json
 //     --out <ordner>             Ausgabeordner (Standard Leadprint_Import/test-umschlag)
 //     --kein-zip                 ZIP nicht erzeugen
+//     --ohne-huelle              rohe Engine-Preise an den Staffeln (Vergleich; Standard
+//                                ist die Sicherheitshülle über die 151 Staffeln, Befund 1)
 //
 // Ausgabe: <out>/<artikelnummer>.xlsx je Artikel plus ein ZIP
 // Leadprint_Import/test-umschlag-stufe<1|2>-<datum>.zip (Stufe 1 = mindestens ein
@@ -39,6 +41,7 @@ const args = process.argv.slice(2);
 let config = getDefaultPricingConfig();
 let outDir = path.resolve('Leadprint_Import', 'test-umschlag');
 let zipErzeugen = true;
+let huelle = true;
 const keys = [];
 const vorlagen = { ...VORLAGEN_STANDARD };
 let vorlageAlle = null;
@@ -67,6 +70,7 @@ for (let i = 0; i < args.length; i += 1) {
     }
     case '--out': outDir = path.resolve(wert(i, 'einen Ordner')); i += 1; break;
     case '--kein-zip': zipErzeugen = false; break;
+    case '--ohne-huelle': huelle = false; break;
     default: console.error(`Unbekannte Option ${args[i]}.`); process.exit(1);
   }
 }
@@ -95,11 +99,12 @@ for (const a of artikel) {
   const vorlagePfad = vorlageAlle ?? vorlagen[a.format];
   if (!vorlagePfad) { console.error(`\n== ${a.key}: keine Vorlage für Format ${a.format} (--vorlage ${a.format}=…).`); fehler += 1; continue; }
   if (!fs.existsSync(vorlagePfad)) { console.error(`\n== ${a.key}: Vorlage ${vorlagePfad} nicht gefunden.`); fehler += 1; continue; }
+  const start = performance.now();
   const { matrix, sheetName } = ladeVorlage(vorlagePfad);
-  const { matrix: out, bericht } = buildImportMatrix({ templateMatrix: matrix, config, mapping, artikelKey: a.key });
+  const { matrix: out, bericht } = buildImportMatrix({ templateMatrix: matrix, config, mapping, artikelKey: a.key, huelle });
   const stufe = bericht.neuanlage ? 'Stufe 1: Neuanlage (article.id leer)' : `Stufe 2: Update von ${a.leadprintId}`;
-  console.log(`\n== ${a.key} (${a.artikelnummer}) aus ${path.basename(vorlagePfad)} — ${stufe}`);
-  console.log(`   Preiszeilen ${bericht.zeilen}, Optionszellen ${bericht.zellen}, davon leer ${bericht.leereZellen}`);
+  console.log(`\n== ${a.key} (${a.artikelnummer}) aus ${path.basename(vorlagePfad)} — ${stufe}${huelle ? '' : ' — OHNE Hülle'}`);
+  console.log(`   Preiszeilen ${bericht.zeilen} (${bericht.zeilenMitId} mit Staffel-ID aus der Vorlage, ${bericht.zeilenNeu} neu), Optionszellen ${bericht.zellen}, davon leer ${bericht.leereZellen}`);
   console.log(`   Sorten an: ${bericht.sortenAn.join(', ')}`);
   console.log(`   Sorten aus: ${bericht.sortenAus.length} (IDs ${bericht.sortenAus.join(', ')})`);
   if (bericht.unbekannteGruppen.length) console.log(`   unbekannte Optionsgruppen in Preiszeilen (bleiben leer): ${bericht.unbekannteGruppen.join(', ')}`);
@@ -119,7 +124,7 @@ for (const a of artikel) {
   const ziel = path.join(outDir, `${a.artikelnummer}.xlsx`);
   XLSX.writeFile(wbOut, ziel);
   dateien.push({ ziel, neuanlage: bericht.neuanlage });
-  console.log(`   → ${path.relative(process.cwd(), ziel)}`);
+  console.log(`   → ${path.relative(process.cwd(), ziel)} (${(fs.statSync(ziel).size / 1024).toFixed(0)} KB, ${((performance.now() - start) / 1000).toFixed(1)} s)`);
 }
 
 if (zipErzeugen && dateien.length && !fehler) {

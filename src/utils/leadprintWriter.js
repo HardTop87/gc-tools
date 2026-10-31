@@ -11,9 +11,15 @@
 // Umschlag-Farbigkeit und Veredelung sind Aufschläge je Zeile. Die alten
 // mit-U-Artikel ohne umschlagPapier (8 Live-Artikel) kann der Writer nicht —
 // sie werden laut Plan zu Standard-Umschlag-Artikeln ihrer Kombination.
+//
+// Sicherheitshülle (Befund 1, 31.10.2026): Beide Writer rechnen standardmäßig
+// mit Hülle (leadprintMapper: Staffelwerte so angehoben, dass die lineare
+// Interpolation des Shops zwischen zwei Staffeln nie unter dem Engine-Preis
+// liegt) über die 151 Staffeln aus mapping.auflagen. `huelle: false` liefert
+// die rohen Engine-Preise an den Staffeln (Tests, Vergleich).
 
 import { getCoverPaperOptions } from './calculateRSTPrice';
-import { computeArtikelOhneUmschlag, computeUmschlagZeile, SEITEN_STUETZSTELLEN } from './leadprintMapper';
+import { computeArtikelOhneUmschlag, computeUmschlagZeilen, SEITEN_STUETZSTELLEN } from './leadprintMapper';
 
 // P3: 4 Seiten Inhalt gibt es nur mit Umschlag — die mit-Umschlag-Artikel
 // bekommen deshalb eine eigene Stützstellenliste mit der 4 am Anfang.
@@ -55,7 +61,7 @@ function seitenListenwerte(mapping) {
 //     Produktionszeit aller Zellen der Zeile — „Zeilenmaximum", 10.10.2026),
 //     aufschlaege: { <listenwertId>: betrag | null } }
 // Fehlende Shop-IDs werden gesammelt statt still übersprungen.
-export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
+export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey, huelle = true }) {
   const artikel = (mapping.artikel ?? []).find((a) => a.key === artikelKey);
   if (!artikel) return { zeilen: [], probleme: [`Artikel ${artikelKey} nicht im Mapping.`] };
   if (artikel.umschlag !== 'ohne') {
@@ -75,6 +81,7 @@ export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
     formatKey: artikel.format,
     farbigkeit: artikel.farbigkeit,
     auflagen: mapping.auflagen ?? [],
+    huelle,
   });
 
   const zeilen = [];
@@ -117,6 +124,7 @@ export function buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey }) {
       liefertage: zeile.produktionszeitWTMax,
       routenSeiten: zeile.routenSeiten,
       aufschlaege,
+      liftBasis: zeile.liftBasis, // Anhebung der Basiszelle durch die Hülle (0 ohne Hülle)
     });
   }
 
@@ -144,9 +152,9 @@ export function inhaltspapiereZuUmschlag(config, formatKey, pUmschlagId) {
 //     aufschlaege: { <listenwertId 5628>: betrag | null },
 //     aufschlagFarbigkeitUmschlag: betrag | null (4/4 statt 1/1),
 //     veredelungMoeglich, aufschlaegeVeredelung: { ohne|glaenzend|matt|softtouch: betrag | null } }
-// Preisbasis ist die übergebene Config (heutige Staffeln, KEINE Sicherheitshülle
-// und keine dichteren Staffeln — Befund 1 des Plans ist noch nicht entschieden).
-export function buildPreiszeilenMitUmschlag({ config, mapping, artikelKey }) {
+// Preisbasis ist die übergebene Config; Staffeln aus mapping.auflagen, Hülle
+// und Aufschlag-Variante wie im Mapper (Standard: Hülle an, alleSeiten).
+export function buildPreiszeilenMitUmschlag({ config, mapping, artikelKey, huelle = true, aufschlagVariante }) {
   const artikel = (mapping.artikel ?? []).find((a) => a.key === artikelKey);
   if (!artikel) return { zeilen: [], probleme: [`Artikel ${artikelKey} nicht im Mapping.`], hinweise: [] };
   if (artikel.umschlag !== 'mit' || !artikel.umschlagPapier) {
@@ -179,12 +187,15 @@ export function buildPreiszeilenMitUmschlag({ config, mapping, artikelKey }) {
       probleme.push(`Papier ${pInhaltId}: keine sortenId im Mapping.`);
       continue;
     }
-    for (const auflage of mapping.auflagen ?? []) {
-      const zeile = computeUmschlagZeile({
-        config, formatKey: artikel.format, farbigkeit: artikel.farbigkeit,
-        pInhaltId, pUmschlagId: artikel.umschlagPapier, auflage,
-        seitenListe: SEITEN_STUETZSTELLEN_MIT_UMSCHLAG,
-      });
+    const auflagen = mapping.auflagen ?? [];
+    const berechnungen = computeUmschlagZeilen({
+      config, formatKey: artikel.format, farbigkeit: artikel.farbigkeit,
+      pInhaltId, pUmschlagId: artikel.umschlagPapier, auflagen,
+      seitenListe: SEITEN_STUETZSTELLEN_MIT_UMSCHLAG, huelle, aufschlagVariante,
+    });
+    const nachAuflage = new Map(berechnungen.map((z) => [z.auflage, z]));
+    for (const auflage of auflagen) {
+      const zeile = nachAuflage.get(auflage);
       if (!zeile) {
         // Basiszelle (4 Seiten, 1/1) nicht kalkulierbar → die Zeile fehlt im
         // Shop ganz; das darf nicht still passieren.
@@ -214,6 +225,7 @@ export function buildPreiszeilenMitUmschlag({ config, mapping, artikelKey }) {
         liefertage: zeile.produktionszeitWTMax,
         routenSeiten: zeile.routenSeiten,
         aufschlaege,
+        liftBasis: zeile.liftBasis,
         aufschlagFarbigkeitUmschlag: zeile.aufschlagFarbigkeitUmschlag,
         veredelungMoeglich: zeile.veredelungMoeglich,
         aufschlaegeVeredelung: zeile.aufschlaegeVeredelung,

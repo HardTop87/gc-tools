@@ -88,8 +88,10 @@ function engine({ format = 'A4_Hoch', seiten, auflage, papier, umschlag = null, 
   return route ? route.gesamt : null;
 }
 
-function baue(artikelKey, { m = mapping, tpl = vorlage(), nurPreisbloecke = false } = {}) {
-  const { matrix, bericht } = buildImportMatrix({ templateMatrix: tpl, config, mapping: m, artikelKey, nurPreisbloecke });
+const STAFFELN = mapping.auflagen.length; // 151 (Raster B)
+
+function baue(artikelKey, { m = mapping, tpl = vorlage(), nurPreisbloecke = false, huelle = true } = {}) {
+  const { matrix, bericht } = buildImportMatrix({ templateMatrix: tpl, config, mapping: m, artikelKey, nurPreisbloecke, huelle });
   const model = parseLeadprintExport(matrix);
   const preise = findBlock(model, 'articlePrices') ? blockToObjects(findBlock(model, 'articlePrices')) : [];
   const art = blockToObjects(findBlock(model, 'article.'))[0];
@@ -131,10 +133,11 @@ describe('Leadprint-Writer: Preiszeilen eines Umschlagartikels', () => {
     expect(inhaltspapiereZuUmschlag(config, 'A5_Hoch', 'CC_350')).toEqual([]); // in A5 Hoch nicht zugelassen
   });
 
-  it('CC_160: 3 Papiere × 20 Staffeln, Basis = 4 Seiten / Umschlag 1/1 / ohne Cello, Aufschläge exakt aus der Engine', () => {
-    const { zeilen, probleme } = buildPreiszeilenMitUmschlag({ config, mapping, artikelKey: 'A4_Hoch|4c|mit|CC_160' });
+  it('CC_160: 3 Papiere × 151 Staffeln, Basis = 4 Seiten / Umschlag 1/1 / ohne Cello, ohne Hülle Aufschläge exakt aus der Engine', () => {
+    const { zeilen, probleme } = buildPreiszeilenMitUmschlag({ config, mapping, artikelKey: 'A4_Hoch|4c|mit|CC_160', huelle: false });
     expect(probleme).toEqual([]);
-    expect(zeilen).toHaveLength(3 * mapping.auflagen.length);
+    expect(zeilen).toHaveLength(3 * STAFFELN);
+    expect(STAFFELN).toBe(151);
     expect([...new Set(zeilen.map((z) => z.papierId))]).toEqual(['CC_100', 'CC_120', 'CC_160']);
     const z = zeilen.find((x) => x.papierId === 'CC_120' && x.auflage === 100);
     expect(z.sortenId).toBe(mapping.sorten.CC_120.sortenId);
@@ -154,12 +157,28 @@ describe('Leadprint-Writer: Preiszeilen eines Umschlagartikels', () => {
       expect(x.artikelnummer.startsWith('TEST-BRO-RST-A4H-44-U-CC160-')).toBe(true);
       expect(x.liefertage).toBeGreaterThanOrEqual(x.produktionszeitWT);
     }
+    // Mit Hülle (Standard): gleiche Zeilen, jede Zelle ≥ roh, Routen/Liefertage gleich
+    const mit = buildPreiszeilenMitUmschlag({ config, mapping, artikelKey: 'A4_Hoch|4c|mit|CC_160' });
+    expect(mit.probleme).toEqual([]);
+    expect(mit.zeilen).toHaveLength(zeilen.length);
+    mit.zeilen.forEach((h, i) => {
+      const r = zeilen[i];
+      expect([h.papierId, h.auflage, h.route, h.liefertage, h.artikelnummer]).toEqual([r.papierId, r.auflage, r.route, r.liefertage, r.artikelnummer]);
+      expect(h.preis).toBeGreaterThanOrEqual(r.preis - 1e-9);
+      for (const lw of Object.keys(r.aufschlaege)) {
+        if (r.aufschlaege[lw] === null) { expect(h.aufschlaege[lw]).toBeNull(); continue; }
+        expect(h.preis + h.aufschlaege[lw]).toBeGreaterThanOrEqual(r.preis + r.aufschlaege[lw] - 1e-9);
+      }
+      expect(h.preis + h.aufschlagFarbigkeitUmschlag).toBeGreaterThanOrEqual(r.preis + r.aufschlagFarbigkeitUmschlag - 1e-9);
+      expect(h.preis + h.aufschlaegeVeredelung.matt).toBeGreaterThanOrEqual(r.preis + r.aufschlaegeVeredelung.matt - 1e-9);
+    });
+    expect(mit.zeilen.some((h) => h.liftBasis > 0)).toBe(true);
   });
 
   it('N_250: Natur-Papiere, keine Veredelung (Cello nur CC/BD)', () => {
     const { zeilen, probleme } = buildPreiszeilenMitUmschlag({ config, mapping, artikelKey: 'A4_Hoch|4c|mit|N_250' });
     expect(probleme).toEqual([]);
-    expect(zeilen).toHaveLength(4 * mapping.auflagen.length);
+    expect(zeilen).toHaveLength(4 * STAFFELN);
     expect(zeilen.every((z) => z.veredelungMoeglich === false)).toBe(true);
     expect(zeilen.every((z) => Object.keys(z.aufschlaegeVeredelung).length === 0)).toBe(true);
     // 4/4-Aufschlag ist nie leer; bei 1–10 Ex. (Kassen-Anker) kann er 0 sein
@@ -176,6 +195,8 @@ describe('Leadprint-Writer: Preiszeilen eines Umschlagartikels', () => {
 
 describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 1, Neuanlage)', () => {
   const u1 = baue('A4_Hoch|4c|mit|CC_160');
+  // Vergleichsbau ohne Hülle für die zellgenauen Engine-Vergleiche
+  const u1roh = baue('A4_Hoch|4c|mit|CC_160', { huelle: false });
 
   it('läuft fehlerfrei, ohne Warnungen; Neuanlage aus fremder Vorlage wird als Hinweis gemeldet', () => {
     expect(u1.bericht.fehler).toEqual([]);
@@ -211,11 +232,13 @@ describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 1, Neuanlage)', () =>
     expect(u1.bericht.sortenAn).toEqual(['CC_100', 'CC_120', 'CC_160']);
   });
 
-  it('Preiszeilen: 60 Zeilen ohne ID, Basis 4 Seiten = 0, Seitenaufschläge auf den Cent, Routen-Tag, Liefertage-Offset', () => {
-    expect(u1.bericht.zeilen).toBe(60);
+  it('Preiszeilen: 453 Zeilen ohne ID (Neuanlage), Basis 4 Seiten = 0, Seitenaufschläge auf den Cent (ohne Hülle), Routen-Tag, Liefertage-Offset', () => {
+    expect(u1.bericht.zeilen).toBe(3 * STAFFELN);
+    expect(u1.bericht.zeilenMitId).toBe(0);
     expect(u1.preise.every((r) => r.id === null && r.anzahl_pakete === 1)).toBe(true);
     expect(u1.preise.map((r) => r.sortiercode)).toEqual(u1.preise.map((_, i) => (i + 1) * 10));
-    const z = u1.zeile('CC_120', 100);
+    expect(new Set(u1.preise.map((r) => `${r.paper__id}|${r.wert}`)).size).toBe(u1.preise.length);
+    const z = u1roh.zeile('CC_120', 100);
     const e = (o) => engine({ papier: 'CC_120', auflage: 100, umschlag: 'CC_160', ...o });
     expect(z.bezeichnung).toBe('100 Stück');
     expect(z.preis).toBe(cent(e({ seiten: 4 })));
@@ -225,6 +248,10 @@ describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 1, Neuanlage)', () =>
       expect(cent(z.preis + z[`dynopt_aa.5628.${SEITEN[seiten]}`])).toBe(cent(e({ seiten })));
       expect(z[`dynopt_aa.5628.${SEITEN[seiten]}.rai`]).toBeNull();
     }
+    // mit Hülle: dieselbe Zeile, nie unter der Engine
+    const h = u1.zeile('CC_120', 100);
+    expect(h.preis).toBeGreaterThanOrEqual(cent(e({ seiten: 4 })));
+    for (const seiten of [8, 12, 24, 44, 48]) expect(cent(h.preis + h[`dynopt_aa.5628.${SEITEN[seiten]}`])).toBeGreaterThanOrEqual(cent(e({ seiten })));
     expect(z.artikelnummer).toBe('TEST-BRO-RST-A4H-44-U-CC160-GC');
     // dick: CC_160 Inhalt, Partner-Limit → hohe Seitenzahlen leer, nie 0
     const dick = u1.zeile('CC_160', 100);
@@ -235,8 +262,8 @@ describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 1, Neuanlage)', () =>
     expect([...new Set(p2.preise.map((r) => r.liefertage))].sort()).toEqual([1, 2]);
   });
 
-  it('Farbigkeit Umschlag: 1/1 = 0, 4/4 = Aufschlag auf den Cent; Veredelung: ohne 0, bp 0, Cello-Arten als Aufschlag', () => {
-    const z = u1.zeile('CC_100', 500);
+  it('Farbigkeit Umschlag: 1/1 = 0, 4/4 = Aufschlag auf den Cent; Veredelung: ohne 0, bp 0, Cello-Arten als Aufschlag (ohne Hülle exakt)', () => {
+    const z = u1roh.zeile('CC_100', 500);
     const e = (o) => engine({ papier: 'CC_100', auflage: 500, umschlag: 'CC_160', seiten: 4, ...o });
     expect(z['dynopt_aa.5556.16085']).toBe(0);
     expect(z['dynopt_aa.5556.16085.rai']).toBeNull();
@@ -292,7 +319,7 @@ describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 1, Neuanlage)', () =>
   it('N_250: Veredelung komplett leer (auch bp), nur N-Inhaltspapiere, nur eigener Umschlag bepreist', () => {
     const n = baue('A4_Hoch|4c|mit|N_250');
     expect(n.bericht.fehler).toEqual([]);
-    expect(n.bericht.zeilen).toBe(80);
+    expect(n.bericht.zeilen).toBe(4 * STAFFELN);
     expect(n.bericht.sortenAn).toEqual(['N_80', 'N_90', 'N_100', 'N_120']);
     for (const z of n.preise) {
       expect(z['dynopt_aa.5562.16107']).toBeNull();
@@ -310,9 +337,9 @@ describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 1, Neuanlage)', () =>
     const a5 = baue('A5_Hoch|4c|mit|CC_250', { tpl: vorlage({ id: 1112127304, artikelnummer: 'BRO-RST-A5H-44-U' }) });
     expect(a5.bericht.fehler).toEqual([]);
     expect([...a5.bericht.sortenAn].sort()).toEqual(['CC_100', 'CC_120', 'CC_160', 'R_90']);
-    expect(a5.bericht.zeilen).toBe(80);
+    expect(a5.bericht.zeilen).toBe(4 * STAFFELN);
     const r90 = a5.zeile('R_90', 100);
-    expect(r90.preis).toBe(cent(engine({ format: 'A5_Hoch', papier: 'R_90', auflage: 100, umschlag: 'CC_250', seiten: 4 })));
+    expect(r90.preis).toBeGreaterThanOrEqual(cent(engine({ format: 'A5_Hoch', papier: 'R_90', auflage: 100, umschlag: 'CC_250', seiten: 4 })));
     expect(r90['dynopt_aa.5555.16084']).toBe(0); // CC_250 eigen
     expect(r90['dynopt_aa.5555.16080']).toBeNull(); // N_250 passt zu R_90, aber kein A5-Testartikel
     expect(r90['dynopt_aa.5555.16082']).toBeNull(); // CC_160 passt NICHT zu R_90 (Ausnahme nur CC_250/N_250)
@@ -363,13 +390,28 @@ describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 2, IDs im Mapping)', 
     }
   });
 
-  it('mit eigenem Export als Vorlage: kein Warnhinweis, Datumsfelder bleiben', () => {
+  it('mit eigenem Export als Vorlage: kein Warnhinweis, Datumsfelder bleiben, Staffel-ID der Vorlagenzeile wird übernommen', () => {
     const eigene = baue('A4_Hoch|4c|mit|CC_250', { m: m2, tpl: vorlage({ id: idStufe2('A4_Hoch|4c|mit|CC_250'), artikelnummer: 'TEST-BRO-RST-A4H-44-U-CC250' }) });
     expect(eigene.bericht.fehler).toEqual([]);
     expect(eigene.bericht.warnungen).toEqual([]);
     expect(eigene.bericht.vorlageFremd).toBe(false);
     expect(eigene.art.cdate).toBe(1791748166);
     expect(eigene.art.id).toBe(idStufe2('A4_Hoch|4c|mit|CC_250'));
+    // Die einzige Vorlagenzeile ist Sorte 1933 (N_80) × 1 Stück — kein CC-Inhaltspapier,
+    // also nicht in der Datei (der Import löscht die Staffel), keine ID übernommen
+    expect(eigene.bericht.zeilenMitId).toBe(0);
+    expect(eigene.bericht.vorlagenzeilenEntfallen).toBe(1);
+    expect(eigene.preise.every((r) => r.id === null)).toBe(true);
+    // Beim N_250-Artikel ist N_80 aktiv → die Staffel-ID 19746384 bleibt an N_80 × 1
+    const n250 = baue('A4_Hoch|4c|mit|N_250', { m: m2, tpl: vorlage({ id: idStufe2('A4_Hoch|4c|mit|N_250'), artikelnummer: 'TEST-BRO-RST-A4H-44-U-N250' }) });
+    expect(n250.bericht.vorlageFremd).toBe(false);
+    expect(n250.zeile('N_80', 1).id).toBe(19746384);
+    expect(n250.bericht.zeilenMitId).toBe(1);
+    expect(n250.bericht.zeilenNeu).toBe(4 * STAFFELN - 1);
+    expect(n250.preise.filter((r) => r.id !== null)).toHaveLength(1);
+    // fremde Vorlage (u2): keine ID übernommen
+    expect(u2.preise.every((r) => r.id === null)).toBe(true);
+    expect(u2.bericht.zeilenMitId).toBe(0);
   });
 
   it('Testartikel verweisen nie auf Live-Artikel und Live-Artikel nie auf Testartikel', () => {
@@ -387,17 +429,18 @@ describe('Leadprint-Import-Builder: Umschlagartikel (Stufe 2, IDs im Mapping)', 
 describe('Leadprint-Import-Builder: Test-Einstiegsartikel T-E (ohne Umschlag)', () => {
   const te = baue('A4_Hoch|4c|ohne|TEST');
 
-  it('ist ein normaler ohne-U-Artikel als Neuanlage: 13 Papiere × 20 Staffeln, Basis 8 Seiten, 4 Seiten leer', () => {
+  it('ist ein normaler ohne-U-Artikel als Neuanlage: 13 Papiere × 151 Staffeln, Basis 8 Seiten, 4 Seiten leer', () => {
     expect(te.bericht.fehler).toEqual([]);
     expect(te.bericht.warnungen).toEqual([]);
-    expect(te.bericht.zeilen).toBe(13 * mapping.auflagen.length);
+    expect(te.bericht.zeilen).toBe(13 * STAFFELN);
+    expect(te.preise.every((r) => r.id === null)).toBe(true);
     expect(te.art.id).toBeNull();
     expect(te.art.bezeichnung).toBe('TEST Rückstichheftung A4 Hoch 4/4 ohne Umschlag');
     expect(te.art.artikelnummer).toBe('TEST-BRO-RST-A4H-44');
     expect(te.art.unsichtbar).toBe(1); // kein Einstiegsartikel im Sinne der Warengruppenliste
     expect(te.art.status).toBe('OK');
     const z = te.zeile('CC_120', 100);
-    expect(z.preis).toBe(cent(engine({ papier: 'CC_120', auflage: 100, seiten: 8, dU: '4c' })));
+    expect(z.preis).toBeGreaterThanOrEqual(cent(engine({ papier: 'CC_120', auflage: 100, seiten: 8, dU: '4c' })));
     expect(z['dynopt_aa.5628.52313']).toBeNull();
     expect(z.artikelnummer).toBe('TEST-BRO-RST-A4H-44-GC');
     for (const r of te.preise) {
@@ -442,40 +485,47 @@ const VORLAGEN = {
 
 describe.skipIf(!Object.values(VORLAGEN).every((f) => fs.existsSync(f)))('Umschlagartikel gegen die echten mit-U-Exporte vom 10.10.2026', () => {
   const lade = (f) => { const wb = XLSX.read(fs.readFileSync(f)); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }); };
-  const erwartet = { 'A4_Hoch|4c|ohne|TEST': 260, 'A4_Hoch|4c|mit|CC_160': 60, 'A4_Hoch|4c|mit|CC_250': 60, 'A4_Hoch|4c|mit|CC_350': 60, 'A4_Hoch|4c|mit|N_250': 80, 'A5_Hoch|4c|mit|CC_250': 80 };
-  for (const [artikelKey, zeilen] of Object.entries(erwartet)) {
-    it(`${artikelKey}: fehlerfrei, ${zeilen} Zeilen, 157 Preisspalten, Shop-Preis nie unter der Engine`, () => {
+  const erwartet = { 'A4_Hoch|4c|ohne|TEST': 13, 'A4_Hoch|4c|mit|CC_160': 3, 'A4_Hoch|4c|mit|CC_250': 3, 'A4_Hoch|4c|mit|CC_350': 3, 'A4_Hoch|4c|mit|N_250': 4, 'A5_Hoch|4c|mit|CC_250': 4 };
+  for (const [artikelKey, sorten] of Object.entries(erwartet)) {
+    it(`${artikelKey}: fehlerfrei, ${sorten} × 151 Zeilen ohne ID, 157 Preisspalten, Shop-Preis nie unter der Engine`, () => {
       const artikel = mapping.artikel.find((a) => a.key === artikelKey);
       const tpl = lade(VORLAGEN[artikel.format]);
       const { matrix, bericht } = buildImportMatrix({ templateMatrix: tpl, config, mapping, artikelKey });
       expect(bericht.fehler).toEqual([]);
       expect(bericht.warnungen).toEqual([]);
       expect(bericht.unbekannteGruppen).toEqual([]);
-      expect(bericht.zeilen).toBe(zeilen);
+      expect(bericht.zeilen).toBe(sorten * 151);
+      expect(bericht.zeilenMitId).toBe(0); // fremde Vorlage → Neuanlage ohne Staffel-IDs
       const model = parseLeadprintExport(matrix);
       const preisBlock = findBlock(model, 'articlePrices');
       expect(preisBlock.header).toHaveLength(157);
       expect(preisBlock.header).toEqual(findBlock(parseLeadprintExport(tpl), 'articlePrices').header);
       expect(blockToObjects(findBlock(model, 'article.'))[0].id).toBeNull();
+      const preise = blockToObjects(preisBlock);
+      expect(preise.every((r) => r.id === null)).toBe(true);
+      expect(new Set(preise.map((r) => `${r.paper__id}|${r.wert}`)).size).toBe(preise.length);
       if (artikel.umschlag !== 'mit') return;
       // Kombination mehrerer Optionen (Seiten × Umschlag 4/4 × Cello) ist eine
-      // Näherung — nie unter dem Engine-Preis, höchstens wenige Euro darüber.
-      const preise = blockToObjects(preisBlock);
+      // Näherung — nie unter dem Engine-Preis; ohne Hülle höchstens wenige Euro
+      // darüber, mit Hülle kommt an den Staffeln der Lift dazu.
+      const roh = blockToObjects(findBlock(parseLeadprintExport(buildImportMatrix({ templateMatrix: tpl, config, mapping, artikelKey, huelle: false }).matrix), 'articlePrices'));
       const sorteZuPapier = Object.fromEntries(Object.entries(mapping.sorten).map(([k, v]) => [String(v.sortenId), k]));
-      for (const z of preise.filter((r) => [100, 500].includes(r.wert))) {
-        const papier = sorteZuPapier[String(z.paper__id)];
-        for (const seiten of [4, 24, 48]) {
-          const sz = z[`dynopt_aa.5628.${SEITEN[seiten]}`];
-          if (sz == null) continue;
-          for (const [dU, cello, fz, vz] of [
-            ['4c', 'ohne', z['dynopt_aa.5556.16086'], 0],
-            ['4c', 'glaenzend', z['dynopt_aa.5556.16086'], z['dynopt_aa.5562.16109']],
-          ]) {
-            if (vz == null) continue; // Veredelung nicht wählbar (N)
-            const shop = cent(z.preis + sz + fz + vz);
-            const e = cent(engine({ format: artikel.format, papier, auflage: z.wert, umschlag: artikel.umschlagPapier, seiten, dU, cello }));
-            expect(shop).toBeGreaterThanOrEqual(e);
-            expect(shop - e).toBeLessThan(5);
+      for (const [liste, mitHuelle] of [[roh, false], [preise, true]]) {
+        for (const z of liste.filter((r) => [100, 500].includes(r.wert))) {
+          const papier = sorteZuPapier[String(z.paper__id)];
+          for (const seiten of [4, 24, 48]) {
+            const sz = z[`dynopt_aa.5628.${SEITEN[seiten]}`];
+            if (sz == null) continue;
+            for (const [dU, cello, fz, vz] of [
+              ['4c', 'ohne', z['dynopt_aa.5556.16086'], 0],
+              ['4c', 'glaenzend', z['dynopt_aa.5556.16086'], z['dynopt_aa.5562.16109']],
+            ]) {
+              if (vz == null) continue; // Veredelung nicht wählbar (N)
+              const shop = cent(z.preis + sz + fz + vz);
+              const e = cent(engine({ format: artikel.format, papier, auflage: z.wert, umschlag: artikel.umschlagPapier, seiten, dU, cello }));
+              expect(shop, `${papier} × ${z.wert} × ${seiten}S ${dU} ${cello} ${mitHuelle ? 'Hülle' : 'roh'}`).toBeGreaterThanOrEqual(e);
+              if (!mitHuelle) expect(shop - e).toBeLessThan(5);
+            }
           }
         }
       }

@@ -15,9 +15,24 @@
 // alle Nicht-Preis-Spalten der Referenz-Preiszeile (z. B. Pakete, Gewicht).
 //
 // Was neu geschrieben wird: articleGlobalVariety (Sorten-Flags aus der Config)
-// und der komplette articlePrices-Block. Preiszeilen bekommen KEINE id → der
-// Import legt sie neu an und löscht alle alten (offizielle Doku: Staffeln, die
-// in der Datei fehlen, werden entfernt). Leere Zellen bleiben leer — nie 0.
+// und der komplette articlePrices-Block. Leere Zellen bleiben leer — nie 0.
+//
+// Staffelzeilen und ihre IDs (31.10.2026, Raster B mit 151 Staffeln): Ist die
+// Vorlage der Export DIESES Artikels (article.id = leadprintId), werden die
+// Vorlagenzeilen über (Sorte paper__id, Auflage wert) wiedergefunden und ihre
+// articlePrices.id übernommen → der Import aktualisiert die Staffel statt sie
+// zu löschen und neu anzulegen. Zeilen, die es in der Vorlage nicht gibt
+// (neue Staffeln, neue Sorten), bekommen eine LEERE id (Doku: „Wenn diese
+// Zelle leer ist, wird ein neuer Staffeleintrag angelegt"). Vorlagenzeilen,
+// deren Sorte im Artikel nicht mehr aktiv ist, kommen nicht in die Datei —
+// der Import löscht sie (Doku: Staffeln, die in der Datei fehlen, werden
+// entfernt). Bei fremder Vorlage (Neuanlage, Testartikel Stufe 2) gehören die
+// IDs einem anderen Artikel → alle Zeilen ohne id. Zeilenreihenfolge wie die
+// Vorlage (Sorte in der Reihenfolge ihres Auftretens, neue Sorten hinten in
+// Config-Reihenfolge; je Sorte Auflage aufsteigend), sortiercode 10, 20, …
+//
+// Sicherheitshülle: Die Preise kommen aus dem Writer mit Hülle (Befund 1);
+// `huelle: false` baut die Datei mit rohen Engine-Preisen (Vergleich, Tests).
 //
 // Zwei Artikeltypen (Umschlagartikel-Plan.md, 31.10.2026):
 //   ohne Umschlag   – Zeile = Inhaltspapier × Auflage, Basis 8 Seiten; die
@@ -451,8 +466,8 @@ export function reduziereAufPreisbloecke(model) {
 // Baut das Modell der Import-Datei für einen Artikel (ohne Umschlag oder
 // Umschlagartikel). nurPreisbloecke: siehe reduziereAufPreisbloecke — nur für
 // bestehende Artikel sinnvoll (eine Neuanlage braucht den ganzen article-Block).
-export function buildImportModel({ templateMatrix, config, mapping, artikelKey, nurPreisbloecke = false }) {
-  const ergebnis = buildVollesModell({ templateMatrix, config, mapping, artikelKey });
+export function buildImportModel({ templateMatrix, config, mapping, artikelKey, nurPreisbloecke = false, huelle = true, aufschlagVariante }) {
+  const ergebnis = buildVollesModell({ templateMatrix, config, mapping, artikelKey, huelle, aufschlagVariante });
   if (nurPreisbloecke && ergebnis.bericht.neuanlage) {
     ergebnis.bericht.fehler.push('Minimaldatei nicht möglich: Neuanlage braucht den vollständigen article-Block.');
   }
@@ -466,9 +481,10 @@ export function buildImportModel({ templateMatrix, config, mapping, artikelKey, 
   return ergebnis;
 }
 
-function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
+function buildVollesModell({ templateMatrix, config, mapping, artikelKey, huelle = true, aufschlagVariante }) {
   const bericht = {
     artikelKey, fehler: [], warnungen: [], hinweise: [], geaendert: [], zeilen: 0, leereZellen: 0, zellen: 0,
+    zeilenMitId: 0, zeilenNeu: 0, vorlagenzeilenEntfallen: 0, huelle,
     sortenAn: [], sortenAus: [], unbekannteGruppen: [], referenzzeile: null, neuanlage: false, vorlageFremd: false,
   };
   const model = parseLeadprintExport(templateMatrix);
@@ -495,18 +511,36 @@ function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
     return { model, bericht };
   }
   const writer = istUmschlagartikel(artikel)
-    ? buildPreiszeilenMitUmschlag({ config, mapping, artikelKey })
-    : buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey });
+    ? buildPreiszeilenMitUmschlag({ config, mapping, artikelKey, huelle, aufschlagVariante })
+    : buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey, huelle });
   const { zeilen, probleme } = writer;
   for (const p of probleme) bericht.fehler.push(`Writer: ${p}`);
   for (const h of writer.hinweise ?? []) bericht.hinweise.push(`Writer: ${h}`);
   if (bericht.fehler.length) return { model, bericht };
 
   // Referenzzeile: Nicht-Preis-Spalten (Pakete, Gewicht, …) werden von der
-  // ersten vorhandenen Zeile übernommen — bevorzugt die 1-Stück-Zeile.
+  // ersten vorhandenen Zeile übernommen — bevorzugt die 1-Stück-Zeile; für
+  // Zeilen einer Sorte, die in der Vorlage vorkommt, von deren erster Zeile.
   const alt = blockToObjects(preisBlock);
   const referenz = alt.find((r) => Number(r.wert) === 1) ?? alt[0] ?? {};
   bericht.referenzzeile = referenz.id ?? null;
+  const referenzJeSorte = new Map();
+  for (const r of alt) {
+    const sorte = String(r.paper__id ?? '');
+    if (!referenzJeSorte.has(sorte) || (Number(r.wert) === 1 && Number(referenzJeSorte.get(sorte).wert) !== 1)) referenzJeSorte.set(sorte, r);
+  }
+  // Vorlagenzeilen nach (Sorte, Auflage): Quelle der articlePrices.id — nur
+  // wenn die Vorlage der Export dieses Artikels ist (siehe Kopfkommentar).
+  const idsUebernehmen = !bericht.vorlageFremd;
+  const vorlageNachSchluessel = new Map();
+  for (const r of alt) {
+    const schluessel = `${r.paper__id}|${Number(r.wert)}`;
+    if (vorlageNachSchluessel.has(schluessel)) {
+      bericht.warnungen.push(`Vorlage hat die Staffel ${r.wert} für Sorte ${r.paper__id} doppelt (ids ${vorlageNachSchluessel.get(schluessel).id}, ${r.id}) — die zweite wird vom Import gelöscht.`);
+      continue;
+    }
+    vorlageNachSchluessel.set(schluessel, r);
+  }
 
   const felder = preisBlock.header.map((h) => {
     const s = String(h ?? '');
@@ -547,10 +581,25 @@ function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
     if (bericht.fehler.length) return { model, bericht };
   }
 
+  // Reihenfolge wie die Vorlage: Sorten in der Reihenfolge ihres Auftretens,
+  // neue Sorten dahinter in Writer-Reihenfolge (Config), je Sorte Auflage
+  // aufsteigend. Der Export des Shops ist genau so sortiert.
+  const sortenReihenfolge = [];
+  for (const r of alt) if (!sortenReihenfolge.includes(String(r.paper__id))) sortenReihenfolge.push(String(r.paper__id));
+  for (const z of zeilen) if (!sortenReihenfolge.includes(String(z.sortenId))) sortenReihenfolge.push(String(z.sortenId));
+  const sortiert = [...zeilen].sort((a, b) =>
+    sortenReihenfolge.indexOf(String(a.sortenId)) - sortenReihenfolge.indexOf(String(b.sortenId)) || a.auflage - b.auflage);
+  const geschrieben = new Set();
+
   const neu = [];
-  zeilen.forEach((zeile, index) => {
-    const obj = { ...referenz };
-    obj.id = null; // neu anlegen; alte Staffeln löscht der Import
+  sortiert.forEach((zeile, index) => {
+    const schluessel = `${zeile.sortenId}|${zeile.auflage}`;
+    const vorlageZeile = vorlageNachSchluessel.get(schluessel) ?? null;
+    const obj = { ...(referenzJeSorte.get(String(zeile.sortenId)) ?? referenz) };
+    // id aus der Vorlage → Staffel wird aktualisiert; leer → neu angelegt
+    obj.id = idsUebernehmen && vorlageZeile?.id != null ? vorlageZeile.id : null;
+    if (vorlageZeile) geschrieben.add(schluessel);
+    if (obj.id != null) bericht.zeilenMitId += 1; else bericht.zeilenNeu += 1;
     obj.bezeichnung = `${zeile.auflage} Stück`;
     obj.wert = zeile.auflage;
     obj.preis = rundeCent(zeile.preis);
@@ -574,6 +623,10 @@ function buildVollesModell({ templateMatrix, config, mapping, artikelKey }) {
   });
   preisBlock.rows = objectsToBlockRows(preisBlock, neu);
   bericht.zeilen = neu.length;
+  // Vorlagenzeilen ohne Gegenstück (Sorte nicht mehr aktiv, Staffel entfallen):
+  // nicht in der Datei → der Import löscht sie. Nur als Zahl im Bericht, bei
+  // fremder Vorlage sind es ohnehin alle.
+  if (idsUebernehmen) bericht.vorlagenzeilenEntfallen = [...vorlageNachSchluessel.keys()].filter((k) => !geschrieben.has(k)).length;
   return { model, bericht };
 }
 

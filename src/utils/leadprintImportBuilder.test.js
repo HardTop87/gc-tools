@@ -80,11 +80,17 @@ function direkt(seiten, { auflage = 100, papier = 'CC_120', farbigkeit = '4c' } 
   return route ? route.gesamt : null;
 }
 
+const cent = (x) => Math.round(x * 100) / 100;
+const STAFFELN = mapping.auflagen.length; // 151 (Raster B)
+
 describe('Leadprint-Import-Builder (ohne-Umschlag-Artikel)', () => {
   const { matrix, bericht } = buildImportMatrix({ templateMatrix: vorlage(), config, mapping, artikelKey: 'A4_Hoch|4c|ohne' });
   const model = parseLeadprintExport(matrix);
   const preise = blockToObjects(findBlock(model, 'articlePrices'));
   const zeile = (papierId, auflage) => preise.find((r) => r.paper__id === mapping.sorten[papierId].sortenId && r.wert === auflage);
+  // Vergleichsbau ohne Hülle: exakte Engine-Preise an den Staffeln
+  const roh = blockToObjects(findBlock(parseLeadprintExport(buildImportMatrix({ templateMatrix: vorlage(), config, mapping, artikelKey: 'A4_Hoch|4c|ohne', huelle: false }).matrix), 'articlePrices'));
+  const zeileRoh = (papierId, auflage) => roh.find((r) => r.paper__id === mapping.sorten[papierId].sortenId && r.wert === auflage);
 
   it('erkennt den Artikel an der ID der Vorlage', () => {
     expect(artikelKeyAusVorlage(vorlage(), mapping)).toBe('A4_Hoch|4c|ohne');
@@ -97,24 +103,55 @@ describe('Leadprint-Import-Builder (ohne-Umschlag-Artikel)', () => {
     expect(bericht.unbekannteGruppen).toEqual([]);
   });
 
-  it('schreibt 13 Inhaltspapiere × 20 Staffeln, alle ohne ID (neu anlegen, alte löschen)', () => {
-    expect(bericht.zeilen).toBe(13 * mapping.auflagen.length);
-    expect(preise).toHaveLength(13 * mapping.auflagen.length);
-    expect(preise.every((r) => r.id === null)).toBe(true);
+  it('schreibt 13 Inhaltspapiere × 151 Staffeln; Vorlagenzeilen behalten ihre ID, neue Zeilen ohne ID, Fremdsorten entfallen', () => {
+    expect(STAFFELN).toBe(151);
+    expect(bericht.zeilen).toBe(13 * STAFFELN);
+    expect(preise).toHaveLength(13 * STAFFELN);
+    // Die Vorlage ist der Export dieses Artikels (id 1112051356) mit zwei Zeilen:
+    // Sorte 1933 (N_80) × 1 (aktiv → id bleibt) und Sorte 1970 × 10 (Bilderdruck
+    // glänzend, nicht aktiv → nicht in der Datei, der Import löscht sie).
+    expect(preise.filter((r) => r.id !== null)).toHaveLength(1);
+    expect(preise[0].paper__id).toBe(1933);
+    expect(preise[0].wert).toBe(1);
+    expect(preise[0].id).toBe(11630994);
+    expect(preise.some((r) => r.paper__id === 1970)).toBe(false);
+    expect(bericht.zeilenMitId).toBe(1);
+    expect(bericht.zeilenNeu).toBe(13 * STAFFELN - 1);
+    expect(bericht.vorlagenzeilenEntfallen).toBe(1);
+    // keine Dublette (Sorte × Auflage), je Sorte alle 151 Staffeln aufsteigend
+    const schluessel = preise.map((r) => `${r.paper__id}|${r.wert}`);
+    expect(new Set(schluessel).size).toBe(preise.length);
+    const sorten = [...new Set(preise.map((r) => r.paper__id))];
+    expect(sorten).toHaveLength(13);
+    expect(sorten[0]).toBe(1933); // Reihenfolge der Vorlage zuerst, dann Config-Reihenfolge
+    for (const s of sorten) expect(preise.filter((r) => r.paper__id === s).map((r) => r.wert)).toEqual(mapping.auflagen);
     expect(preise.every((r) => r.anzahl_pakete === 1)).toBe(true); // aus der Referenzzeile übernommen
     expect(preise.map((r) => r.sortiercode)).toEqual(preise.map((_, i) => (i + 1) * 10));
     expect(zeile('CC_120', 100).bezeichnung).toBe('100 Stück');
   });
 
-  it('Basispreis und Seitenaufschläge sind auf den Cent die Engine-Preise', () => {
-    const z = zeile('CC_120', 100);
-    const cent = (x) => Math.round(x * 100) / 100;
+  it('ohne Hülle sind Basispreis und Seitenaufschläge auf den Cent die Engine-Preise; mit Hülle nie darunter', () => {
+    const z = zeileRoh('CC_120', 100);
     expect(z.preis).toBe(cent(direkt(8)));
     for (const seiten of [12, 24, 44, 48]) {
       // Basis + Aufschlag = auf den Cent gerundeter Engine-Preis der Zelle
       expect(cent(z.preis + z[`dynopt_aa.5628.${SEITEN[seiten]}`])).toBe(cent(direkt(seiten)));
     }
     expect(z[`dynopt_aa.5628.${SEITEN[8]}`]).toBe(0);
+    // Hülle: jede bepreiste Zelle ≥ Engine, Leerzellen identisch
+    let angehoben = 0;
+    for (const h of preise) {
+      const r = roh.find((x) => x.paper__id === h.paper__id && x.wert === h.wert);
+      expect(h.preis).toBeGreaterThanOrEqual(r.preis);
+      if (h.preis > r.preis) angehoben += 1;
+      for (const lw of Object.values(SEITEN)) {
+        const hz = h[`dynopt_aa.5628.${lw}`];
+        const rz = r[`dynopt_aa.5628.${lw}`];
+        if (rz === null) { expect(hz).toBeNull(); continue; }
+        expect(cent(h.preis + hz)).toBeGreaterThanOrEqual(cent(r.preis + rz));
+      }
+    }
+    expect(angehoben).toBeGreaterThan(0);
   });
 
   it('nicht kalkulierbare Seitenzahlen und „4 Seiten" bleiben leer — nie 0 (D1, P3)', () => {
@@ -191,7 +228,7 @@ describe('Leadprint-Import-Builder (ohne-Umschlag-Artikel)', () => {
       const istIlda = r.liefertage === 1;
       // Routen-Tag der Basiszelle ist unabhängig davon; der Offset kommt aus dem Zeilenmaximum
       expect(r.artikelnummer.startsWith('BRO-RST-A4H-44-')).toBe(true);
-      if (istIlda) expect([100, 200, 300, 400, 500]).toContain(r.wert);
+      if (istIlda) { expect(r.wert).toBeGreaterThanOrEqual(100); expect(r.wert).toBeLessThanOrEqual(500); }
     }
     // Bei Produktionszeit 2 am Artikel wird der Offset entsprechend größer
     const { matrix: m2 } = buildImportMatrix({ templateMatrix: vorlage({ produktionszeit: 2 }), config, mapping, artikelKey: 'A4_Hoch|4c|ohne' });
@@ -259,6 +296,83 @@ describe('Leadprint-Import-Builder (ohne-Umschlag-Artikel)', () => {
   });
 });
 
+describe('Leadprint-Import-Builder: Staffelzeilen erweitern statt duplizieren (Raster B)', () => {
+  const ALT = [1, 2, 3, 4, 5, 10, 20, 50, 99, 100, 200, 300, 400, 500, 501, 600, 700, 800, 900, 1000];
+  const SORTEN_A4 = [1933, 1934, 1935, 1936, 1942, 1943, 1944, 1961, 1962, 1963, 1964, 3128, 6313];
+
+  // Eigener Export mit den alten 20 Staffeln × 13 Sorten, jede Zeile mit id —
+  // so wie die Live-Exporte vom 11.10.2026 (Sorte aufsteigend, dann Auflage).
+  function eigeneVorlage({ id = 1112051356, extraSorte = null } = {}) {
+    const v = vorlage({ id });
+    const headerIndex = v.findIndex((row) => row[0] === 'articlePrices.id');
+    const header = v[headerIndex];
+    const referenz = v[headerIndex + 1];
+    const rows = [];
+    let nr = 0;
+    for (const sorte of [...SORTEN_A4, ...(extraSorte ? [extraSorte] : [])]) {
+      for (const wert of ALT) {
+        const r = [...referenz];
+        r[0] = 20000000 + nr; r[1] = `${wert} Stück`; r[2] = wert; r[4] = (nr + 1) * 10; r[9] = sorte;
+        nr += 1;
+        rows.push(r);
+      }
+    }
+    return [...v.slice(0, headerIndex), header, ...rows];
+  }
+
+  it('Update: 260 Vorlagenzeilen behalten ihre ID, 1703 neue Staffeln ohne ID, keine Dublette, Reihenfolge der Vorlage', () => {
+    const tpl = eigeneVorlage();
+    const { matrix, bericht } = buildImportMatrix({ templateMatrix: tpl, config, mapping, artikelKey: 'A4_Hoch|4c|ohne' });
+    expect(bericht.fehler).toEqual([]);
+    expect(bericht.warnungen).toEqual([]);
+    expect(bericht.neuanlage).toBe(false);
+    expect(bericht.vorlageFremd).toBe(false);
+    const preise = blockToObjects(findBlock(parseLeadprintExport(matrix), 'articlePrices'));
+    expect(preise).toHaveLength(13 * 151);
+    expect(bericht.zeilenMitId).toBe(260);
+    expect(bericht.zeilenNeu).toBe(1703);
+    expect(bericht.vorlagenzeilenEntfallen).toBe(0);
+    expect(preise.filter((r) => r.id !== null)).toHaveLength(260);
+    const alt = blockToObjects(findBlock(parseLeadprintExport(tpl), 'articlePrices'));
+    for (const a of alt) expect(preise.find((r) => r.paper__id === a.paper__id && r.wert === a.wert).id).toBe(a.id);
+    for (const r of preise) if (!ALT.includes(r.wert)) expect(r.id).toBeNull();
+    expect(new Set(preise.map((r) => `${r.paper__id}|${r.wert}`)).size).toBe(preise.length);
+    expect([...new Set(preise.map((r) => r.paper__id))]).toEqual(SORTEN_A4);
+    for (const s of SORTEN_A4) expect(preise.filter((r) => r.paper__id === s).map((r) => r.wert)).toEqual(mapping.auflagen);
+    expect(preise.map((r) => r.sortiercode)).toEqual(preise.map((_, i) => (i + 1) * 10));
+  });
+
+  it('Vorlagenzeilen einer nicht mehr aktiven Sorte kommen nicht in die Datei (der Import löscht sie)', () => {
+    const { matrix, bericht } = buildImportMatrix({ templateMatrix: eigeneVorlage({ extraSorte: 1970 }), config, mapping, artikelKey: 'A4_Hoch|4c|ohne' });
+    const preise = blockToObjects(findBlock(parseLeadprintExport(matrix), 'articlePrices'));
+    expect(preise.some((r) => r.paper__id === 1970)).toBe(false);
+    expect(bericht.vorlagenzeilenEntfallen).toBe(20);
+    expect(bericht.zeilenMitId).toBe(260);
+  });
+
+  it('fremde Vorlage (Neuanlage): keine ID wird übernommen', () => {
+    const { matrix, bericht } = buildImportMatrix({ templateMatrix: eigeneVorlage({ id: 1112051356 }), config, mapping, artikelKey: 'A4_Hoch|4c|ohne|TEST' });
+    expect(bericht.fehler).toEqual([]);
+    expect(bericht.neuanlage).toBe(true);
+    const preise = blockToObjects(findBlock(parseLeadprintExport(matrix), 'articlePrices'));
+    expect(preise.every((r) => r.id === null)).toBe(true);
+    expect(bericht.zeilenMitId).toBe(0);
+    expect(bericht.zeilenNeu).toBe(13 * 151);
+  });
+
+  it('doppelte (Sorte, Auflage) in der Vorlage wird gemeldet, nur die erste ID übernommen', () => {
+    const tpl = eigeneVorlage();
+    const headerIndex = tpl.findIndex((row) => row[0] === 'articlePrices.id');
+    const dublette = [...tpl[headerIndex + 1]]; dublette[0] = 29999999;
+    tpl.push(dublette);
+    const { matrix, bericht } = buildImportMatrix({ templateMatrix: tpl, config, mapping, artikelKey: 'A4_Hoch|4c|ohne' });
+    expect(bericht.warnungen.some((w) => w.includes('doppelt') && w.includes('29999999'))).toBe(true);
+    const preise = blockToObjects(findBlock(parseLeadprintExport(matrix), 'articlePrices'));
+    expect(preise.some((r) => r.id === 29999999)).toBe(false);
+    expect(preise.filter((r) => r.id !== null)).toHaveLength(260);
+  });
+});
+
 const ECHT = {
   'A4_Hoch|1c|ohne': 'Leadprint_Export/export_1112051233_BRO_RST_A4H_11.xlsx',
   'A4_Hoch|4c|ohne': 'Leadprint_Export/export_1112051356_BRO_RST_A4H_44.xlsx',
@@ -266,7 +380,7 @@ const ECHT = {
 
 describe.skipIf(!Object.values(ECHT).every((f) => fs.existsSync(f)))('Leadprint-Import-Builder gegen die echten Exporte vom 10.10.2026', () => {
   for (const [artikelKey, datei] of Object.entries(ECHT)) {
-    it(`${artikelKey}: fehlerfrei, 260 Zeilen, Stichprobe exakt`, () => {
+    it(`${artikelKey}: fehlerfrei, 1963 Zeilen (260 mit ID aus der Vorlage, 1703 neu), Stichprobe`, () => {
       const wb = XLSX.read(fs.readFileSync(datei));
       const matrix = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
       expect(artikelKeyAusVorlage(matrix, mapping)).toBe(artikelKey);
@@ -274,14 +388,33 @@ describe.skipIf(!Object.values(ECHT).every((f) => fs.existsSync(f)))('Leadprint-
       expect(bericht.fehler).toEqual([]);
       expect(bericht.warnungen).toEqual([]);
       expect(bericht.unbekannteGruppen).toEqual([]);
-      expect(bericht.zeilen).toBe(260);
+      expect(bericht.zeilen).toBe(13 * 151);
+      expect(bericht.zeilenMitId).toBe(260);
+      expect(bericht.zeilenNeu).toBe(13 * 151 - 260);
+      expect(bericht.vorlagenzeilenEntfallen).toBe(0);
       const preise = blockToObjects(findBlock(parseLeadprintExport(out), 'articlePrices'));
+      expect(preise.filter((r) => r.id !== null)).toHaveLength(260);
+      expect(new Set(preise.map((r) => `${r.paper__id}|${r.wert}`)).size).toBe(preise.length);
+      // IDs der Vorlage sitzen an derselben (Sorte, Auflage)
+      const alt = blockToObjects(findBlock(parseLeadprintExport(matrix), 'articlePrices'));
+      for (const a of alt) {
+        const n = preise.find((r) => r.paper__id === a.paper__id && r.wert === a.wert);
+        expect(n.id).toBe(a.id);
+      }
+      // Reihenfolge wie die Vorlage: Sorten in Vorlagenreihenfolge, Auflage aufsteigend
+      const sortenVorlage = [...new Set(alt.map((r) => r.paper__id))];
+      expect([...new Set(preise.map((r) => r.paper__id))]).toEqual(sortenVorlage);
       const farbigkeit = artikelKey.includes('|1c|') ? '1c' : '4c';
       const z = preise.find((r) => r.paper__id === mapping.sorten.N_80.sortenId && r.wert === 50);
       const cent = (x) => Math.round(x * 100) / 100;
-      expect(z.preis).toBe(cent(direkt(8, { auflage: 50, papier: 'N_80', farbigkeit })));
-      expect(cent(z.preis + z[`dynopt_aa.5628.${SEITEN[32]}`])).toBe(cent(direkt(32, { auflage: 50, papier: 'N_80', farbigkeit })));
+      expect(z.preis).toBeGreaterThanOrEqual(cent(direkt(8, { auflage: 50, papier: 'N_80', farbigkeit })));
+      expect(cent(z.preis + z[`dynopt_aa.5628.${SEITEN[32]}`])).toBeGreaterThanOrEqual(cent(direkt(32, { auflage: 50, papier: 'N_80', farbigkeit })));
       expect(z.liefertage).toBe(0);
+      // ohne Hülle exakt
+      const rohOut = buildImportMatrix({ templateMatrix: matrix, config, mapping, artikelKey, huelle: false }).matrix;
+      const zr = blockToObjects(findBlock(parseLeadprintExport(rohOut), 'articlePrices')).find((r) => r.paper__id === mapping.sorten.N_80.sortenId && r.wert === 50);
+      expect(zr.preis).toBe(cent(direkt(8, { auflage: 50, papier: 'N_80', farbigkeit })));
+      expect(cent(zr.preis + zr[`dynopt_aa.5628.${SEITEN[32]}`])).toBe(cent(direkt(32, { auflage: 50, papier: 'N_80', farbigkeit })));
       // Zwilling-Weiterleitung Farbigkeit
       const twin = mapping.artikel.find((a) => a.key === `A4_Hoch|${farbigkeit === '1c' ? '4c' : '1c'}|ohne`).leadprintId;
       const lw = farbigkeit === '1c' ? 16099 : 16098;

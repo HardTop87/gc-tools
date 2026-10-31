@@ -193,3 +193,33 @@ Dabei beantwortet sich nebenbei: Legt der Import mit leerer ID einen vollständi
 | 14 | `https://<subshop>/sitemap.xml` öffnen | stehen die TEST-Artikel darin? | Befund 3 |
 
 Rückweg nach dem Test: die sechs TEST-Artikel auf Status GESPERRT setzen oder löschen (keine Bestellungen vorhanden).
+
+---
+
+## Staffelsuche (31.10.2026, Nachtrag zu Befund 1)
+
+Armins Vorgabe: Staffeln kosten im Export nichts außer Zeilen, also so viele wie nötig. Gemessen über 3.887 Preiskurven (ohne und mit Umschlag, alle ganzen Mengen 1–1000, Stichprobe der Zeilen).
+
+**Warum es keine exakte Lösung mit wenigen Staffeln gibt:** Die Engine wechselt je Papier und Seitenzahl an einer anderen Menge die Route (GC → Kopp → ILDA), dazu Knicke beim Dickenaufschlag (80 Ex.) und an den Verarbeitungsstaffeln der Partner (300, 400 …). Jede Kurve hat ihre eigenen Knickstellen zwischen 80 und 500. Eine gezielte Suche nach den „schlimmsten" Mengen bringt deshalb wenig; ein regelmäßiges Raster ist genauso gut und für alle nachvollziehbar.
+
+| Raster | Staffeln | Zeilen je Artikel ohne U / mit U | ohne U + Hülle: > 5 € zu teuer · Ø Fehler | mit U + Hülle: > 5 € zu teuer · Ø Fehler |
+|---|---|---|---|---|
+| heute | 20 | 260 / 72 | 2,15 % · 0,59 € | 3,32 % · 1,08 € |
+| A: + 80–300 je 5, 320–500 je 20, 550–1000 je 50 | 75 | 975 / 270 | 0,11 % · 0,14 € | 0,19 % · 0,35 € |
+| **B: + 80–300 je 2, 310–500 je 10, 550–1000 je 50** | **151** | **1.963 / 544** | **0,04 % · 0,12 €** | **0,07 % · 0,30 €** |
+| C: + 80–300 je 1, 305–500 je 5, 525–1000 je 25 | 290 | 3.770 / 1.044 | 0,01 % · 0,13 € | 0,03 % · 0,30 € |
+| D: jede Menge bis 500, dann je 10 | 551 | 7.163 / 1.984 | 0 % · 0,10 €, max +0,61 € | 0 % · 0,21 €, max +1,85 € |
+
+„Hülle" = Staffelwerte so angehoben, dass die Gerade nie unter dem echten Preis liegt (nie zu billig). Ohne Hülle bleiben in jedem Raster außer D einzelne Mengen 8 bis 26 € zu billig.
+
+**Empfehlung: Raster B mit Hülle.** Nie zu billig, im Schnitt 18 bis 33 Cent zu teuer, 99,7 bis 99,8 % der Mengen innerhalb von 5 € (volle Messung über alle 29 Seitenzahlen am 31.10.: ohne U 0,195 % > 5 €, Ø +0,18 €; mit U 0,25 %, Ø +0,33 €; die Tabelle oben wurde mit 13 Seitenzahlen gemessen). Die verbleibenden Ausreißer (bis +28 €) sitzen fast alle bei 300–310 Exemplaren mit Umschlag (Verarbeitungsstaffel Kopp bei 300) und lassen sich durch 2er-Schritte bis 320 weiter drücken. Datei je Artikel ohne Umschlag etwa 3,3 MB statt 450 KB.
+
+Raster D wäre praktisch exakt, bedeutet aber 7.000 Preiszeilen je Artikel und 12 MB je Datei. Ob der Shop das verträgt (Preistabelle, Import-Dauer von heute rund 5 Minuten je Datei), müsste be.print beantworten. Vorschlag: mit B starten, am Testartikel prüfen, ob die Import-Dauer mit der Zeilenzahl wächst, und D als Option behalten.
+
+**Import-Dauer (Armins Screenshot 31.10.):** Der Shop arbeitet die Importdateien einzeln ab, Abstand etwa 5 Minuten. 116 Artikel sind rund 10 Stunden Warteschlange, planbar über Nacht, aber kein „kurz einspielen".
+
+**Entscheidung Armin 31.10.2026: Raster B mit Hülle wird getestet, Stufe 2 der Testartikel läuft bereits damit. Umgesetzt am 31.10. (Mapping 151 Staffeln, Hülle im Mapper, Builder behält `articlePrices.id` der vorhandenen Zeilen und hängt neue ohne id an; Live-Datei A4H 4/4: 1.963 Zeilen, 260 mit id, 3,0 MB; Build 0,5–0,8 s je Artikel). Nebenbefund: Die A5-Hoch-Exporte vom 11.10. enthalten noch 3 A4-Sorten (60 Zeilen), die der Import entfernt.**
+
+Umsetzung: Staffeln in `leadprintMapping.rst.json` (`auflagen`) erweitern, Hülle im Mapper/Writer für beide Artikeltypen, Dauertest aus der Messung. Danach alle Dateien neu bauen, auch die sechs Testartikel und die acht ohne Umschlag.
+
+**Nachtrag Shopzuweisung (Screenshot Armin, 31.10.):** Die Backend-Maske hat drei Elemente: Checkbox „Im Hauptshop ausblenden", Checkbox „Shopzuweisung aktivieren" (bei den Live-Artikeln an) und die Liste „Artikel in folgenden Shops anzeigen" (gc_subshop). Im Export entspricht die zweite Checkbox dem Feld `global_in_allen_subhops_ausblenden_jn` (1 bei allen 16 Live-Artikeln, 0 bei den Juli-Exporten vor der Zuweisung). Die Shop-Liste hat keine Export-Spalte; `shop__id` steht bei allen Artikeln auf 0 und ist es nicht. **Prüfauftrag für Stufe 2:** Die Exporte der sechs Testartikel (nach Armins Freischaltung in gc_subshop) zellgenau gegen die Stufe-1-Importdateien vergleichen; jede Spalte, die sich außer id/Datum geändert hat, ist ein Kandidat für die Zuweisung. Erwartung: keine, dann bleibt es beim Handgriff je Artikel oder einer Rückfrage bei be.print nach einer undokumentierten Importspalte.

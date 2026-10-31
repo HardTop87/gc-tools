@@ -9,6 +9,9 @@ import {
   pruefeMappingVollstaendigkeit,
 } from './leadprintWriter';
 
+// Hinweis: Die Writer-Tests laufen mit dem Standard (Hülle an, 151 Staffeln);
+// wo exakte Engine-Werte geprüft werden, steht huelle: false.
+
 const config = getDefaultPricingConfig();
 
 describe('Leadprint-Writer: Datenschicht (ohne-Umschlag-Artikel)', () => {
@@ -17,14 +20,11 @@ describe('Leadprint-Writer: Datenschicht (ohne-Umschlag-Artikel)', () => {
     expect(SEITEN_STUETZSTELLEN_MIT_UMSCHLAG[1]).toBe(8);
   });
 
-  it('baut die Preiszeilen mit Shop-IDs und exakten Engine-Preisen', () => {
-    const { zeilen, probleme } = buildPreiszeilenOhneUmschlag({
-      config,
-      mapping,
-      artikelKey: 'A4_Hoch|4c|ohne',
-    });
+  it('baut die Preiszeilen mit Shop-IDs; ohne Hülle exakt die Engine-Preise, mit Hülle nie darunter (Differenz = Lift)', () => {
+    const roh = buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey: 'A4_Hoch|4c|ohne', huelle: false });
+    const { zeilen, probleme } = roh;
     expect(probleme).toEqual([]);
-    expect(zeilen.length).toBeGreaterThan(0);
+    expect(zeilen).toHaveLength(13 * 151);
 
     // Stichprobe: CC_120 × 100 Ex. — Basispreis und ein Aufschlag exakt wie die Engine
     const zeile = zeilen.find((z) => z.papierId === 'CC_120' && z.auflage === 100);
@@ -43,6 +43,26 @@ describe('Leadprint-Writer: Datenschicht (ohne-Umschlag-Artikel)', () => {
     expect(zeile.preis).toBeCloseTo(direkt(8), 8);
     const lw24 = mapping.optionsfelder['Seitenanzahl Innenteil'].werte['24'];
     expect(zeile.aufschlaege[lw24]).toBeCloseTo(direkt(24) - direkt(8), 8);
+
+    // Mit Hülle (Standard): gleiche Struktur, Basis ≥ Engine um genau den Lift
+    // (auf den Cent aufgerundet), jede Zelle ≥ Engine, Routen/Liefertage gleich.
+    const mit = buildPreiszeilenOhneUmschlag({ config, mapping, artikelKey: 'A4_Hoch|4c|ohne' });
+    expect(mit.probleme).toEqual([]);
+    expect(mit.zeilen).toHaveLength(zeilen.length);
+    const cent = (x) => Math.round(x * 100) / 100;
+    let mitLift = 0;
+    mit.zeilen.forEach((m, i) => {
+      const r = zeilen[i];
+      expect([m.papierId, m.auflage, m.route, m.liefertage, m.routenSeiten]).toEqual([r.papierId, r.auflage, r.route, r.liefertage, r.routenSeiten]);
+      expect(m.preis).toBeGreaterThanOrEqual(r.preis - 1e-9);
+      expect(m.preis).toBeCloseTo(Math.ceil((r.preis + m.liftBasis) * 100 - 1e-9) / 100, 8);
+      if (m.liftBasis > 0) mitLift += 1;
+      for (const [lw, a] of Object.entries(m.aufschlaege)) {
+        if (a === null) { expect(r.aufschlaege[lw]).toBeNull(); continue; }
+        expect(cent(m.preis + a)).toBeGreaterThanOrEqual(cent(r.preis + r.aufschlaege[lw]) - 1e-9);
+      }
+    });
+    expect(mitLift).toBeGreaterThan(0);
   });
 
   it('stempelt jede Zeile mit Routen-Tag in der Artikelnummer und Liefertagen (Option 2 + Bonus)', () => {

@@ -223,3 +223,13 @@ Raster D wäre praktisch exakt, bedeutet aber 7.000 Preiszeilen je Artikel und 1
 Umsetzung: Staffeln in `leadprintMapping.rst.json` (`auflagen`) erweitern, Hülle im Mapper/Writer für beide Artikeltypen, Dauertest aus der Messung. Danach alle Dateien neu bauen, auch die sechs Testartikel und die acht ohne Umschlag.
 
 **Nachtrag Shopzuweisung (Screenshot Armin, 31.10.):** Die Backend-Maske hat drei Elemente: Checkbox „Im Hauptshop ausblenden", Checkbox „Shopzuweisung aktivieren" (bei den Live-Artikeln an) und die Liste „Artikel in folgenden Shops anzeigen" (gc_subshop). Im Export entspricht die zweite Checkbox dem Feld `global_in_allen_subhops_ausblenden_jn` (1 bei allen 16 Live-Artikeln, 0 bei den Juli-Exporten vor der Zuweisung). Die Shop-Liste hat keine Export-Spalte; `shop__id` steht bei allen Artikeln auf 0 und ist es nicht. **Prüfauftrag für Stufe 2:** Die Exporte der sechs Testartikel (nach Armins Freischaltung in gc_subshop) zellgenau gegen die Stufe-1-Importdateien vergleichen; jede Spalte, die sich außer id/Datum geändert hat, ist ein Kandidat für die Zuweisung. Erwartung: keine, dann bleibt es beim Handgriff je Artikel oder einer Rückfrage bei be.print nach einer undokumentierten Importspalte.
+
+---
+
+## Stufe 1 ausgewertet, Stufe 2 gebaut (31.10.2026, 23 Uhr)
+
+**Neuanlage per Import funktioniert.** Armins Export `articleExport_666_20261031222936.zip` enthält alle sechs TEST-Artikel mit neuen IDs 1112127451–456. Alle Artikelfelder stehen so, wie importiert (Bezeichnung, Artikelnummer, unsichtbar 1, status OK, Subshop-Flag 1, 3 %). Einzige Unterschiede zum Import: `id`, `cdate`, `mdate`. Die Preiszeilen (60/80/260) und Optionszellen sind unverändert angekommen.
+
+**Shopzuweisung ist nicht importierbar (Befund 4 bestätigt).** Armin hat die sechs Artikel nach dem Import in gc_subshop freigeschaltet (`mdate` liegt 25–30 Minuten nach `cdate`). Im Export hat sich dadurch keine einzige Spalte geändert. Die Liste „Artikel in folgenden Shops anzeigen" wird nicht exportiert und kann nicht importiert werden. Es bleibt beim Handgriff je Artikel oder einer Rückfrage bei be.print.
+
+**Stufe 2** (`Leadprint_Import/test-umschlag-stufe2-2026-10-31.zip`): IDs im Mapping, jeder Artikel aus seinem eigenen Export gebaut (`--vorlagen-ordner Leadprint_Export`), damit die vorhandenen Staffelzeilen ihre `articlePrices.id` behalten: 60/80/260 Zeilen mit ID aktualisiert, 393/524/1.703 neue Zeilen angehängt, keine Dubletten. Weiterleitungen gesetzt (T-E → T-U2/T-U4 je Familie, Umschlagwechsel zwischen T-U1/2/3, Rücksprung „ohne Umschlag" → T-E, Format A4↔A5 für CC_250). Preise mit Raster B und Hülle. Stichprobe CC_120 × 100 in T-U2: Basis 138,43 € (Engine 138,42 + 1 Cent Aufrundung der Hülle).

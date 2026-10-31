@@ -185,7 +185,7 @@
       "rolle": "test",
       "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 ohne Umschlag",
       "artikelnummer": "TEST-BRO-RST-A4H-44",
-      "leadprintId": null,
+      "leadprintId": 1112127453,
       "einstieg": false
     },
     {
@@ -197,7 +197,7 @@
       "rolle": "test",
       "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 160g ColorCopy",
       "artikelnummer": "TEST-BRO-RST-A4H-44-U-CC160",
-      "leadprintId": null,
+      "leadprintId": 1112127451,
       "einstieg": false
     },
     {
@@ -209,7 +209,7 @@
       "rolle": "test",
       "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 250g ColorCopy",
       "artikelnummer": "TEST-BRO-RST-A4H-44-U-CC250",
-      "leadprintId": null,
+      "leadprintId": 1112127452,
       "einstieg": false
     },
     {
@@ -221,7 +221,7 @@
       "rolle": "test",
       "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 350g ColorCopy",
       "artikelnummer": "TEST-BRO-RST-A4H-44-U-CC350",
-      "leadprintId": null,
+      "leadprintId": 1112127456,
       "einstieg": false
     },
     {
@@ -233,7 +233,7 @@
       "rolle": "test",
       "bezeichnung": "TEST Rückstichheftung A4 Hoch 4/4 mit Umschlag 250g Natur",
       "artikelnummer": "TEST-BRO-RST-A4H-44-U-N250",
-      "leadprintId": null,
+      "leadprintId": 1112127455,
       "einstieg": false
     },
     {
@@ -245,7 +245,7 @@
       "rolle": "test",
       "bezeichnung": "TEST Rückstichheftung A5 Hoch 4/4 mit Umschlag 250g ColorCopy",
       "artikelnummer": "TEST-BRO-RST-A5H-44-U-CC250",
-      "leadprintId": null,
+      "leadprintId": 1112127454,
       "einstieg": false
     }
   ],

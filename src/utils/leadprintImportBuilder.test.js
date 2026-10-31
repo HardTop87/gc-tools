@@ -351,7 +351,10 @@ describe('Leadprint-Import-Builder: Staffelzeilen erweitern statt duplizieren (R
   });
 
   it('fremde Vorlage (Neuanlage): keine ID wird übernommen', () => {
-    const { matrix, bericht } = buildImportMatrix({ templateMatrix: eigeneVorlage({ id: 1112051356 }), config, mapping, artikelKey: 'A4_Hoch|4c|ohne|TEST' });
+    // Testartikel ohne Shop-ID wie in Stufe 1 (im echten Mapping hat T-E seit 31.10. die ID 1112127453)
+    const stufe1 = structuredClone(mapping);
+    stufe1.artikel.find((a) => a.key === 'A4_Hoch|4c|ohne|TEST').leadprintId = null;
+    const { matrix, bericht } = buildImportMatrix({ templateMatrix: eigeneVorlage({ id: 1112051356 }), config, mapping: stufe1, artikelKey: 'A4_Hoch|4c|ohne|TEST' });
     expect(bericht.fehler).toEqual([]);
     expect(bericht.neuanlage).toBe(true);
     const preise = blockToObjects(findBlock(parseLeadprintExport(matrix), 'articlePrices'));

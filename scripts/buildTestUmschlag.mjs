@@ -11,6 +11,10 @@
 //     --artikel <key>            nur diesen Mapping-Key bauen (mehrfach erlaubt)
 //     --vorlage <export.xlsx>    Vorlage für alle Artikel
 //     --vorlage <Format>=<export.xlsx>   Vorlage je Format (z. B. A5_Hoch=…)
+//     --vorlagen-ordner <ordner> Stufe 2: je Artikel den EIGENEN Export aus diesem Ordner
+//                                als Vorlage nehmen (Zuordnung über article.id = leadprintId);
+//                                nur so werden die articlePrices.id der vorhandenen
+//                                Staffelzeilen übernommen statt Dubletten anzulegen
 //     --config <preisstand.json> Preisbasis statt pricingConfig.default.json
 //     --out <ordner>             Ausgabeordner (Standard Leadprint_Import/test-umschlag)
 //     --kein-zip                 ZIP nicht erzeugen
@@ -45,6 +49,7 @@ let huelle = true;
 const keys = [];
 const vorlagen = { ...VORLAGEN_STANDARD };
 let vorlageAlle = null;
+let vorlagenOrdner = null;
 const wert = (i, was) => {
   const v = args[i + 1];
   if (!v || v.startsWith('--')) { console.error(`${args[i]} braucht ${was}.`); process.exit(1); }
@@ -68,6 +73,7 @@ for (let i = 0; i < args.length; i += 1) {
       i += 1;
       break;
     }
+    case '--vorlagen-ordner': vorlagenOrdner = wert(i, 'einen Ordner mit Export-Dateien'); i += 1; break;
     case '--out': outDir = path.resolve(wert(i, 'einen Ordner')); i += 1; break;
     case '--kein-zip': zipErzeugen = false; break;
     case '--ohne-huelle': huelle = false; break;
@@ -90,13 +96,27 @@ function ladeVorlage(pfad) {
   return matrixCache.get(pfad);
 }
 
+// Eigener Export je Artikel (Stufe 2): Datei im Ordner, deren article.id zur leadprintId passt.
+function eigeneVorlage(a) {
+  if (!vorlagenOrdner || a.leadprintId == null) return null;
+  for (const f of fs.readdirSync(vorlagenOrdner).filter((x) => x.endsWith('.xlsx') && !x.startsWith('~$'))) {
+    const pfad = path.join(vorlagenOrdner, f);
+    const { matrix } = ladeVorlage(pfad);
+    const spalte = (matrix[0] ?? []).findIndex((h) => String(h) === 'article.id');
+    if (spalte >= 0 && String(matrix[1]?.[spalte]) === String(a.leadprintId)) return pfad;
+  }
+  return null;
+}
+
 fs.mkdirSync(outDir, { recursive: true });
 const dateien = [];
 let fehler = 0;
 let mappingHinweiseGezeigt = false;
 for (const a of artikel) {
   if (a.fehlt) { console.error(`\n== ${a.key}: nicht im Mapping.`); fehler += 1; continue; }
-  const vorlagePfad = vorlageAlle ?? vorlagen[a.format];
+  const eigene = eigeneVorlage(a);
+  if (vorlagenOrdner && a.leadprintId != null && !eigene) console.log(`\n== ${a.key}: kein eigener Export in ${vorlagenOrdner} (article.id ${a.leadprintId}) — Format-Vorlage, Staffelzeilen ohne ID.`);
+  const vorlagePfad = eigene ?? vorlageAlle ?? vorlagen[a.format];
   if (!vorlagePfad) { console.error(`\n== ${a.key}: keine Vorlage für Format ${a.format} (--vorlage ${a.format}=…).`); fehler += 1; continue; }
   if (!fs.existsSync(vorlagePfad)) { console.error(`\n== ${a.key}: Vorlage ${vorlagePfad} nicht gefunden.`); fehler += 1; continue; }
   const start = performance.now();

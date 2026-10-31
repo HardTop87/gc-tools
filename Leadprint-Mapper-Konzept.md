@@ -127,6 +127,19 @@ byte-gleich übernehmen. Das minimiert das Risiko, dass Leadprint den Import abl
 
 ### 3.2 Mapping-Tabelle `leadprintMapping.json` (einmalig pflegen)
 
+> **Stand 24.10.2026 — Shop-Katalog ergänzt.** Die shopweiten Stammdaten (alle 67
+> Sorten, Optionsfelder mit Listenwerten, Artikel — jeweils ID + Klarname) liegen
+> jetzt in `src/data/leadprintShop.json`. Das RST-Mapping unten verweist auf diese
+> IDs; `src/utils/leadprintShop.test.js` sichert, dass beide dieselben IDs/Namen
+> kennen und jedes Rechner-Papier der Nicht-Banner-Formate eine Shop-Sorte hat.
+> Preise/Dicken/Grammaturen bleiben in der `pricingConfig` (Verwaltung), neue
+> Sorten/Optionen werden zuerst im Backend angelegt und dann im Katalog eingetragen.
+> Werkzeuge: `npx vite-node scripts/pruefeLeadprintKatalog.mjs Leadprint_Export`
+> (Export-IDs gegen Katalog, schreibt nichts) und
+> `npx vite-node scripts/leadprintUebersicht.mjs` (erzeugt `Leadprint-Uebersicht.md`).
+> Writer und Builder lesen weiterhin das RST-Mapping; die Umstellung auf den
+> Katalog kommt mit dem zweiten Produkt.
+
 ```json
 {
   "artikel": { "A4_Hoch|4c": 1112051356, "A4_Hoch|1c": 1112051233, "…": "…" },

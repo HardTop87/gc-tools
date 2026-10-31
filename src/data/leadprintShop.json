@@ -1,0 +1,2198 @@
+{
+  "meta": {
+    "shopId": 666,
+    "stand": "2026-10-24",
+    "zweck": "Katalog der Leadprint-Shop-Objekte (IDs + Klarnamen). Quelle der Wahrheit für IDs ist das Shop-Backend; Preise, Dicken und Grammaturen pflegt die Verwaltung (pricingConfig). Produkt-Mappings (leadprintMapping.<produkt>.json) verweisen auf diese IDs.",
+    "quellen": [
+      "Leadprint-Mapping-ausgefüllt.xlsx (Blatt Papiere, 07.07.2026)",
+      "leadprintMapping.rst.json (Stand 2026-10-11)",
+      "Leadprint_Export/*.xlsx (RST-Artikel, 10./11.10.2026)"
+    ],
+    "pflege": "Neue Sorten/Optionen/Artikel zuerst im Backend anlegen, dann hier mit ID und Namen eintragen. Prüfen: npm test (leadprintShop.test.js) und npx vite-node scripts/pruefeLeadprintKatalog.mjs Leadprint_Export. Übersicht erzeugen: npx vite-node scripts/leadprintUebersicht.mjs",
+    "familien": {
+      "CC": "ColorCopy",
+      "N": "Natur",
+      "BD": "Bilderdruck",
+      "R": "Recycling",
+      "LF": "Großformat",
+      "P": "PrimaSet",
+      "Chromo": "Chromokarton",
+      "Haft": "Haftpapier",
+      "Spezial": "Spezialpapiere"
+    }
+  },
+  "sorten": [
+    {
+      "id": 1927,
+      "name": "180g MasterJet matt",
+      "familie": "LF",
+      "gsm": 180,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1928,
+      "name": "150g MasterJet matt",
+      "familie": "LF",
+      "gsm": 150,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1929,
+      "name": "120g MasterJet matt",
+      "familie": "LF",
+      "gsm": 120,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1930,
+      "name": "240g Fotopapier (glänzend)",
+      "familie": "LF",
+      "gsm": 240,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1931,
+      "name": "240g Fotopapier (seidenmatt)",
+      "familie": "LF",
+      "gsm": 240,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1932,
+      "name": "90g MasterJet matt",
+      "familie": "LF",
+      "gsm": 90,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1933,
+      "name": "80g Natur",
+      "familie": "N",
+      "gsm": 80,
+      "rechnerKey": "N_80",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051230,
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1934,
+      "name": "90g Natur",
+      "familie": "N",
+      "gsm": 90,
+      "rechnerKey": "N_90",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1935,
+      "name": "100g Natur",
+      "familie": "N",
+      "gsm": 100,
+      "rechnerKey": "N_100",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1936,
+      "name": "120g Natur",
+      "familie": "N",
+      "gsm": 120,
+      "rechnerKey": "N_120",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1937,
+      "name": "160g Natur",
+      "familie": "N",
+      "gsm": 160,
+      "rechnerKey": "N_160",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1938,
+      "name": "200g Natur",
+      "familie": "N",
+      "gsm": 200,
+      "rechnerKey": "N_200",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1939,
+      "name": "250g Natur",
+      "familie": "N",
+      "gsm": 250,
+      "rechnerKey": "N_250",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1940,
+      "name": "300g Natur",
+      "familie": "N",
+      "gsm": 300,
+      "rechnerKey": "N_300",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1942,
+      "name": "100g ColorCopy",
+      "familie": "CC",
+      "gsm": 100,
+      "rechnerKey": "CC_100",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1943,
+      "name": "120g ColorCopy",
+      "familie": "CC",
+      "gsm": 120,
+      "rechnerKey": "CC_120",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1944,
+      "name": "160g ColorCopy",
+      "familie": "CC",
+      "gsm": 160,
+      "rechnerKey": "CC_160",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1946,
+      "name": "200g ColorCopy",
+      "familie": "CC",
+      "gsm": 200,
+      "rechnerKey": "CC_200",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1947,
+      "name": "250g ColorCopy",
+      "familie": "CC",
+      "gsm": 250,
+      "rechnerKey": "CC_250",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1948,
+      "name": "300g ColorCopy",
+      "familie": "CC",
+      "gsm": 300,
+      "rechnerKey": "CC_300",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1949,
+      "name": "350g ColorCopy",
+      "familie": "CC",
+      "gsm": 350,
+      "rechnerKey": "CC_350",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1950,
+      "name": "100g PrimaSet",
+      "familie": "P",
+      "gsm": 100,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051356
+      ]
+    },
+    {
+      "id": 1951,
+      "name": "115g PrimaSet",
+      "familie": "P",
+      "gsm": 115,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1952,
+      "name": "135g PrimaSet",
+      "familie": "P",
+      "gsm": 135,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1953,
+      "name": "150g PrimaSet",
+      "familie": "P",
+      "gsm": 150,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1954,
+      "name": "170g PrimaSet",
+      "familie": "P",
+      "gsm": 170,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1955,
+      "name": "200g PrimaSet",
+      "familie": "P",
+      "gsm": 200,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1956,
+      "name": "250g PrimaSet",
+      "familie": "P",
+      "gsm": 250,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1957,
+      "name": "300g Chromosulfatkarton (einseitig gestrichen)",
+      "familie": "Chromo",
+      "gsm": 300,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1958,
+      "name": "330g Chromosulfatkarton (beidseitig gestrichen)",
+      "familie": "Chromo",
+      "gsm": 330,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1959,
+      "name": "330g Chromosulfatkarton (einseitig gestrichen)",
+      "familie": "Chromo",
+      "gsm": 330,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1960,
+      "name": "300g Chromosulfatkarton (beidseitig gestrichen)",
+      "familie": "Chromo",
+      "gsm": 300,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1961,
+      "name": "115g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 115,
+      "rechnerKey": "BD_115",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051230,
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1962,
+      "name": "135g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 135,
+      "rechnerKey": "BD_135",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1963,
+      "name": "150g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 150,
+      "rechnerKey": "BD_150",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051230,
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1964,
+      "name": "170g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 170,
+      "rechnerKey": "BD_170",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051230,
+        1112051233,
+        1112051356,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 1965,
+      "name": "200g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 200,
+      "rechnerKey": "BD_200",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1966,
+      "name": "250g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 250,
+      "rechnerKey": "BD_250",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1967,
+      "name": "300g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 300,
+      "rechnerKey": "BD_300",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1968,
+      "name": "350g Bilderdruck matt",
+      "familie": "BD",
+      "gsm": 350,
+      "rechnerKey": "BD_350",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1970,
+      "name": "115g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 115,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509
+      ]
+    },
+    {
+      "id": 1971,
+      "name": "135g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 135,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509
+      ]
+    },
+    {
+      "id": 1972,
+      "name": "150g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 150,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112051377,
+        1112051509
+      ]
+    },
+    {
+      "id": 1973,
+      "name": "170g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 170,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1974,
+      "name": "200g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 200,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1975,
+      "name": "250g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 250,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1976,
+      "name": "300g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 300,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1977,
+      "name": "350g Bilderdruck glänzend",
+      "familie": "BD",
+      "gsm": 350,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1978,
+      "name": "115g Arctic Volume Ivory",
+      "familie": "Spezial",
+      "gsm": 115,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1979,
+      "name": "130g Arctic Volume Ivory",
+      "familie": "Spezial",
+      "gsm": 130,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1980,
+      "name": "150g Arctic Volume Ivory",
+      "familie": "Spezial",
+      "gsm": 150,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1981,
+      "name": "200g Arctic Volume Ivory",
+      "familie": "Spezial",
+      "gsm": 200,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1982,
+      "name": "250g Arctic Volume Ivory",
+      "familie": "Spezial",
+      "gsm": 250,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1983,
+      "name": "180g Transparentpapier",
+      "familie": "Spezial",
+      "gsm": 180,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1984,
+      "name": "Haftpapier (glänzend)",
+      "familie": "Haft",
+      "gsm": null,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1985,
+      "name": "Haftpapier (matt)",
+      "familie": "Haft",
+      "gsm": null,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1986,
+      "name": "340g Splendorgel Extra White",
+      "familie": "Spezial",
+      "gsm": 340,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1987,
+      "name": "140g Tintoretto Gesso",
+      "familie": "Spezial",
+      "gsm": 140,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1988,
+      "name": "300g Tintoretto Gesso",
+      "familie": "Spezial",
+      "gsm": 300,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 1989,
+      "name": "280g Constellation Snow E/E08 Tela Fine",
+      "familie": "Spezial",
+      "gsm": 280,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 2168,
+      "name": "seidenmattes Posterpapier (mind. 190 g/qm)",
+      "familie": "LF",
+      "gsm": 190,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 3128,
+      "name": "80g Recycling",
+      "familie": "R",
+      "gsm": 80,
+      "rechnerKey": "R_80",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 6313,
+      "name": "100g Recycling",
+      "familie": "R",
+      "gsm": 100,
+      "rechnerKey": "R_100",
+      "imExport": true,
+      "aktivInArtikeln": [
+        1112051233,
+        1112051356,
+        1112127295,
+        1112127296,
+        1112127297,
+        1112127298,
+        1112127299,
+        1112127300,
+        1112127301,
+        1112127302,
+        1112127303,
+        1112127304,
+        1112127305,
+        1112127306,
+        1112127307,
+        1112127308
+      ]
+    },
+    {
+      "id": 6389,
+      "name": "90g Recycling",
+      "familie": "R",
+      "gsm": 90,
+      "rechnerKey": "R_90",
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 7780,
+      "name": "330g Symbol Card 1",
+      "familie": "Chromo",
+      "gsm": 330,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 7781,
+      "name": "330g Symbol Card 2Side",
+      "familie": "Chromo",
+      "gsm": 330,
+      "rechnerKey": null,
+      "imExport": true,
+      "aktivInArtikeln": []
+    },
+    {
+      "id": 10130,
+      "name": "300g Recycling",
+      "familie": "R",
+      "gsm": 300,
+      "rechnerKey": "R_300",
+      "imExport": true,
+      "aktivInArtikeln": []
+    }
+  ],
+  "optionsfelder": [
+    {
+      "id": 12913,
+      "name": "Endformat",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 52310,
+          "name": "DIN A4 Hochformat (210 x 297 mm)"
+        },
+        {
+          "id": 52311,
+          "name": "DIN A5 Hochformat (148 x 210 mm)"
+        },
+        {
+          "id": 52312,
+          "name": "DIN A5 Querformat (210 x 148 mm)",
+          "hinweis": "Listenwert ggf. anlegen"
+        },
+        {
+          "id": 55105,
+          "name": "DIN A6 Hochformat (105 x 148 mm)",
+          "hinweis": "Listenwert ggf. anlegen"
+        }
+      ]
+    },
+    {
+      "id": 5561,
+      "name": "Bindung",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16105,
+          "name": "Drahtheftung 2-fach"
+        },
+        {
+          "id": 16106,
+          "name": null
+        },
+        {
+          "id": 16133,
+          "name": null
+        },
+        {
+          "id": 16134,
+          "name": null
+        },
+        {
+          "id": 22731,
+          "name": null
+        },
+        {
+          "id": 22732,
+          "name": null
+        },
+        {
+          "id": null,
+          "name": "Drahtheftung 4-fach"
+        },
+        {
+          "id": null,
+          "name": "Klebebindung"
+        },
+        {
+          "id": null,
+          "name": "Softcover (Hotmelt-Klebebindung)"
+        },
+        {
+          "id": null,
+          "name": "Hardcover (Hotmelt-Klebebindung)"
+        },
+        {
+          "id": null,
+          "name": "Wire-O (Drahtspiralbindung)"
+        }
+      ]
+    },
+    {
+      "id": 5628,
+      "name": "Seitenanzahl Innenteil",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16360,
+          "name": "8 Seiten"
+        },
+        {
+          "id": 16361,
+          "name": "12 Seiten"
+        },
+        {
+          "id": 16362,
+          "name": "16 Seiten"
+        },
+        {
+          "id": 16363,
+          "name": "20 Seiten"
+        },
+        {
+          "id": 16364,
+          "name": "24 Seiten"
+        },
+        {
+          "id": 16365,
+          "name": "28 Seiten"
+        },
+        {
+          "id": 16366,
+          "name": "32 Seiten"
+        },
+        {
+          "id": 16367,
+          "name": "36 Seiten"
+        },
+        {
+          "id": 16368,
+          "name": "40 Seiten"
+        },
+        {
+          "id": 16385,
+          "name": "44 Seiten"
+        },
+        {
+          "id": 16386,
+          "name": "48 Seiten"
+        },
+        {
+          "id": 16387,
+          "name": "52 Seiten"
+        },
+        {
+          "id": 16388,
+          "name": "56 Seiten"
+        },
+        {
+          "id": 16389,
+          "name": "60 Seiten"
+        },
+        {
+          "id": 16390,
+          "name": "64 Seiten"
+        },
+        {
+          "id": 16391,
+          "name": "68 Seiten"
+        },
+        {
+          "id": 16392,
+          "name": "72 Seiten"
+        },
+        {
+          "id": 16393,
+          "name": "76 Seiten"
+        },
+        {
+          "id": 16394,
+          "name": "80 Seiten"
+        },
+        {
+          "id": 16395,
+          "name": "84 Seiten"
+        },
+        {
+          "id": 16396,
+          "name": "88 Seiten"
+        },
+        {
+          "id": 16397,
+          "name": "92 Seiten"
+        },
+        {
+          "id": 16398,
+          "name": "96 Seiten"
+        },
+        {
+          "id": 16399,
+          "name": "100 Seiten"
+        },
+        {
+          "id": 16400,
+          "name": "104 Seiten"
+        },
+        {
+          "id": 16401,
+          "name": "108 Seiten"
+        },
+        {
+          "id": 16402,
+          "name": "112 Seiten"
+        },
+        {
+          "id": 16403,
+          "name": "116 Seiten"
+        },
+        {
+          "id": 16404,
+          "name": "120 Seiten"
+        },
+        {
+          "id": 52313,
+          "name": "4 Seiten"
+        }
+      ]
+    },
+    {
+      "id": 5559,
+      "name": "Farbigkeit Innenteil",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16098,
+          "name": "1/1 beidseitig schwarz"
+        },
+        {
+          "id": 16099,
+          "name": "4/4 beidseitig farbig"
+        }
+      ]
+    },
+    {
+      "id": 5560,
+      "name": "Papier Innenteil",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 53341,
+          "name": "siehe Sorte",
+          "hinweis": "aus Export 10.10.2026"
+        }
+      ]
+    },
+    {
+      "id": 5563,
+      "name": "Seitenanzahl Umschlag (RST)",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16136,
+          "name": "4 Seiten",
+          "hinweis": "rai → mit-U-Zwilling; Standard im mit-U-Artikel"
+        },
+        {
+          "id": 16137,
+          "name": null
+        },
+        {
+          "id": 16138,
+          "name": null
+        },
+        {
+          "id": 16139,
+          "name": null
+        },
+        {
+          "id": 16140,
+          "name": null
+        },
+        {
+          "id": 16141,
+          "name": null
+        },
+        {
+          "id": 16142,
+          "name": null
+        },
+        {
+          "id": 16143,
+          "name": null
+        },
+        {
+          "id": 16144,
+          "name": null
+        },
+        {
+          "id": 16407,
+          "name": null
+        },
+        {
+          "id": 16408,
+          "name": null
+        },
+        {
+          "id": 16409,
+          "name": null
+        },
+        {
+          "id": 16410,
+          "name": null
+        },
+        {
+          "id": 16411,
+          "name": null
+        },
+        {
+          "id": 16412,
+          "name": null
+        },
+        {
+          "id": 16413,
+          "name": null
+        },
+        {
+          "id": 16414,
+          "name": null
+        },
+        {
+          "id": 16415,
+          "name": null
+        },
+        {
+          "id": 16416,
+          "name": null
+        },
+        {
+          "id": 16417,
+          "name": null
+        },
+        {
+          "id": 16418,
+          "name": null
+        },
+        {
+          "id": 16419,
+          "name": null
+        },
+        {
+          "id": 16420,
+          "name": null
+        },
+        {
+          "id": 16421,
+          "name": null
+        },
+        {
+          "id": 16422,
+          "name": null
+        },
+        {
+          "id": 16423,
+          "name": null
+        },
+        {
+          "id": 16424,
+          "name": null
+        },
+        {
+          "id": 16425,
+          "name": null
+        },
+        {
+          "id": 16426,
+          "name": null
+        },
+        {
+          "id": 52314,
+          "name": "ohne Umschlag",
+          "hinweis": "Standard im ohne-U-Artikel"
+        }
+      ]
+    },
+    {
+      "id": 5556,
+      "name": "Farbigkeit Umschlag (RST)",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16085,
+          "name": "1/1 beidseitig schwarz"
+        },
+        {
+          "id": 16086,
+          "name": "4/4 beidseitig farbig"
+        }
+      ]
+    },
+    {
+      "id": 5555,
+      "name": "Papier Umschlag (RST)",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16079,
+          "name": "200g Natur",
+          "sortenId": 1938
+        },
+        {
+          "id": 16080,
+          "name": "250g Natur",
+          "sortenId": 1939
+        },
+        {
+          "id": 16081,
+          "name": "300g Natur",
+          "sortenId": 1940
+        },
+        {
+          "id": 16082,
+          "name": "160g ColorCopy",
+          "sortenId": 1944
+        },
+        {
+          "id": 16083,
+          "name": "200g ColorCopy",
+          "sortenId": 1946
+        },
+        {
+          "id": 16084,
+          "name": "250g ColorCopy",
+          "sortenId": 1947
+        },
+        {
+          "id": 16359,
+          "name": "160g Natur",
+          "sortenId": 1937
+        },
+        {
+          "id": 16376,
+          "name": "300g ColorCopy",
+          "sortenId": 1948
+        },
+        {
+          "id": 16377,
+          "name": "170g Bilderdruck matt",
+          "sortenId": 1964
+        },
+        {
+          "id": 16378,
+          "name": "200g Bilderdruck matt",
+          "sortenId": 1965
+        },
+        {
+          "id": 16379,
+          "name": "250g Bilderdruck matt",
+          "sortenId": 1966
+        },
+        {
+          "id": 16380,
+          "name": "300g Bilderdruck matt",
+          "sortenId": 1967
+        },
+        {
+          "id": 16381,
+          "name": null
+        },
+        {
+          "id": 16382,
+          "name": "200g Bilderdruck glänzend",
+          "sortenId": 1974
+        },
+        {
+          "id": 16383,
+          "name": "250g Bilderdruck glänzend",
+          "sortenId": 1975
+        },
+        {
+          "id": 16384,
+          "name": "300g Bilderdruck glänzend",
+          "sortenId": 1976
+        },
+        {
+          "id": 55101,
+          "name": "350g ColorCopy",
+          "sortenId": 1949
+        },
+        {
+          "id": 55102,
+          "name": "350g Bilderdruck matt",
+          "sortenId": 1968
+        },
+        {
+          "id": 55103,
+          "name": "350g Bilderdruck glänzend",
+          "sortenId": 1977
+        },
+        {
+          "id": 55104,
+          "name": "300g Recycling",
+          "sortenId": 10130
+        }
+      ]
+    },
+    {
+      "id": 5562,
+      "name": "Veredelung Umschlag (RST)",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16107,
+          "name": "ohne"
+        },
+        {
+          "id": 16108,
+          "name": "Cellophanierung matt-kratzfest, 1/0 einseitig (außen)"
+        },
+        {
+          "id": 16109,
+          "name": "Cellophanierung glänzend, 1/0 einseitig (außen)"
+        },
+        {
+          "id": 16110,
+          "name": "Cellophanierung softtouch, 1/0 einseitig (außen)"
+        }
+      ]
+    },
+    {
+      "id": 13453,
+      "name": "Produktionsgeschwindigkeit",
+      "typ": "auflagenunabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 55097,
+          "name": "Standard",
+          "hinweis": "0 %, für GC und Kopp"
+        },
+        {
+          "id": 55098,
+          "name": "Standard",
+          "hinweis": "0 %, für ILDA"
+        },
+        {
+          "id": 55099,
+          "name": "Express",
+          "hinweis": "+ 10 %, für GC und Kopp"
+        },
+        {
+          "id": 55100,
+          "name": "Express",
+          "hinweis": "+ 10 %, für ILDA"
+        }
+      ]
+    },
+    {
+      "id": 5629,
+      "name": "SquareFold",
+      "typ": "auflagenabhängig",
+      "imExport": true,
+      "listenwerte": [
+        {
+          "id": 16405,
+          "name": null
+        },
+        {
+          "id": 16406,
+          "name": null
+        },
+        {
+          "id": null,
+          "name": "ohne"
+        },
+        {
+          "id": null,
+          "name": "mit SquareFold"
+        }
+      ]
+    }
+  ],
+  "weitereOptionsgruppen": [
+    {
+      "id": 5463,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        15617,
+        15618
+      ]
+    },
+    {
+      "id": 5470,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": [
+        15657,
+        15658,
+        15659,
+        15660,
+        15661,
+        15662,
+        15663,
+        15664,
+        15665,
+        15666,
+        16132,
+        17855,
+        39707,
+        39708
+      ]
+    },
+    {
+      "id": 5479,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5504,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5506,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5509,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5510,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": [
+        15829,
+        15830,
+        15831,
+        15832,
+        15833
+      ]
+    },
+    {
+      "id": 5511,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5512,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5515,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        15846,
+        15847
+      ]
+    },
+    {
+      "id": 5516,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        15848,
+        15849,
+        15850
+      ]
+    },
+    {
+      "id": 5517,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        15851
+      ]
+    },
+    {
+      "id": 5519,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5547,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5551,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5850,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5851,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5852,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5923,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5944,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5945,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5946,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5947,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5948,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 5955,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6326,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6327,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6329,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6330,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6331,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6332,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6333,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6562,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        20796,
+        20797,
+        20798,
+        22473,
+        45034
+      ]
+    },
+    {
+      "id": 6572,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        20819,
+        20820
+      ]
+    },
+    {
+      "id": 6894,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        22425,
+        22426,
+        22427,
+        48234
+      ]
+    },
+    {
+      "id": 6923,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6925,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6964,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6965,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6978,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        22808
+      ]
+    },
+    {
+      "id": 6979,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 6984,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        22820,
+        22821
+      ]
+    },
+    {
+      "id": 6993,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        22842,
+        22843,
+        33470
+      ]
+    },
+    {
+      "id": 7003,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        22862
+      ]
+    },
+    {
+      "id": 7007,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        22901,
+        22902,
+        34311
+      ]
+    },
+    {
+      "id": 7028,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 7040,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 7050,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 7077,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 7214,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        23630,
+        23631
+      ]
+    },
+    {
+      "id": 7217,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        23641,
+        23642
+      ]
+    },
+    {
+      "id": 7218,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 7219,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 7416,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 7490,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        24925,
+        24926,
+        24927
+      ]
+    },
+    {
+      "id": 7491,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        24928,
+        24929,
+        24930
+      ]
+    },
+    {
+      "id": 7492,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        24931,
+        24932,
+        24933
+      ]
+    },
+    {
+      "id": 9470,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        35179,
+        35180,
+        35181
+      ]
+    },
+    {
+      "id": 9483,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        35245,
+        35246
+      ]
+    },
+    {
+      "id": 10078,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10079,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10081,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10092,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10133,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10134,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10161,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        40095,
+        40096
+      ]
+    },
+    {
+      "id": 10173,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        40150,
+        40151,
+        40152
+      ]
+    },
+    {
+      "id": 10242,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10353,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        40921
+      ]
+    },
+    {
+      "id": 10480,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        41405,
+        41406,
+        41407
+      ]
+    },
+    {
+      "id": 10487,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 10604,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        42273,
+        42274,
+        42275
+      ]
+    },
+    {
+      "id": 10802,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        43108,
+        43109,
+        43110
+      ]
+    },
+    {
+      "id": 10803,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        43113,
+        43114,
+        43115
+      ]
+    },
+    {
+      "id": 10815,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        43153,
+        43154,
+        43155,
+        43156
+      ]
+    },
+    {
+      "id": 11058,
+      "typ": "auflagenabhängig",
+      "name": null,
+      "listenwerte": []
+    },
+    {
+      "id": 11065,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        43999,
+        44000
+      ]
+    },
+    {
+      "id": 12168,
+      "typ": "auflagenunabhängig",
+      "name": null,
+      "listenwerte": [
+        49195,
+        49196
+      ]
+    }
+  ],
+  "artikel": [
+    {
+      "id": 1112051233,
+      "artikelnummer": "BRO-RST-A4H-11",
+      "bezeichnung": "Rückstichheftung A4 Hoch 1/1 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A4_Hoch|1c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112051356,
+      "artikelnummer": "BRO-RST-A4H-44",
+      "bezeichnung": "Rückstichheftung A4 Hoch 4/4 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A4_Hoch|4c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112127295,
+      "artikelnummer": "BRO-RST-A5H-11",
+      "bezeichnung": "Rückstichheftung A5 Hoch 1/1 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Hoch|1c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112127296,
+      "artikelnummer": "BRO-RST-A5H-44",
+      "bezeichnung": "Rückstichheftung A5 Hoch 4/4 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Hoch|4c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112127297,
+      "artikelnummer": "BRO-RST-A5Q-11",
+      "bezeichnung": "Rückstichheftung A5 Quer 1/1 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Quer|1c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112127298,
+      "artikelnummer": "BRO-RST-A5Q-44",
+      "bezeichnung": "Rückstichheftung A5 Quer 4/4 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Quer|4c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112127299,
+      "artikelnummer": "BRO-RST-A6H-11",
+      "bezeichnung": "Rückstichheftung A6 Hoch 1/1 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A6_Hoch|1c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112127300,
+      "artikelnummer": "BRO-RST-A6H-44",
+      "bezeichnung": "Rückstichheftung A6 Hoch 4/4 ohne Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A6_Hoch|4c|ohne",
+      "imExport": true
+    },
+    {
+      "id": 1112127301,
+      "artikelnummer": "BRO-RST-A4H-11-U",
+      "bezeichnung": "Rückstichheftung A4 Hoch 1/1 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A4_Hoch|1c|mit",
+      "imExport": true
+    },
+    {
+      "id": 1112127302,
+      "artikelnummer": "BRO-RST-A4H-44-U",
+      "bezeichnung": "Rückstichheftung A4 Hoch 4/4 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A4_Hoch|4c|mit",
+      "imExport": true
+    },
+    {
+      "id": 1112127303,
+      "artikelnummer": "BRO-RST-A5H-11-U",
+      "bezeichnung": "Rückstichheftung A5 Hoch 1/1 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Hoch|1c|mit",
+      "imExport": true
+    },
+    {
+      "id": 1112127304,
+      "artikelnummer": "BRO-RST-A5H-44-U",
+      "bezeichnung": "Rückstichheftung A5 Hoch 4/4 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Hoch|4c|mit",
+      "imExport": true
+    },
+    {
+      "id": 1112127305,
+      "artikelnummer": "BRO-RST-A5Q-11-U",
+      "bezeichnung": "Rückstichheftung A5 Quer 1/1 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Quer|1c|mit",
+      "imExport": true
+    },
+    {
+      "id": 1112127306,
+      "artikelnummer": "BRO-RST-A5Q-44-U",
+      "bezeichnung": "Rückstichheftung A5 Quer 4/4 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A5_Quer|4c|mit",
+      "imExport": true
+    },
+    {
+      "id": 1112127307,
+      "artikelnummer": "BRO-RST-A6H-11-U",
+      "bezeichnung": "Rückstichheftung A6 Hoch 1/1 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A6_Hoch|1c|mit",
+      "imExport": true
+    },
+    {
+      "id": 1112127308,
+      "artikelnummer": "BRO-RST-A6H-44-U",
+      "bezeichnung": "Rückstichheftung A6 Hoch 4/4 mit Umschlag",
+      "produkt": "rst",
+      "mappingKey": "A6_Hoch|4c|mit",
+      "imExport": true
+    }
+  ],
+  "abgeloesteArtikel": [
+    {
+      "id": 1112051230,
+      "artikelnummer": null,
+      "bezeichnung": "Rückstichheftung A4 Hochformat",
+      "hinweis": "Alt-Export Juli 2026 (Leadprint_Export/export_1112051230*.xlsx); durch die 16 RST-Artikel vom Oktober ersetzt"
+    },
+    {
+      "id": 1112051377,
+      "artikelnummer": "BRO-RST",
+      "bezeichnung": "Rückstichheftung - A5 1/1",
+      "hinweis": "Alt-Export Juli 2026 (Leadprint_Export/export_1112051377*.xlsx); durch die 16 RST-Artikel vom Oktober ersetzt"
+    },
+    {
+      "id": 1112051509,
+      "artikelnummer": "BRO-RST",
+      "bezeichnung": "Rückstichheftung - A5 4/4",
+      "hinweis": "Alt-Export Juli 2026 (Leadprint_Export/export_1112051509*.xlsx); durch die 16 RST-Artikel vom Oktober ersetzt"
+    }
+  ]
+}
